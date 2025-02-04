@@ -11120,7 +11120,7 @@
 
 - name: media.gpu-process-decoder
   type: RelaxedAtomicBool
-#if defined(XP_WIN)
+#if defined(XP_WIN) || defined(ANDROID)
   value: true
 #else
   value: false
