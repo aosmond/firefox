@@ -11267,13 +11267,7 @@
 
 - name: media.ffvpx-hw.enabled
   type: RelaxedAtomicBool
-#if defined(MOZ_WIDGET_GTK)
   value: true
-#elif defined(XP_WIN)
-  value: @IS_NIGHTLY_BUILD@
-#else
-  value: false
-#endif
   mirror: always
 
 # The codecs in the vendored ffmpeg copy are usually prefered to the other
@@ -11528,7 +11522,7 @@
 
 -   name: media.android-media-codec.preferred
     type: RelaxedAtomicBool
-    value: true
+    value: false
     mirror: always
 #endif  # ANDROID
 
