@@ -31,7 +31,8 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 #endif
   }
   static void Init(FFmpegLibWrapper* aLib) {
-#if (defined(XP_WIN) || defined(MOZ_WIDGET_GTK)) && \
+#if (defined(XP_WIN) || defined(MOZ_WIDGET_GTK) || \
+     defined(MOZ_WIDGET_ANDROID)) &&               \
     defined(MOZ_USE_HWDECODE) && !defined(MOZ_FFVPX_AUDIOONLY)
 #  ifdef XP_WIN
     if (!XRE_IsGPUProcess()) {
@@ -57,13 +58,15 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 #  if LIBAVCODEC_VERSION_MAJOR >= 55
         {AV_CODEC_ID_VP9, gfx::gfxVars::UseVP9HwDecode()},
 #  endif
-#  if defined(MOZ_WIDGET_GTK) && LIBAVCODEC_VERSION_MAJOR >= 54
+#  if (defined(MOZ_WIDGET_GTK) || defined(MOZ_WIDGET_ANDROID)) && \
+      LIBAVCODEC_VERSION_MAJOR >= 54
         {AV_CODEC_ID_VP8, gfx::gfxVars::UseVP8HwDecode()},
 #  endif
 
     // These proprietary video codecs can only be decoded via hardware by using
     // the system ffmpeg, not supported by ffvpx.
-#  if defined(MOZ_WIDGET_GTK) && !defined(FFVPX_VERSION)
+#  if (defined(MOZ_WIDGET_GTK) && !defined(FFVPX_VERSION)) || \
+      defined(MOZ_WIDGET_ANDROID)
 #    if LIBAVCODEC_VERSION_MAJOR >= 55
         {AV_CODEC_ID_HEVC, gfx::gfxVars::UseHEVCHwDecode()},
 #    endif
@@ -91,8 +94,8 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
       MOZ_LOG(sPDMLog, LogLevel::Debug,
               ("Support %s for hw decoding", AVCodecToString(entry.mId)));
     }
-#endif  // (XP_WIN || MOZ_WIDGET_GTK) && MOZ_USE_HWDECODE &&
-        // !MOZ_FFVPX_AUDIOONLY
+#endif  // (XP_WIN || MOZ_WIDGET_GTK || MOZ_WIDGET_ANDROID) && MOZ_USE_HWDECODE
+        // && !MOZ_FFVPX_AUDIOONLY
   }
 
   static already_AddRefed<PlatformDecoderModule> Create(
