@@ -607,12 +607,12 @@ void PDMFactory::CreateUtilityPDMs() {
           FFmpegRuntimeLinker::LinkStatusCode());
     }
 #endif
-#ifdef MOZ_WIDGET_ANDROID
-    if (StaticPrefs::media_utility_android_media_codec_enabled()) {
-      StartupPDM(AndroidDecoderModule::Create(),
-                 StaticPrefs::media_android_media_codec_preferred());
-    }
-#endif
+// #ifdef MOZ_WIDGET_ANDROID
+//     if (StaticPrefs::media_utility_android_media_codec_enabled()) {
+//       StartupPDM(AndroidDecoderModule::Create(),
+//                  StaticPrefs::media_android_media_codec_preferred());
+//     }
+// #endif
     StartupPDM(AgnosticDecoderModule::Create(),
                StaticPrefs::media_prefer_non_ffvpx());
   }
@@ -702,12 +702,12 @@ void PDMFactory::CreateContentPDMs() {
 #endif  // !defined(MOZ_WIDGET_ANDROID)
 
   // Android still needs this, the actual decoder is remoted on java side
-#ifdef MOZ_WIDGET_ANDROID
-  if (StaticPrefs::media_android_media_codec_enabled()) {
-    StartupPDM(AndroidDecoderModule::Create(),
-               StaticPrefs::media_android_media_codec_preferred());
-  }
-#endif
+// #ifdef MOZ_WIDGET_ANDROID
+//   if (StaticPrefs::media_android_media_codec_enabled()) {
+//     StartupPDM(AndroidDecoderModule::Create(),
+//                StaticPrefs::media_android_media_codec_preferred());
+//   }
+// #endif
 
   if (StaticPrefs::media_gmp_decoder_enabled() &&
       !StartupPDM(GMPDecoderModule::Create(),
@@ -748,12 +748,12 @@ void PDMFactory::CreateDefaultPDMs() {
         FFmpegRuntimeLinker::LinkStatusCode());
   }
 #endif
-#ifdef MOZ_WIDGET_ANDROID
-  if (StaticPrefs::media_android_media_codec_enabled()) {
-    StartupPDM(AndroidDecoderModule::Create(),
-               StaticPrefs::media_android_media_codec_preferred());
-  }
-#endif
+// #ifdef MOZ_WIDGET_ANDROID
+//   if (StaticPrefs::media_android_media_codec_enabled()) {
+//     StartupPDM(AndroidDecoderModule::Create(),
+//                StaticPrefs::media_android_media_codec_preferred());
+//   }
+// #endif
 
   StartupPDM(AgnosticDecoderModule::Create(),
              StaticPrefs::media_prefer_non_ffvpx());
@@ -812,12 +812,12 @@ already_AddRefed<PlatformDecoderModule> PDMFactory::GetDecoderModule(
 void PDMFactory::SetCDMProxy(CDMProxy* aProxy) {
   MOZ_ASSERT(aProxy);
 
-#ifdef MOZ_WIDGET_ANDROID
-  if (IsWidevineKeySystem(aProxy->KeySystem())) {
-    mEMEPDM = AndroidDecoderModule::Create(aProxy);
-    return;
-  }
-#endif
+// #ifdef MOZ_WIDGET_ANDROID
+//   if (IsWidevineKeySystem(aProxy->KeySystem())) {
+//     mEMEPDM = AndroidDecoderModule::Create(aProxy);
+//     return;
+//   }
+// #endif
 #ifdef MOZ_WMF_CDM
   if (IsPlayReadyKeySystemAndSupported(aProxy->KeySystem()) ||
       IsWidevineExperimentKeySystemAndSupported(aProxy->KeySystem()) ||
@@ -854,9 +854,9 @@ media::MediaCodecsSupported PDMFactory::Supported(bool aForceRefresh) {
       supported += MCSInfo::GetDecodeMediaCodecsSupported(
           cd.codec, pdm->SupportsMimeType(nsCString(cd.mimeTypeString)));
     }
-#ifdef MOZ_WIDGET_ANDROID
-    supported += AndroidDecoderModule::GetSupportedCodecs();
-#endif
+// #ifdef MOZ_WIDGET_ANDROID
+//     supported += AndroidDecoderModule::GetSupportedCodecs();
+// #endif
     return supported;
   };
 
