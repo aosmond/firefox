@@ -90,6 +90,10 @@ class PDMInitializer final {
     if (StaticPrefs::media_ffvpx_hw_enabled()) {
       FFVPXRuntimeLinker::Init();
     }
+#elif defined(MOZ_WIDGET_ANDROID)
+    if (StaticPrefs::media_ffvpx_hw_enabled()) {
+      FFVPXRuntimeLinker::Init();
+    }
 #endif
   }
 
@@ -517,6 +521,10 @@ void PDMFactory::CreateGpuPDMs() {
   }
   if (StaticPrefs::media_wmf_enabled()) {
     StartupPDM(WMFDecoderModule::Create());
+  }
+#elif defined (MOZ_WIDGET_ANDROID)
+  if (StaticPrefs::media_ffvpx_hw_enabled()) {
+    StartupPDM(FFVPXRuntimeLinker::CreateDecoder());
   }
 #endif
 }
