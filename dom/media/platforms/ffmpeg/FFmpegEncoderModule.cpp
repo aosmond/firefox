@@ -91,6 +91,33 @@ template <int V>
              AVCodecToString(static_cast<AVCodecID>(codec))));
   }
 #    undef ADD_HW_CODEC
+#  elif defined(MOZ_WIDGET_ANDROID)
+  static constexpr AVCodecID kCodecIDs[] = {
+      AV_CODEC_ID_AV1,
+      AV_CODEC_ID_H264,
+      AV_CODEC_ID_VP8,
+      AV_CODEC_ID_VP9,
+  };
+  for (const auto& codecId : kCodecIDs) {
+    const auto* codec =
+        FFmpegDataEncoder<V>::FindHardwareEncoder(aLib, codecId);
+    if (!codec) {
+      MOZ_LOG(
+          sPEMLog, LogLevel::Debug,
+          ("No codec or encoder for %s on mediacodec", AVCodecToString(codecId)));
+      continue;
+    }
+    for (int i = 0;
+         const AVCodecHWConfig* config = aLib->avcodec_get_hw_config(codec, i);
+         ++i) {
+      if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) {
+        sSupportedHWCodecs.AppendElement(static_cast<uint32_t>(codecId));
+        MOZ_LOG(sPEMLog, LogLevel::Debug,
+                ("Support %s on mediacodec", AVCodecToString(codecId)));
+        break;
+      }
+    }
+  }
 #  endif  // XP_WIN, MOZ_WIDGET_GTK
 #endif    // MOZ_USE_HWDECODE
 }  // namespace mozilla
