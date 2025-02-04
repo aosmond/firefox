@@ -9,6 +9,7 @@
 
 #include <atomic>
 
+#include "AndroidSurfaceTexture.h"
 #include "ImageContainer.h"
 #include "FFmpegDataDecoder.h"
 #include "FFmpegLibWrapper.h"
@@ -25,6 +26,10 @@
 #include "libavutil/pixfmt.h"
 #if LIBAVCODEC_VERSION_MAJOR < 54
 #  define AVPixelFormat PixelFormat
+#endif
+
+#ifdef MOZ_WIDGET_ANDROID
+#  include "mozilla/java/GeckoSurfaceWrappers.h"
 #endif
 
 struct _VADRMPRIMESurfaceDescriptor;
@@ -146,10 +151,11 @@ class FFmpegVideoDecoder<LIBAV_VER>
   // This will be called inside the ctor.
   void InitHWDecoderIfAllowed();
 
-  enum class ContextType {
-    D3D11VA,
-    VAAPI,
-    V4L2,
+  enum class ContextType{
+      D3D11VA,     // Windows
+      MediaCodec,  // Android
+      VAAPI,       // Linux Desktop
+      V4L2,        // Linux embedded
   };
   void InitHWCodecContext(ContextType aType);
 
@@ -169,6 +175,17 @@ class FFmpegVideoDecoder<LIBAV_VER>
   UniquePtr<DXVA2Manager> mDXVA2Manager;
   // Number of HW Textures are already in use by Gecko
   std::atomic<uint8_t> mNumOfHWTexturesInUse{0};
+#endif
+
+#ifdef MOZ_WIDGET_ANDROID
+  MediaResult InitMediaCodecDecoder();
+  MediaResult CreateImageMediaCodec(int64_t aOffset, int64_t aPts,
+                                    int64_t aDuration,
+                                    MediaDataDecoder::DecodedData& aResults);
+  int32_t mTextureAlignment;
+  AVBufferRef* mMediaCodecDeviceContext = nullptr;
+  java::GeckoSurface::GlobalRef mSurface;
+  AndroidSurfaceTextureHandle mSurfaceHandle{};
 #endif
 
 #if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
