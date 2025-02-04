@@ -36,6 +36,27 @@ already_AddRefed<PlatformDecoderModule> RemoteDecoderModule::Create(
 RemoteDecoderModule::RemoteDecoderModule(RemoteDecodeIn aLocation)
     : mLocation(aLocation) {}
 
+const char* RemoteDecoderModule::Name() const {
+  switch (mLocation) {
+    case RemoteDecodeIn::Unspecified:
+      return "Remote: Unspecified";
+    case RemoteDecodeIn::RddProcess:
+      return "Remote: RddProcess";
+    case RemoteDecodeIn::GpuProcess:
+      return "Remote: GpuProcess";
+    case RemoteDecodeIn::UtilityProcess_Generic:
+      return "Remote: Utility_Generic";
+    case RemoteDecodeIn::UtilityProcess_AppleMedia:
+      return "Remote: Utility_AppleMedia";
+    case RemoteDecodeIn::UtilityProcess_WMF:
+      return "Remote: Utility_WMF";
+    case RemoteDecodeIn::UtilityProcess_MFMediaEngineCDM:
+      return "Remote: Utility_MFMediaEngineCDM";
+    default:
+    MOZ_CRASH("Missing enum handling");
+  }
+}
+
 media::DecodeSupportSet RemoteDecoderModule::SupportsMimeType(
     const nsACString& aMimeType, DecoderDoctorDiagnostics* aDiagnostics) const {
   MOZ_CRASH("Deprecated: Use RemoteDecoderModule::Supports");
