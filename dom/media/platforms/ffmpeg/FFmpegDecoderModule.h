@@ -27,7 +27,7 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 #ifdef FFVPX_VERSION
     return "FFmpeg(FFVPX)";
 #else
-    return "FFmpeg(OS library)"
+    return "FFmpeg(OS library)";
 #endif
   }
   static void Init(FFmpegLibWrapper* aLib) {
