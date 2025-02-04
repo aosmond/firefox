@@ -23,6 +23,13 @@ namespace mozilla {
 template <int V>
 class FFmpegDecoderModule : public PlatformDecoderModule {
  public:
+  const char* Name() const override {
+#ifdef FFVPX_VERSION
+    return "FFmpeg(FFVPX)";
+#else
+    return "FFmpeg(OS library)"
+#endif
+  }
   static void Init(FFmpegLibWrapper* aLib) {
 #if defined(MOZ_USE_HWDECODE)
 #  if defined(XP_WIN) && !defined(MOZ_FFVPX_AUDIOONLY)

@@ -580,6 +580,12 @@ void PDMFactory::CreateRddPDMs() {
 #endif
   StartupPDM(AgnosticDecoderModule::Create(),
              StaticPrefs::media_prefer_non_ffvpx());
+
+  PDM_INIT_LOG("RDD PDM order:");
+  int i = 0;
+  for (auto pdm : mCurrentPDMs) {
+    PDM_INIT_LOG("%d: %s", i++, pdm->Name());
+  }
 }
 
 void PDMFactory::CreateUtilityPDMs() {
@@ -625,6 +631,12 @@ void PDMFactory::CreateUtilityPDMs() {
     }
   }
 #endif
+
+  PDM_INIT_LOG("Utility PDM order:");
+  int i = 0;
+  for (auto pdm : mCurrentPDMs) {
+    PDM_INIT_LOG("%d: %s", i++, pdm->Name());
+  }
 }
 
 void PDMFactory::CreateContentPDMs() {
@@ -710,6 +722,11 @@ void PDMFactory::CreateContentPDMs() {
                   StaticPrefs::media_gmp_decoder_preferred())) {
     mFailureFlags += DecoderDoctorDiagnostics::Flags::GMPPDMFailedToStartup;
   }
+  PDM_INIT_LOG("Content PDM order:");
+  int i = 0;
+  for (auto pdm : mCurrentPDMs) {
+    PDM_INIT_LOG("%d: %s", i++, pdm->Name());
+  }
 }
 
 void PDMFactory::CreateDefaultPDMs() {
@@ -753,6 +770,12 @@ void PDMFactory::CreateDefaultPDMs() {
       !StartupPDM(GMPDecoderModule::Create(),
                   StaticPrefs::media_gmp_decoder_preferred())) {
     mFailureFlags += DecoderDoctorDiagnostics::Flags::GMPPDMFailedToStartup;
+  }
+
+  PDM_INIT_LOG("Default PDM order:");
+  int i = 0;
+  for (auto pdm : mCurrentPDMs) {
+    PDM_INIT_LOG("%d: %s", i++, pdm->Name());
   }
 }
 
