@@ -65,3 +65,12 @@
   #undef HAVE_GETAUXVAL
   #define HAVE_GETAUXVAL 0
 #endif
+
+/**
+ * Android hardware decoding via MediaCodec NDK
+*/
+
+#if defined (MOZ_WIDGET_ANDROID) && !defined(MOZ_FFVPX_AUDIOONLY)
+#undef CONFIG_VP9_MEDIACODEC_DECODER
+#define CONFIG_VP9_MEDIACODEC_DECODER 1
+#endif
