@@ -294,6 +294,10 @@ FFmpegLibWrapper::LinkResult FFmpegLibWrapper::Link() {
   AV_FUNC_OPTION(av_tx_init, AV_FUNC_AVUTIL_ALL)
   AV_FUNC_OPTION(av_tx_uninit, AV_FUNC_AVUTIL_ALL)
 
+#ifdef MOZ_WIDGET_ANDROID
+  AV_FUNC(av_mediacodec_release_buffer, AV_FUNC_AVCODEC_ALL);
+#endif
+
 #undef AV_FUNC
 #undef AV_FUNC_OPTION
 
