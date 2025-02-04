@@ -65,4 +65,10 @@ static const FFCodec * const codec_list[] = {
 #if CONFIG_LIBAOM_AV1_ENCODER
     &ff_libaom_av1_encoder,
 #endif
+#if CONFIG_MEDIACODEC
+    &ff_aac_mediacodec_decoder,
+#endif
+#if CONFIG_VP9_MEDIACODEC_DECODER
+    &ff_vp9_mediacodec_decoder,
+#endif
     NULL };
