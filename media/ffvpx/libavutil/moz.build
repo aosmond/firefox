@@ -81,7 +81,10 @@ if not CONFIG['MOZ_FFVPX_AUDIOONLY']:
         ]
     elif CONFIG["MOZ_WIDGET_TOOLKIT"] == "android":
         SOURCES += [
+            'ambient_viewing_environment.c',
+            'display.c',
             'hwcontext_mediacodec.c',
+            'stereo3d.c',
         ]
 
 EXPORTS.ffvpx += [
