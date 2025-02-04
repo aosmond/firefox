@@ -29,7 +29,8 @@ namespace mozilla {
 
 template <int V>
 /* static */ void FFmpegEncoderModule<V>::Init(FFmpegLibWrapper* aLib) {
-#if (defined(XP_WIN) || defined(MOZ_WIDGET_GTK)) && \
+#if (defined(XP_WIN) || defined(MOZ_WIDGET_GTK) || \
+     defined(MOZ_WIDGET_ANDROID)) &&               \
     defined(MOZ_USE_HWDECODE) && !defined(MOZ_FFVPX_AUDIOONLY)
 #  ifdef XP_WIN
   if (!XRE_IsGPUProcess())
@@ -61,13 +62,15 @@ template <int V>
 #  if LIBAVCODEC_VERSION_MAJOR >= 55
       {AV_CODEC_ID_VP9, gfx::gfxVars::UseVP9HwEncode()},
 #  endif
-#  if defined(MOZ_WIDGET_GTK) && LIBAVCODEC_VERSION_MAJOR >= 54
+#  if (defined(MOZ_WIDGET_GTK) || defined(MOZ_WIDGET_ANDROID)) && \
+      LIBAVCODEC_VERSION_MAJOR >= 54
       {AV_CODEC_ID_VP8, gfx::gfxVars::UseVP8HwEncode()},
 #  endif
 
   // These proprietary video codecs can only be encoded via hardware by using
   // the system ffmpeg, not supported by ffvpx.
-#  if defined(MOZ_WIDGET_GTK) && !defined(FFVPX_VERSION)
+#  if (defined(MOZ_WIDGET_GTK) && !defined(FFVPX_VERSION)) || \
+      defined(MOZ_WIDGET_ANDROID)
 #    if LIBAVCODEC_VERSION_MAJOR >= 55
       {AV_CODEC_ID_HEVC, gfx::gfxVars::UseHEVCHwEncode()},
 #    endif
@@ -95,8 +98,8 @@ template <int V>
     MOZ_LOG(sPEMLog, LogLevel::Debug,
             ("Support %s for hw encoding", AVCodecToString(entry.mId)));
   }
-#endif  // (XP_WIN || MOZ_WIDGET_GTK) && MOZ_USE_HWDECODE &&
-        // !MOZ_FFVPX_AUDIOONLY
+#endif  // (XP_WIN || MOZ_WIDGET_GTK || MOZ_WIDGET_ANDROID) && MOZ_USE_HWDECODE
+        // && !MOZ_FFVPX_AUDIOONLY
 }  // namespace mozilla
 
 template <int V>
