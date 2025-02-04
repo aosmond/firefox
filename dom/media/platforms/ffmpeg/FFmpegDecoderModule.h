@@ -27,7 +27,7 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 #ifdef FFVPX_VERSION
     return "FFmpeg(FFVPX)";
 #else
-    return "FFmpeg(OS library)"
+    return "FFmpeg(OS library)";
 #endif
   }
   static void Init(FFmpegLibWrapper* aLib) {
@@ -59,6 +59,28 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
           break;
         }
       }
+    }
+#  elif defined(MOZ_WIDGET_ANDROID) && !defined(MOZ_FFVPX_AUDIOONLY)
+    if (!XRE_IsRDDProcess()) {
+      return;
+    }
+    static nsTArray<AVCodecID> kCodecIDs({
+        AV_CODEC_ID_AV1,
+        AV_CODEC_ID_H264,
+        AV_CODEC_ID_HEVC,
+        AV_CODEC_ID_VP9,
+    });
+    for (const auto& codecId : kCodecIDs) {
+      const auto* codec = FFmpegDataDecoder<V>::FindAVCodec(aLib, codecId);
+      if (!codec) {
+        MOZ_LOG(sPDMLog, LogLevel::Debug,
+                ("No codec or decoder for %s on mediacodec",
+                 AVCodecToString(codecId)));
+        continue;
+      }
+      sSupportedHWCodecs.AppendElement(codecId);
+      MOZ_LOG(sPDMLog, LogLevel::Debug,
+              ("Support %s on mediacodec", AVCodecToString(codecId)));
     }
 #  elif MOZ_WIDGET_GTK
     // Hardware decoding on Linux should only happen on the RDD process for now.
