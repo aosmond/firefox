@@ -236,7 +236,7 @@ void PEMFactory::InitContentPEMs() {
 #endif
 
 #ifdef MOZ_WIDGET_ANDROID
-    mCurrentPEMs.AppendElement(new AndroidEncoderModule());
+    //mCurrentPEMs.AppendElement(new AndroidEncoderModule());
 #endif
 
 #ifdef XP_WIN
@@ -295,7 +295,7 @@ void PEMFactory::InitDefaultPEMs() {
 #endif
 
 #ifdef MOZ_WIDGET_ANDROID
-  mCurrentPEMs.AppendElement(new AndroidEncoderModule());
+  //mCurrentPEMs.AppendElement(new AndroidEncoderModule());
 #endif
 
 #ifdef XP_WIN
