@@ -18,6 +18,9 @@ class MFTDecoder;
 
 class WMFDecoderModule : public PlatformDecoderModule {
  public:
+  const char* GetName() const override {
+    return "WMF";
+  }
   static already_AddRefed<PlatformDecoderModule> Create();
 
   // Initializes the module, loads required dynamic libraries, etc.
