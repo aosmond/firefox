@@ -1204,6 +1204,16 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
         aId, flag);
   });
 
+#ifdef MOZ_FFMPEG_USE_DURATION_MAP
+#  if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_ANDROID)
+  if (IsHardwareAccelerated())
+#  endif
+  {
+    InsertDuration(aSample->mTimecode.ToMicroseconds(),
+                   aSample->mDuration.ToMicroseconds());
+  }
+#endif
+
 #if LIBAVCODEC_VERSION_MAJOR >= 58
   packet->duration = aSample->mDuration.ToMicroseconds();
   int res = mLib->avcodec_send_packet(mCodecContext, packet);
@@ -1288,8 +1298,10 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
       rv = CreateImageD3D11(mFrame->pkt_pos, GetFramePts(mFrame),
                             Duration(mFrame), aResults);
 #    elif defined(MOZ_WIDGET_ANDROID)
-      rv = CreateImageMediaCodec(mFrame->pkt_pos, GetFramePts(mFrame),
-                                 Duration(mFrame), aResults);
+      rv = CreateImageMediaCodec(
+          mFrame->pkt_pos, GetFramePts(mFrame),
+          TakeDuration(mFrame->pkt_dts, aSample->mDuration.ToMicroseconds()),
+          aResults);
 #    else
       return MediaResult(NS_ERROR_DOM_MEDIA_DECODE_ERR,
                          RESULT_DETAIL("No HW decoding implementation!"));
@@ -1353,14 +1365,6 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
     }
   } while (true);
 #else
-  // LibAV provides no API to retrieve the decoded sample's duration.
-  // (FFmpeg >= 1.0 provides av_frame_get_pkt_duration)
-  // As such we instead use a map using the dts as key that we will retrieve
-  // later.
-  // The map will have a typical size of 16 entry.
-  mDurationMap.Insert(aSample->mTimecode.ToMicroseconds(),
-                      aSample->mDuration.ToMicroseconds());
-
   if (!PrepareFrame()) {
     NS_WARNING("FFmpeg decoder failed to allocate frame.");
     return MediaResult(NS_ERROR_OUT_OF_MEMORY, __func__);
@@ -1396,19 +1400,8 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
   // If we've decoded a frame then we need to output it
   int64_t pts =
       mPtsContext.GuessCorrectPts(GetFramePts(mFrame), mFrame->pkt_dts);
-  // Retrieve duration from dts.
-  // We use the first entry found matching this dts (this is done to
-  // handle damaged file with multiple frames with the same dts)
-
-  int64_t duration;
-  if (!mDurationMap.Find(mFrame->pkt_dts, duration)) {
-    NS_WARNING("Unable to retrieve duration from map");
-    duration = aSample->mDuration.ToMicroseconds();
-    // dts are probably incorrectly reported ; so clear the map as we're
-    // unlikely to find them in the future anyway. This also guards
-    // against the map becoming extremely big.
-    mDurationMap.Clear();
-  }
+  int64_t duration =
+      TakeDuration(mFrame->pkt_dts, aSample->mDuration.ToMicroseconds());
 
   MediaResult rv = CreateImage(aSample->mOffset, pts, duration, aResults);
   if (NS_FAILED(rv)) {
@@ -1822,6 +1815,8 @@ FFmpegVideoDecoder<LIBAV_VER>::ProcessFlush() {
   MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
 #if LIBAVCODEC_VERSION_MAJOR < 58
   mPtsContext.Reset();
+#endif
+#ifdef MOZ_FFMPEG_USE_DURATION_MAP
   mDurationMap.Clear();
 #endif
   mPerformanceRecorder.Record(std::numeric_limits<int64_t>::max());
@@ -2392,10 +2387,9 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::CreateImageMediaCodec(
       MakeUnique<CompositeListener>(mLib, mFrame));
 
   RefPtr<VideoData> v = VideoData::CreateFromImage(
-      {mFrame->width, mFrame->height}, aOffset,
-      TimeUnit::FromMicroseconds(aPts), TimeUnit::FromMicroseconds(16000),
-      img.forget(), mFrame->flags & AV_FRAME_FLAG_KEY,
-      TimeUnit::FromMicroseconds(aPts));
+      mInfo.mDisplay, aOffset, TimeUnit::FromMicroseconds(aPts),
+      TimeUnit::FromMicroseconds(aDuration), img.forget(),
+      mFrame->flags & AV_FRAME_FLAG_KEY, TimeUnit::FromMicroseconds(-1));
 
   aResults.AppendElement(std::move(v));
   return NS_OK;
