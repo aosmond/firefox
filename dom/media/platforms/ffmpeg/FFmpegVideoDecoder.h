@@ -32,6 +32,10 @@
 #  include "mozilla/java/GeckoSurfaceWrappers.h"
 #endif
 
+#if LIBAVCODEC_VERSION_MAJOR < 58 || defined(MOZ_WIDGET_ANDROID)
+#  define MOZ_FFMPEG_USE_DURATION_MAP
+#endif
+
 struct _VADRMPRIMESurfaceDescriptor;
 typedef struct _VADRMPRIMESurfaceDescriptor VADRMPRIMESurfaceDescriptor;
 
@@ -266,7 +270,35 @@ class FFmpegVideoDecoder<LIBAV_VER>
   };
 
   PtsCorrectionContext mPtsContext;
+#endif
+
+#ifdef MOZ_FFMPEG_USE_DURATION_MAP
   DurationMap mDurationMap;
+
+  void InsertDuration(int64_t aDts, int64_t aDuration) {
+    // LibAV provides no API to retrieve the decoded sample's duration.
+    // (FFmpeg >= 1.0 provides av_frame_get_pkt_duration)
+    // As such we instead use a map using the dts as key that we will retrieve
+    // later.
+    // The map will have a typical size of 16 entry.
+    mDurationMap.Insert(aDts, aDuration);
+  }
+
+  int64_t TakeDuration(int64_t aDts, int64_t aDefaultDuration) {
+    // Retrieve duration from dts.
+    // We use the first entry found matching this dts (this is done to
+    // handle damaged file with multiple frames with the same dts)
+    int64_t duration;
+    if (!mDurationMap.Find(aDts, duration)) {
+      NS_WARNING("Unable to retrieve duration from map");
+      // dts are probably incorrectly reported ; so clear the map as we're
+      // unlikely to find them in the future anyway. This also guards
+      // against the map becoming extremely big.
+      mDurationMap.Clear();
+      return aDefaultDuration;
+    }
+    return duration;
+  }
 #endif
 
   const bool mLowLatency;
