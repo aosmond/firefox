@@ -147,6 +147,10 @@ bool WebRenderTextureHost::IsWrappingSurfaceTextureHost() {
 }
 
 void WebRenderTextureHost::PrepareForUse() {
+#ifdef MOZ_WIDGET_ANDROID
+  // Do anything necessary with the underlying texture first.
+  mWrappedTextureHost->PrepareForUse();
+#endif
   // When SurfaceTextureHost is wrapped by RemoteTextureHostWrapper,
   // PrepareForUse() is handled by SurfaceTextureHost.
   if ((IsWrappingSurfaceTextureHost() &&
