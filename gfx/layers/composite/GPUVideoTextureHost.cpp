@@ -202,6 +202,12 @@ void GPUVideoTextureHost::UnbindTextureSource() {
   TextureHost::UnbindTextureSource();
 }
 
+void GPUVideoTextureHost::PrepareForUse() {
+  if (EnsureWrappedTextureHost()) {
+    EnsureWrappedTextureHost()->PrepareForUse();
+  }
+}
+
 void GPUVideoTextureHost::NotifyNotUsed() {
   if (EnsureWrappedTextureHost()) {
     EnsureWrappedTextureHost()->NotifyNotUsed();
@@ -249,6 +255,13 @@ bool GPUVideoTextureHost::NeedsDeferredDeletion() const {
     return TextureHost::NeedsDeferredDeletion();
   }
   return mWrappedTextureHost->NeedsDeferredDeletion();
+}
+
+bool GPUVideoTextureHost::NeedsYFlip() const {
+  if (!mWrappedTextureHost) {
+    return TextureHost::NeedsYFlip();
+  }
+  return mWrappedTextureHost->NeedsYFlip();
 }
 
 }  // namespace layers
