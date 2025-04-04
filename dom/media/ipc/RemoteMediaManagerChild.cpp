@@ -1091,6 +1091,20 @@ void RemoteMediaManagerChild::DeallocateSurfaceDescriptor(
       })));
 }
 
+void RemoteDecoderManagerChild::OnSetCurrent(const SurfaceDescriptorGPUVideo& aSD) {
+  nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
+  if (!managerThread) {
+    return;
+  }
+  MOZ_ALWAYS_SUCCEEDS(managerThread->Dispatch(NS_NewRunnableFunction(
+      "RemoteDecoderManagerChild::OnSetCurrent",
+      [ref = RefPtr{this}, sd = aSD]() {
+        if (ref->CanSend()) {
+          ref->SendOnSetCurrent(sd);
+        }
+      })));
+}
+
 /* static */ void RemoteMediaManagerChild::HandleRejectionError(
     const RemoteMediaManagerChild* aDyingManager, RemoteMediaIn aLocation,
     const ipc::ResponseRejectReason& aReason,
@@ -1130,7 +1144,7 @@ void RemoteMediaManagerChild::DeallocateSurfaceDescriptor(
   aCallback(MediaResult(err, __func__));
 }
 
-void RemoteMediaManagerChild::HandleFatalError(const char* aMsg) {
+void RemoteDecoderManagerChild::HandleFatalError(const char* aMsg) {
   dom::ContentChild::FatalErrorIfNotUsingGPUProcess(aMsg, OtherChildID());
 }
 

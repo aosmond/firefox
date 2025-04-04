@@ -202,6 +202,12 @@ void GPUVideoTextureHost::UnbindTextureSource() {
   TextureHost::UnbindTextureSource();
 }
 
+void GPUVideoTextureHost::PrepareForUse() {
+  if (EnsureWrappedTextureHost()) {
+    EnsureWrappedTextureHost()->PrepareForUse();
+  }
+}
+
 void GPUVideoTextureHost::NotifyNotUsed() {
   if (EnsureWrappedTextureHost()) {
     EnsureWrappedTextureHost()->NotifyNotUsed();
