@@ -2374,9 +2374,14 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::CreateImageMediaCodec(
    public:
     CompositeListener(FFmpegLibWrapper* aLib, AVFrame* aFrame) : mLib(aLib) {
       mRef = aLib->av_buffer_ref(aFrame->buf[0]);
+      MOZ_ASSERT(mRef, "CompositeListener failed to get buffer ref!");
     }
 
     void operator()(void) override {
+      if (NS_WARN_IF(!mRef)) {
+        MOZ_ASSERT_UNREACHABLE("CompositorListener already set current!");
+        return;
+      }
       mLib->av_mediacodec_release_buffer((AVMediaCodecBuffer*)mRef->data, 1);
       mLib->av_buffer_unref(&mRef);
     }
