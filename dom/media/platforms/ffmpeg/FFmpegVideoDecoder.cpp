@@ -2372,7 +2372,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::CreateImageMediaCodec(
   class CompositeListener final
       : public layers::SurfaceTextureImage::SetCurrentCallback {
    public:
-    CompositeListener(FFmpegLibWrapper* aLib) : mLib(aLib) {}
+    explicit CompositeListener(FFmpegLibWrapper* aLib) : mLib(aLib) {}
 
     bool Init(AVFrame* aFrame) {
       if (NS_WARN_IF(!aFrame) || NS_WARN_IF(!aFrame->buf[0])) {
