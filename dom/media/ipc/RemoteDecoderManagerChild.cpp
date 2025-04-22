@@ -909,6 +909,20 @@ void RemoteDecoderManagerChild::DeallocateSurfaceDescriptor(
       })));
 }
 
+void RemoteDecoderManagerChild::OnSetCurrent(const SurfaceDescriptorGPUVideo& aSD) {
+  nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
+  if (!managerThread) {
+    return;
+  }
+  MOZ_ALWAYS_SUCCEEDS(managerThread->Dispatch(NS_NewRunnableFunction(
+      "RemoteDecoderManagerChild::OnSetCurrent",
+      [ref = RefPtr{this}, sd = aSD]() {
+        if (ref->CanSend()) {
+          ref->SendOnSetCurrent(sd);
+        }
+      })));
+}
+
 void RemoteDecoderManagerChild::HandleFatalError(const char* aMsg) {
   dom::ContentChild::FatalErrorIfNotUsingGPUProcess(aMsg, OtherChildID());
 }

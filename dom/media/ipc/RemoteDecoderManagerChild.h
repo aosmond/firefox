@@ -77,6 +77,8 @@ class RemoteDecoderManagerChild final
   void DeallocateSurfaceDescriptor(
       const SurfaceDescriptorGPUVideo& aSD) override;
 
+  void OnSetCurrent(const SurfaceDescriptorGPUVideo& aSD) override;
+
   bool AllocShmem(size_t aSize, mozilla::ipc::Shmem* aShmem) override {
     return PRemoteDecoderManagerChild::AllocShmem(aSize, aShmem);
   }
