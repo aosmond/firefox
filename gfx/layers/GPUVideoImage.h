@@ -30,6 +30,7 @@ class IGPUVideoSurfaceManager {
       const SurfaceDescriptorGPUVideo& aSD) = 0;
   virtual void DeallocateSurfaceDescriptor(
       const SurfaceDescriptorGPUVideo& aSD) = 0;
+  virtual void OnSetCurrent(const SurfaceDescriptorGPUVideo& aSD) = 0;
 };
 
 // Represents an animated Image that is known to the GPU process.
@@ -79,6 +80,14 @@ class GPUVideoImage final : public Image {
 
   Maybe<SurfaceDescriptor> GetDesc() override {
     return GetDescFromTexClient(mTextureClient);
+  }
+
+  void OnSetCurrent() override {
+    GPUVideoTextureData* data = GetData();
+    if (NS_WARN_IF(!data)) {
+      return;
+    }
+    data->OnSetCurrent();
   }
 
  private:

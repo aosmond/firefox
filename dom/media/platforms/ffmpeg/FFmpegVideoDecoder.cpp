@@ -677,7 +677,7 @@ void FFmpegVideoDecoder<LIBAV_VER>::InitHWDecoderIfAllowed() {
 #  endif  // MOZ_ENABLE_D3D11VA
 
 #  ifdef MOZ_WIDGET_ANDROID
-  if (XRE_IsGPUProcess() && NS_SUCCEEDED(InitMediaCodecDecoder())) {
+  if (XRE_IsRDDProcess() && NS_SUCCEEDED(InitMediaCodecDecoder())) {
     return;
   }
 #  endif
@@ -2274,7 +2274,7 @@ bool FFmpegVideoDecoder<LIBAV_VER>::CanUseZeroCopyVideoFrame() const {
 
 #ifdef MOZ_WIDGET_ANDROID
 MediaResult FFmpegVideoDecoder<LIBAV_VER>::InitMediaCodecDecoder() {
-  MOZ_DIAGNOSTIC_ASSERT(XRE_IsGPUProcess());
+  MOZ_DIAGNOSTIC_ASSERT(XRE_IsRDDProcess());
   FFMPEG_LOG("Initialising MediaCodec FFmpeg decoder");
   StaticMutexAutoLock mon(sMutex);
 
