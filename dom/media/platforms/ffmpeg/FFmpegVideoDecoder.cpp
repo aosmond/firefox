@@ -2383,27 +2383,35 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::CreateImageMediaCodec(
       false /* force color space stuff */,
       /* aTransformOverride */ Nothing());
 
-  class CompositeListener
+  class CompositeListener final
       : public layers::SurfaceTextureImage::SetCurrentCallback {
    public:
-    CompositeListener(FFmpegLibWrapper* aLib, AVFrame* aFrame) : mLib(aLib) {
-      mRef = aLib->av_buffer_ref(aFrame->buf[0]);
-      MOZ_ASSERT(mRef, "CompositeListener failed to get buffer ref!");
+    CompositeListener(FFmpegLibWrapper* aLib) : mLib(aLib) {}
+
+    bool Init(AVFrame* aFrame) {
+      if (NS_WARN_IF(!aFrame) || NS_WARN_IF(!aFrame->buf[0])) {
+        return false;
+      }
+      mRef = mLib->av_buffer_ref(aFrame->buf[0]);
+      return true;
     }
 
     void operator()(void) override {
-      if (NS_WARN_IF(!mRef)) {
-        MOZ_ASSERT_UNREACHABLE("CompositorListener already set current!");
-        return;
+      if (!NS_WARN_IF(!mRef->data)) {
+        mLib->av_mediacodec_release_buffer((AVMediaCodecBuffer*)mRef->data, 1);
       }
-      mLib->av_mediacodec_release_buffer((AVMediaCodecBuffer*)mRef->data, 1);
       mLib->av_buffer_unref(&mRef);
     }
     FFmpegLibWrapper* mLib;
     AVBufferRef* mRef;
   };
-  img->AsSurfaceTextureImage()->RegisterSetCurrentCallback(
-      MakeUnique<CompositeListener>(mLib, mFrame));
+
+  auto listener = MakeUnique<CompositeListener>(mLib);
+  if (!listener->Init(mFrame)) {
+    return NS_ERROR_INVALID_ARG;
+  }
+
+  img->AsSurfaceTextureImage()->RegisterSetCurrentCallback(std::move(listener));
 
   RefPtr<VideoData> v = VideoData::CreateFromImage(
       mInfo.mDisplay, aOffset, TimeUnit::FromMicroseconds(aPts),
