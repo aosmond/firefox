@@ -2383,9 +2383,9 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::CreateImageMediaCodec(
     }
 
     void operator()(void) override {
-      if (!NS_WARN_IF(!mRef->data)) {
-        mLib->av_mediacodec_release_buffer((AVMediaCodecBuffer*)mRef->data, 1);
-      }
+      MOZ_ASSERT(mRef);
+      MOZ_ASSERT(mRef->data);
+      mLib->av_mediacodec_release_buffer((AVMediaCodecBuffer*)mRef->data, 1);
       mLib->av_buffer_unref(&mRef);
     }
     FFmpegLibWrapper* mLib;
