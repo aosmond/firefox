@@ -145,6 +145,7 @@ struct MOZ_ONLY_USED_TO_AVOID_STATIC_CONSTRUCTORS FFmpegLibWrapper {
 
   // libavutil v55 and later only
   AVFrame* (*av_frame_alloc)();
+  AVFrame* (*av_frame_clone)(const AVFrame* frame);
   void (*av_frame_free)(AVFrame** frame);
   void (*av_frame_unref)(AVFrame* frame);
   int (*av_frame_get_buffer)(AVFrame* frame, int align);
