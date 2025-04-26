@@ -69,6 +69,7 @@ static void NotifySetCurrent(Image* aImage) {
     return;
   }
 
+#if 0
   SurfaceTextureImage* image = aImage->AsSurfaceTextureImage();
   if (image == nullptr) {
     MOZ_LOG_FMT(gVideoFrameContainer, LogLevel::Debug,
@@ -76,8 +77,9 @@ static void NotifySetCurrent(Image* aImage) {
                 aImage->GetSerial());
     return;
   }
+#endif
 
-  image->OnSetCurrent();
+  aImage->OnSetCurrent();
 }
 #endif
 

@@ -2858,7 +2858,10 @@ bool ContentParent::InitInternal(ProcessPriority aInitialPriority) {
   if (StaticPrefs::media_rdd_process_enabled()) {
     // Ensure the RDD process has been started.
     RDDProcessManager* rdd = RDDProcessManager::Get();
+    LOGPDM("RDD enabled, try launching");
     rdd->LaunchRDDProcess();
+  } else {
+    LOGPDM("RDD disabled");
   }
 
   nsStyleSheetService* sheetService = nsStyleSheetService::GetInstance();
