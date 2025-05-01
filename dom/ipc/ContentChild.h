@@ -170,14 +170,14 @@ class ContentChild final : public PContentChild,
       Endpoint<PCompositorManagerChild>&& aCompositor,
       Endpoint<PImageBridgeChild>&& aImageBridge,
       Endpoint<PVRManagerChild>&& aVRBridge,
-      Endpoint<PRemoteDecoderManagerChild>&& aVideoManager,
+      Endpoint<PRemoteMediaManagerChild>&& aVideoManager,
       nsTArray<uint32_t>&& namespaces);
 
   mozilla::ipc::IPCResult RecvReinitRendering(
       Endpoint<PCompositorManagerChild>&& aCompositor,
       Endpoint<PImageBridgeChild>&& aImageBridge,
       Endpoint<PVRManagerChild>&& aVRBridge,
-      Endpoint<PRemoteDecoderManagerChild>&& aVideoManager,
+      Endpoint<PRemoteMediaManagerChild>&& aVideoManager,
       nsTArray<uint32_t>&& namespaces);
 
   mozilla::ipc::IPCResult RecvReinitRenderingForDeviceReset();
@@ -812,7 +812,7 @@ class ContentChild final : public PContentChild,
   mozilla::ipc::IPCResult RecvFlushFOGData(FlushFOGDataResolver&& aResolver);
 
   mozilla::ipc::IPCResult RecvUpdateMediaCodecsSupported(
-      RemoteDecodeIn aLocation, const media::MediaCodecsSupported& aSupported);
+      RemoteMediaIn aLocation, const media::MediaCodecsSupported& aSupported);
 
 #ifdef NIGHTLY_BUILD
   virtual void OnChannelReceivedMessage(const Message& aMsg) override;
