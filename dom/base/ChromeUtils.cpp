@@ -57,7 +57,7 @@
 #include "mozilla/ipc/UtilityProcessManager.h"
 #include "mozilla/ipc/UtilityProcessHost.h"
 #include "mozilla/net/UrlClassifierFeatureFactory.h"
-#include "mozilla/RemoteDecoderManagerChild.h"
+#include "mozilla/RemoteMediaManagerChild.h"
 #include "mozilla/KeySystemConfig.h"
 #include "mozilla/WheelHandlingHelper.h"
 #include "nsIRFPTargetSetIDL.h"
