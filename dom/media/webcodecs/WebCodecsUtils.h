@@ -100,7 +100,7 @@ using WebCodecsId = size_t;
 
 extern std::atomic<WebCodecsId> sNextId;
 
-struct EncoderConfigurationChangeList;
+class EncoderConfigurationChangeList;
 
 namespace dom {
 
