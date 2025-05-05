@@ -244,8 +244,8 @@ class AutoRelease final {
 };
 
 static bool IsAVCC(Maybe<EncoderConfig::CodecSpecific>& aCodecSpecific) {
-  return aCodecSpecific && aCodecSpecific->is<H264Specific>() &&
-         aCodecSpecific->as<H264Specific>().mFormat == H264BitStreamFormat::AVC;
+  return aCodecSpecific.is<H264Specific>() &&
+         aCodecSpecific.as<H264Specific>().mFormat == H264BitStreamFormat::AVC;
 }
 
 static RefPtr<MediaByteBuffer> ExtractCodecConfig(
