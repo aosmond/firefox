@@ -66,6 +66,9 @@ class RemoteMediaManagerParent final : public PRemoteMediaManagerParent,
       const Maybe<TrackingId>& aTrackingId);
   bool DeallocPRemoteDecoderParent(PRemoteDecoderParent* actor);
 
+  PRemoteEncoderParent* AllocPRemoteEncoderParent(const EncoderConfig& aConfig);
+  bool DeallocPRemoteEncoderParent(PRemoteEncoderParent* actor);
+
   PMFMediaEngineParent* AllocPMFMediaEngineParent();
   bool DeallocPMFMediaEngineParent(PMFMediaEngineParent* actor);
 

@@ -238,6 +238,16 @@ bool RemoteMediaManagerParent::DeallocPRemoteDecoderParent(
   return true;
 }
 
+PRemoteEncoderParent* RemoteMediaManagerParent::AllocPRemoteEncoderParent(
+    const EncoderConfig& aConfig) {
+  return nullptr;
+}
+
+bool RemoteMediaManagerParent::DeallocPRemoteEncoderParent(
+    PRemoteEncoderParent* actor) {
+  return true;
+}
+
 PMFMediaEngineParent* RemoteMediaManagerParent::AllocPMFMediaEngineParent() {
 #ifdef MOZ_WMF_MEDIA_ENGINE
   return new MFMediaEngineParent(this, sRemoteMediaManagerParentThread);
