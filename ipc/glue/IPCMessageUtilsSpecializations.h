@@ -432,6 +432,17 @@ struct ParamTraits<mozilla::dom::ipc::StructuredCloneData> {
   }
 };
 
+// This is not actually used by the Maybe serialization, but Variant
+// specializations sometimes include Nothing as an option.
+template <>
+struct ParamTraits<mozilla::Nothing> {
+  typedef mozilla::Nothing paramType;
+
+  static void Write(MessageWriter* aWriter, const paramType& aParam) {}
+
+  static bool Read(MessageReader* aReader, paramType* aResult) { return true; }
+};
+
 template <class T>
 struct ParamTraits<mozilla::Maybe<T>> {
   typedef mozilla::Maybe<T> paramType;
@@ -536,7 +547,7 @@ struct ParamTraits<mozilla::Variant<Ts...>> {
   struct VariantReader {
     using Next = VariantReader<N - 1>;
 
-    static bool Read(MessageReader* reader, Tag tag, paramType* result) {
+    static ReadResult<paramType> Read(MessageReader* reader, Tag tag) {
       // Since the VariantReader specializations start at N , we need to
       // subtract one to look at N - 1, the first valid tag.  This means our
       // comparisons are off by 1.  If we get to N = 0 then we have failed to
@@ -544,12 +555,14 @@ struct ParamTraits<mozilla::Variant<Ts...>> {
       if (tag == N - 1) {
         // Recall, even though the template parameter is N, we are
         // actually interested in the N - 1 tag.
-        // Default construct our field within the result outparameter and
-        // directly deserialize into the variant. Note that this means that
-        // every type in Ts needs to be default constructible
-        return ReadParam(reader, &result->template emplace<N - 1>());
+        auto p = ReadParam<typename mozilla::detail::Nth<N - 1, Ts...>::Type>(
+            reader);
+        if (p) {
+          return ReadResult<paramType>(mozilla::AsVariant(std::move(*p)));
+        }
+        return {};
       } else {
-        return Next::Read(reader, tag, result);
+        return Next::Read(reader, tag);
       }
     }
 
@@ -560,17 +573,17 @@ struct ParamTraits<mozilla::Variant<Ts...>> {
   // a matching tag.
   template <typename dummy>
   struct VariantReader<0, dummy> {
-    static bool Read(MessageReader* reader, Tag tag, paramType* result) {
-      return false;
+    static ReadResult<paramType> Read(MessageReader* reader, Tag tag) {
+      return {};
     }
   };
 
-  static bool Read(MessageReader* reader, paramType* result) {
+  static ReadResult<paramType> Read(MessageReader* reader) {
     Tag tag;
     if (ReadParam(reader, &tag)) {
-      return VariantReader<sizeof...(Ts)>::Read(reader, tag, result);
+      return VariantReader<sizeof...(Ts)>::Read(reader, tag);
     }
-    return false;
+    return {};
   }
 };
 
