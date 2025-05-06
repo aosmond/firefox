@@ -6,6 +6,8 @@
 #ifndef include_dom_media_ipc_RemoteMediaManagerChild_h
 #define include_dom_media_ipc_RemoteMediaManagerChild_h
 
+#include <functional>
+
 #include "GPUVideoImage.h"
 #include "PDMFactory.h"
 #include "ipc/EnumSerializer.h"
@@ -92,6 +94,10 @@ class RemoteMediaManagerChild final
   static void InitForGPUProcess(
       Endpoint<PRemoteMediaManagerChild>&& aVideoManager);
   static void Shutdown();
+
+  void HandleRejectionError(
+      const mozilla::ipc::ResponseRejectReason& aReason,
+      std::function<void(const MediaResult&)>&& aCallback);
 
   // Run aTask (on the manager thread) when we next attempt to create a new
   // manager (even if creation fails). Intended to be called from ActorDestroy
