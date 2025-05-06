@@ -18,12 +18,12 @@ class RemoteMediaManagerChild;
 using mozilla::MediaDataEncoder;
 using mozilla::ipc::IPCResult;
 
-class RemoteEncoderChild : public ShmemRecycleAllocator<RemoteEncoderChild>,
-                           public PRemoteEncoderChild {
+class RemoteMediaDataEncoderChild : public ShmemRecycleAllocator<RemoteEncoderChild>,
+                                    public PRemoteEncoderChild {
   friend class PRemoteEncoderChild;
 
  public:
-  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(RemoteEncoderChild);
+  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(RemoteMediaEncoderChild, final);
 
   explicit RemoteEncoderChild(RemoteMediaIn aLocation);
 
