@@ -90,7 +90,7 @@ class RemoteMediaDataEncoderChild
   RemoteMediaManagerChild* GetManager();
 
   virtual RefPtr<PRemoteEncoderChild::EncodePromise> DoSendEncode(
-      const MediaData* aSample) = 0;
+      const MediaData* aSample);
 
   void MaybeDestroyActor();
 

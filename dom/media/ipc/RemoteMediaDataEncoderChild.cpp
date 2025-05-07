@@ -74,6 +74,34 @@ RefPtr<MediaDataEncoder::InitPromise> RemoteMediaDataEncoderChild::Init() {
       });
 }
 
+RefPtr<PRemoteEncoderChild::EncodePromise>
+RemoteMediaDataEncoderChild::DoSendEncode(const MediaData* aSample) {
+  if (aSample->mType == MediaData::Type::AUDIO_DATA) {
+    auto samples = MakeRefPtr<ArrayOfRemoteAudioData>();
+    if (!samples->Fill(aSample->As<const AudioData>(),
+                       [&](size_t aSize) { return AllocateBuffer(aSize); })) {
+      return PRemoteEncoderChild::EncodePromise::CreateAndResolve(
+          MediaResult(NS_ERROR_OUT_OF_MEMORY), __func__);
+    }
+    return SendEncode(std::move(samples));
+#if 0
+  } else if (aSample->mType == MediaData::Type::VIDEO_DATA) {
+    // TODO(aosmond): If the location matches the SurfaceDescriptorGPUVideo location, then we can just use the descriptor. Otherwise we do the readback and copy into a shmem.
+    auto samples = MakeRefPtr<ArrayOfRemoteVideoData>();
+    if (!samples->Fill(aSample->As<const VideoData>(),
+                       mLocation,
+                       [&](size_t aSize) { return AllocateBuffer(aSize); })) {
+      return PRemoteEncoderChild::EncodePromise::CreateAndResolve(
+          MediaResult(NS_ERROR_OUT_OF_MEMORY), __func__);
+    }
+    return SendEncode(std::move(samples));
+#endif
+  } else {
+    return PRemoteEncoderChild::EncodePromise::CreateAndResolve(
+        MediaResult(NS_ERROR_INVALID_ARG), __func__);
+  }
+}
+
 RefPtr<MediaDataEncoder::EncodePromise> RemoteMediaDataEncoderChild::Encode(
     const MediaData* aSample) {
   RefPtr<RemoteMediaDataEncoderChild> self = this;
@@ -230,10 +258,6 @@ RefPtr<GenericPromise> RemoteMediaDataEncoderChild::SetBitrate(
                        return GenericPromise::CreateAndResolve(true, __func__);
                      });
 }
-
-void RemoteMediaDataEncoderChild::DestroyIPDL() {}
-
-void RemoteMediaDataEncoderChild::IPDLActorDestroyed() {}
 
 RemoteMediaManagerChild* RemoteMediaDataEncoderChild::GetManager() {
   if (!CanSend()) {
