@@ -239,7 +239,37 @@ ImageContainer::~ImageContainer() {
 nsresult Image::BuildSurfaceDescriptorBuffer(
     SurfaceDescriptorBuffer& aSdBuffer, BuildSdbFlags aFlags,
     const std::function<MemoryOrShmem(uint32_t)>& aAllocate) {
-  return NS_ERROR_NOT_IMPLEMENTED;
+  RefPtr<SourceSurface> surface = GetAsSourceSurface();
+  if (NS_WARN_IF(!surface)) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+
+  RefPtr<DataSourceSurface> dataSurface = surface->GetDataSurface();
+  if (NS_WARN_IF(!dataSurface)) {
+    return NS_ERROR_FAILURE;
+  }
+
+  DataSourceSurface::ScopedMap map(dataSurface, DataSourceSurface::READ);
+  if (NS_WARN_IF(!map.IsMapped())) {
+    return NS_ERROR_FAILURE;
+  }
+
+  SurfaceFormat format = dataSurface->GetFormat();
+  IntSize size = dataSurface->GetSize();
+  uint8_t* output = nullptr;
+  int32_t stride = 0;
+  nsresult rv = AllocateSurfaceDescriptorBufferRgb(
+      size, format, output, aSdBuffer, stride, aAllocate);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return rv;
+  }
+
+  if (NS_WARN_IF(!SwizzleData(map.GetData(), map.GetStride(), format, output,
+                              stride, format, size))) {
+    return NS_ERROR_FAILURE;
+  }
+
+  return NS_OK;
 }
 
 Maybe<SurfaceDescriptor> Image::GetDesc() { return GetDescFromTexClient(); }
