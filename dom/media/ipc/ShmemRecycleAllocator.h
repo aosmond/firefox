@@ -10,12 +10,28 @@
 
 namespace mozilla {
 
+class ShmemRecycleTicket {
+ public:
+  NS_INLINE_DECL_REFCOUNTING(ShmemRecycleTicket)
+
+  ShmemRecycleTicket() = default;
+
+ private:
+  template <class T>
+  friend class ShmemRecycleAllocator;
+
+  ~ShmemRecycleTicket() { MOZ_DIAGNOSTIC_ASSERT(mUsedShmems.IsEmpty()); }
+
+  AutoTArray<ShmemBuffer, 4> mUsedShmems;
+};
+
 template <class T>
 class ShmemRecycleAllocator {
  public:
   explicit ShmemRecycleAllocator(T* aActor)
       : mActor(aActor), mPool(1, ShmemPool::PoolType::DynamicPool) {}
   ShmemBuffer AllocateBuffer(size_t aSize,
+                             ShmemRecycleTicket* aTicket = nullptr,
                              ShmemPool::AllocationPolicy aPolicy =
                                  ShmemPool::AllocationPolicy::Unsafe) {
     ShmemBuffer buffer = mPool.Get(mActor, aSize, aPolicy);
@@ -23,7 +39,11 @@ class ShmemRecycleAllocator {
       return buffer;
     }
     MOZ_DIAGNOSTIC_ASSERT(aSize <= buffer.Get().Size<uint8_t>());
-    mUsedShmems.AppendElement(buffer.Get());
+    if (aTicket) {
+      aTicket->mUsedShmems.AppendElement(buffer.Get());
+    } else {
+      mUsedShmems.AppendElement(buffer.Get());
+    }
     mNeedCleanup = true;
     return buffer;
   }
@@ -35,6 +55,13 @@ class ShmemRecycleAllocator {
       ReleaseBuffer(ShmemBuffer(mem.Get()));
     }
     mUsedShmems.Clear();
+  }
+
+  void ReleaseTicket(ShmemRecycleTicket* aTicket) {
+    for (auto&& mem : aTicket->mUsedShmems) {
+      ReleaseBuffer(ShmemBuffer(mem.Get()));
+    }
+    aTicket->mUsedShmems.Clear();
   }
 
   void CleanupShmemRecycleAllocator() {
