@@ -28,6 +28,8 @@
 
 #include "GMPEncoderModule.h"
 
+#include "mozilla/RemoteEncoderModule.h"
+
 #include "mozilla/StaticMutex.h"
 #include "mozilla/StaticPrefs_media.h"
 #include "mozilla/gfx/gfxVars.h"
@@ -75,6 +77,23 @@ static CodecType MediaCodecToCodecType(media::MediaCodec aCodec) {
 
 PEMFactory::PEMFactory() {
   gfx::gfxVars::Initialize();
+
+  // FIXME(aosmond) -- this is not sufficient
+  if (XRE_IsContentProcess() && StaticPrefs::media_use_remote_encoder()) {
+    if (StaticPrefs::media_rdd_process_enabled()) {
+      if (RefPtr<PlatformEncoderModule> pem =
+              RemoteEncoderModule::Create(RemoteMediaIn::RddProcess)) {
+        mCurrentPEMs.AppendElement(std::move(pem));
+      }
+    }
+    if (StaticPrefs::media_utility_process_enabled()) {
+      if (RefPtr<PlatformEncoderModule> pem = RemoteEncoderModule::Create(
+              RemoteMediaIn::UtilityProcess_Generic)) {
+        mCurrentPEMs.AppendElement(std::move(pem));
+      }
+    }
+  }
+
 #ifdef MOZ_APPLEMEDIA
   RefPtr<PlatformEncoderModule> m(new AppleEncoderModule());
   mCurrentPEMs.AppendElement(m);
@@ -266,6 +285,57 @@ media::MediaCodecsSupported PEMFactory::Supported(bool aForceRefresh) {
   }
 
   return supported;
+}
+
+/* static */
+media::EncodeSupportSet PEMFactory::SupportsCodec(
+    CodecType aCodec, const MediaCodecsSupported& aSupported,
+    RemoteMediaIn aLocation) {
+  const TrackSupportSet supports =
+      RemoteMediaManagerChild::GetTrackSupport(aLocation);
+
+  if (supports.contains(TrackSupport::EncodeVideo)) {
+    switch (aCodec) {
+      case CodecType::H264:
+        return media::MCSInfo::GetEncodeSupportSet(MediaCodec::H264,
+                                                   aSupported);
+      case CodecType::H265:
+        return media::MCSInfo::GetEncodeSupportSet(MediaCodec::HEVC,
+                                                   aSupported);
+      case CodecType::VP8:
+        return media::MCSInfo::GetEncodeSupportSet(MediaCodec::VP8, aSupported);
+      case CodecType::VP9:
+        return media::MCSInfo::GetEncodeSupportSet(MediaCodec::VP9, aSupported);
+#ifdef MOZ_AV1
+      case CodecType::AV1:
+        return media::MCSInfo::GetEncodeSupportSet(MediaCodec::AV1, aSupported);
+#endif
+      default:
+        break;
+    }
+  }
+
+  if (supports.contains(TrackSupport::EncodeAudio)) {
+    switch (aCodec) {
+      case CodecType::Opus:
+        return media::MCSInfo::GetEncodeSupportSet(MediaCodec::Opus,
+                                                   aSupported);
+      case CodecType::Vorbis:
+        return media::MCSInfo::GetEncodeSupportSet(MediaCodec::Vorbis,
+                                                   aSupported);
+      case CodecType::Flac:
+        return media::MCSInfo::GetEncodeSupportSet(MediaCodec::FLAC,
+                                                   aSupported);
+      case CodecType::AAC:
+        return media::MCSInfo::GetEncodeSupportSet(MediaCodec::AAC, aSupported);
+      case CodecType::PCM:
+      case CodecType::G722:
+      default:
+        break;
+    }
+  }
+
+  return media::EncodeSupportSet{};
 }
 
 }  // namespace mozilla
