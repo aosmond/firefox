@@ -281,8 +281,9 @@ void gfxFontInfoLoader::CancelLoader() {
   if (mFontInfo)  // null during any initial delay
     mFontInfo->mCanceled = true;
   if (mFontLoaderThread) {
-    NS_DispatchToMainThread(new ShutdownThreadEvent(mFontLoaderThread));
-    mFontLoaderThread = nullptr;
+    NS_DispatchToMainThread(NS_NewRunnableFunction(
+        __func__,
+        [thread = std::move(mFontLoaderThread)]() { thread->Shutdown(); }));
   }
   RemoveShutdownObserver();
   CleanupLoader();
