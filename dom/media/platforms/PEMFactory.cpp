@@ -28,6 +28,8 @@
 
 #include "GMPEncoderModule.h"
 
+#include "mozilla/RemoteEncoderModule.h"
+
 #include "mozilla/StaticPrefs_media.h"
 #include "mozilla/gfx/gfxVars.h"
 
@@ -44,6 +46,17 @@ LazyLogModule sPEMLog("PlatformEncoderModule");
 
 PEMFactory::PEMFactory() {
   gfx::gfxVars::Initialize();
+
+  // FIXME(aosmond) -- this is not sufficient
+  if (XRE_IsContentProcess() && StaticPrefs::media_use_remote_encoder() &&
+      StaticPrefs::media_rdd_process_enabled()) {
+    if (RefPtr<PlatformEncoderModule> pem =
+            RemoteEncoderModule::Create(RemoteMediaIn::RddProcess)) {
+      mCurrentPEMs.AppendElement(std::move(pem));
+      return;
+    }
+  }
+
 #ifdef MOZ_APPLEMEDIA
   RefPtr<PlatformEncoderModule> m(new AppleEncoderModule());
   mCurrentPEMs.AppendElement(m);
