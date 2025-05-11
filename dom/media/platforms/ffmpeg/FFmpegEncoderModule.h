@@ -21,8 +21,8 @@ class FFmpegEncoderModule final : public PlatformEncoderModule {
     RefPtr<PlatformEncoderModule> pem = new FFmpegEncoderModule(aLib);
     return pem.forget();
   }
-  bool Supports(const EncoderConfig& aConfig) const override;
-  bool SupportsCodec(CodecType aCodec) const override;
+  media::EncodeSupportSet Supports(const EncoderConfig& aConfig) const override;
+  media::EncodeSupportSet SupportsCodec(CodecType aCodec) const override;
 
   const char* GetName() const override { return "FFmpeg Encoder Module"; }
 
