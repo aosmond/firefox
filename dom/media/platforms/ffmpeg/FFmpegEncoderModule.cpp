@@ -13,6 +13,7 @@
 // This must be the last header included
 #include "FFmpegLibs.h"
 
+using mozilla::media::EncodeSupport;
 using mozilla::media::EncodeSupportSet;
 
 namespace mozilla {
@@ -45,10 +46,14 @@ EncodeSupportSet FFmpegEncoderModule<V>::SupportsCodec(CodecType aCodec) const {
   if (id == AV_CODEC_ID_NONE) {
     return EncodeSupportSet{};
   }
-  if (!FFmpegDataEncoder<V>::FindEncoderWithPreference(mLib, id)) {
-    return EncodeSupportSet{};
+  EncodeSupportSet supports;
+  if (FFmpegDataEncoder<V>::FindHardwareEncoder(mLib, id)) {
+    supports += EncodeSupport::HardwareEncode;
   }
-  return EncodeSupportSet{media::EncodeSupport::SoftwareEncode};
+  if (FFmpegDataEncoder<V>::FindSoftwareEncoder(mLib, id)) {
+    supports += EncodeSupport::SoftwareEncode;
+  }
+  return supports;
 }
 
 template <int V>
