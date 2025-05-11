@@ -5,9 +5,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "RemoteEncoderModule.h"
+#include "RemoteDecodeUtils.h"
 #include "RemoteMediaDataEncoderChild.h"
 
 namespace mozilla {
+
+extern LazyLogModule sPEMLog;
 
 RemoteEncoderModule::RemoteEncoderModule(RemoteMediaIn aLocation)
     : mLocation(aLocation) {}
@@ -65,14 +68,19 @@ RemoteEncoderModule::AsyncCreateEncoder(const EncoderConfig& aEncoderConfig,
 
 media::EncodeSupportSet RemoteEncoderModule::Supports(
     const EncoderConfig& aConfig) const {
-  // FIXME(aosmond)
-  return media::EncodeSupportSet{media::EncodeSupport::SoftwareEncode};
+  return SupportsCodec(aConfig.mCodec);
 }
 
 media::EncodeSupportSet RemoteEncoderModule::SupportsCodec(
     CodecType aCodecType) const {
-  // FIXME(aosmond)
-  return media::EncodeSupportSet{media::EncodeSupport::SoftwareEncode};
+  media::EncodeSupportSet supports =
+      RemoteMediaManagerChild::Supports(mLocation, aCodecType);
+  MOZ_LOG(sPEMLog, LogLevel::Debug,
+          ("Sandbox %s encoder %s requested codec %d",
+           RemoteMediaInToStr(mLocation),
+           supports.isEmpty() ? "supports" : "rejects",
+           static_cast<int>(aCodecType)));
+  return supports;
 }
 
 }  // namespace mozilla
