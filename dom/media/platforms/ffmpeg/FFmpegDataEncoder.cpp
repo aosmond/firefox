@@ -48,48 +48,44 @@ AVCodecID GetFFmpegEncoderCodecId<LIBAV_VER>(CodecType aCodec) {
 }
 
 /* static */
-AVCodec* FFmpegDataEncoder<LIBAV_VER>::FindEncoderWithPreference(
+AVCodec* FFmpegDataEncoder<LIBAV_VER>::FindSoftwareEncoder(
     const FFmpegLibWrapper* aLib, AVCodecID aCodecId) {
   MOZ_ASSERT(aLib);
 
-  // Prioritize libx264 for now since it's the only h264 codec we tested. Once
-  // libopenh264 is supported, we can simply use `avcodec_find_encoder` and
-  // rename this function.
-  if (aCodecId == AV_CODEC_ID_H264) {
-    AVCodec* codec = aLib->avcodec_find_encoder_by_name("libx264");
-    if (codec) {
-      FFMPEGV_LOG("Prefer libx264 for h264 codec");
+  AVCodec* fallbackCodec = nullptr;
+  void* opaque = nullptr;
+  while (AVCodec* codec = aLib->av_codec_iterate(&opaque)) {
+    if (codec->id == aCodecId && aLib->av_codec_is_encoder(codec) &&
+        !aLib->avcodec_get_hw_config(codec, 0)) {
+      // Prioritize libx264 for now since it's the only h264 codec we tested.
+      // Once libopenh264 is supported, we can simply use the first one we find.
+      if (aCodecId == AV_CODEC_ID_H264) {
+        if (strcmp(codec->name, "libx264")) {
+          fallbackCodec = codec;
+          continue;
+        }
+        FFMPEGV_LOG("Prefer libx264 for h264 codec");
+      }
       return codec;
     }
-    FFMPEGV_LOG("Fallback to other h264 library. Fingers crossed");
   }
-
-  return aLib->avcodec_find_encoder(aCodecId);
+  FFMPEGV_LOG("Fallback to other h264 library. Fingers crossed");
+  return fallbackCodec;
 }
 
 /* static */
-Result<AVCodecContext*, MediaResult>
-FFmpegDataEncoder<LIBAV_VER>::AllocateCodecContext(const FFmpegLibWrapper* aLib,
-                                                   AVCodecID aCodecId) {
-  AVCodec* codec = FindEncoderWithPreference(aLib, aCodecId);
-  if (!codec) {
-    return Err(MediaResult(
-        NS_ERROR_DOM_MEDIA_FATAL_ERR,
-        RESULT_DETAIL("failed to find ffmpeg encoder for codec id %d",
-                      aCodecId)));
+AVCodec* FFmpegDataEncoder<LIBAV_VER>::FindHardwareEncoder(
+    const FFmpegLibWrapper* aLib, AVCodecID aCodecId) {
+  MOZ_ASSERT(aLib);
+
+  void* opaque = nullptr;
+  while (AVCodec* codec = aLib->av_codec_iterate(&opaque)) {
+    if (codec->id == aCodecId && aLib->av_codec_is_encoder(codec) &&
+        aLib->avcodec_get_hw_config(codec, 0)) {
+      return codec;
+    }
   }
-
-  AVCodecContext* ctx = aLib->avcodec_alloc_context3(codec);
-  if (!ctx) {
-    return Err(MediaResult(
-        NS_ERROR_OUT_OF_MEMORY,
-        RESULT_DETAIL("failed to allocate ffmpeg context for codec %s",
-                      codec->name)));
-  }
-
-  MOZ_ASSERT(ctx->codec == codec);
-
-  return ctx;
+  return nullptr;
 }
 
 /* static */
@@ -290,6 +286,46 @@ void FFmpegDataEncoder<LIBAV_VER>::ShutdownInternal() {
     mLib->av_freep(&mCodecContext);
     mCodecContext = nullptr;
   }
+}
+
+Result<AVCodecContext*, MediaResult>
+FFmpegDataEncoder<LIBAV_VER>::AllocateCodecContext() {
+  AVCodec* codec;
+  switch (mConfig.mHardwarePreference) {
+    case HardwarePreference::RequireHardware:
+      codec = FindHardwareEncoder(mLib, mCodecID);
+      break;
+    case HardwarePreference::RequireSoftware:
+      codec = FindSoftwareEncoder(mLib, mCodecID);
+      break;
+    default:
+      MOZ_ASSERT_UNREACHABLE("unhandled hardware preference!");
+    case HardwarePreference::None:
+      codec = FindHardwareEncoder(mLib, mCodecID);
+      if (!codec) {
+        codec = FindSoftwareEncoder(mLib, mCodecID);
+      }
+      break;
+  }
+
+  if (!codec) {
+    return Err(MediaResult(
+        NS_ERROR_DOM_MEDIA_FATAL_ERR,
+        RESULT_DETAIL("failed to find ffmpeg encoder for codec id %d",
+                      mCodecID)));
+  }
+
+  AVCodecContext* ctx = mLib->avcodec_alloc_context3(codec);
+  if (!ctx) {
+    return Err(MediaResult(
+        NS_ERROR_OUT_OF_MEMORY,
+        RESULT_DETAIL("failed to allocate ffmpeg context for codec %s",
+                      codec->name)));
+  }
+
+  MOZ_ASSERT(ctx->codec == codec);
+
+  return ctx;
 }
 
 int FFmpegDataEncoder<LIBAV_VER>::OpenCodecContext(const AVCodec* aCodec,
