@@ -63,14 +63,16 @@ RemoteEncoderModule::AsyncCreateEncoder(const EncoderConfig& aEncoderConfig,
                                                     aEncoderConfig);
 }
 
-bool RemoteEncoderModule::Supports(const EncoderConfig& aConfig) const {
+media::EncodeSupportSet RemoteEncoderModule::Supports(
+    const EncoderConfig& aConfig) const {
   // FIXME(aosmond)
-  return true;
+  return media::EncodeSupportSet{media::EncodeSupport::SoftwareEncode};
 }
 
-bool RemoteEncoderModule::SupportsCodec(CodecType aCodecType) const {
+media::EncodeSupportSet RemoteEncoderModule::SupportsCodec(
+    CodecType aCodecType) const {
   // FIXME(aosmond)
-  return true;
+  return media::EncodeSupportSet{media::EncodeSupport::SoftwareEncode};
 }
 
 }  // namespace mozilla

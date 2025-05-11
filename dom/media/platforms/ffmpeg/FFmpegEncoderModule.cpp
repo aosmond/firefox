@@ -13,12 +13,15 @@
 // This must be the last header included
 #include "FFmpegLibs.h"
 
+using mozilla::media::EncodeSupportSet;
+
 namespace mozilla {
 
 template <int V>
-bool FFmpegEncoderModule<V>::Supports(const EncoderConfig& aConfig) const {
+EncodeSupportSet FFmpegEncoderModule<V>::Supports(
+    const EncoderConfig& aConfig) const {
   if (!CanLikelyEncode(aConfig)) {
-    return false;
+    return EncodeSupportSet{};
   }
   // We only support L1T2 and L1T3 ScalabilityMode in VPX and AV1 encoders via
   // libvpx and libaom for now.
@@ -26,23 +29,26 @@ bool FFmpegEncoderModule<V>::Supports(const EncoderConfig& aConfig) const {
     if (aConfig.mCodec == CodecType::AV1) {
       // libaom only supports SVC in CBR mode.
       if (aConfig.mBitrateMode != BitrateMode::Constant) {
-        return false;
+        return EncodeSupportSet{};
       }
     } else if (aConfig.mCodec != CodecType::VP8 &&
                aConfig.mCodec != CodecType::VP9) {
-      return false;
+      return EncodeSupportSet{};
     }
   }
   return SupportsCodec(aConfig.mCodec);
 }
 
 template <int V>
-bool FFmpegEncoderModule<V>::SupportsCodec(CodecType aCodec) const {
+EncodeSupportSet FFmpegEncoderModule<V>::SupportsCodec(CodecType aCodec) const {
   AVCodecID id = GetFFmpegEncoderCodecId<V>(aCodec);
   if (id == AV_CODEC_ID_NONE) {
-    return false;
+    return EncodeSupportSet{};
   }
-  return !!FFmpegDataEncoder<V>::FindEncoderWithPreference(mLib, id);
+  if (!FFmpegDataEncoder<V>::FindEncoderWithPreference(mLib, id)) {
+    return EncodeSupportSet{};
+  }
+  return EncodeSupportSet{media::EncodeSupport::SoftwareEncode};
 }
 
 template <int V>
