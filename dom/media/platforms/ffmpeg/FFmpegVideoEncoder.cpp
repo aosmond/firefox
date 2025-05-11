@@ -317,7 +317,7 @@ MediaResult FFmpegVideoEncoder<LIBAV_VER>::InitEncoder() {
   FFMPEGV_LOG("FFmpegVideoEncoder::InitEncoder");
 
   // Initialize the common members of the encoder instance
-  auto r = AllocateCodecContext(mLib, mCodecID);
+  auto r = AllocateCodecContext();
   if (r.isErr()) {
     return r.inspectErr();
   }
