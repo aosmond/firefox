@@ -63,6 +63,8 @@
 #include "nsIXULRuntime.h"
 #include "nsThreadManager.h"
 #include "nscore.h"
+#include "PDMFactory.h"
+#include "PEMFactory.h"
 #include "prenv.h"
 #include "skia/include/core/SkGraphics.h"
 #if defined(XP_WIN)
@@ -120,7 +122,8 @@ static media::MediaCodecsSupported GetFullMediaCodecSupport(
     }
   });
 #endif
-  return PDMFactory::Supported(aForceRefresh);
+  return PDMFactory::Supported(aForceRefresh) +
+         PEMFactory::Supported(aForceRefresh);
 }
 
 static GPUParent* sGPUParent;

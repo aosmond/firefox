@@ -18,6 +18,7 @@
 #endif
 
 #include "PDMFactory.h"
+#include "PEMFactory.h"
 #include "gfxConfig.h"
 #include "mozilla/Assertions.h"
 #include "mozilla/FOGIPC.h"
@@ -140,7 +141,7 @@ mozilla::ipc::IPCResult RDDParent::RecvInit(
     gfxVars::ApplyUpdate(var);
   }
 
-  auto supported = PDMFactory::Supported();
+  auto supported = PDMFactory::Supported() + PEMFactory::Supported();
   Unused << SendUpdateMediaCodecsSupported(supported);
 
 #if defined(MOZ_SANDBOX)
