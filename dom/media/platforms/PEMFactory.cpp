@@ -156,7 +156,7 @@ PEMFactory::CheckAndMaybeCreateEncoder(const EncoderConfig& aConfig,
                                        uint32_t aIndex,
                                        const RefPtr<TaskQueue>& aTaskQueue) {
   for (uint32_t i = aIndex; i < mCurrentPEMs.Length(); i++) {
-    if (!mCurrentPEMs[i]->Supports(aConfig)) {
+    if (mCurrentPEMs[i]->Supports(aConfig).isEmpty()) {
       continue;
     }
     return CreateEncoderWithPEM(mCurrentPEMs[i], aConfig, aTaskQueue)
@@ -219,11 +219,12 @@ media::EncodeSupportSet PEMFactory::Supports(
     const EncoderConfig& aConfig) const {
   RefPtr<PlatformEncoderModule> found;
   for (const auto& m : mCurrentPEMs) {
-    if (m->Supports(aConfig)) {
+    media::EncodeSupportSet supports = m->Supports(aConfig);
+    if (!supports.isEmpty()) {
       // TODO name
       LOG("Checking if %s supports codec %s: yes", m->GetName(),
           GetCodecTypeString(aConfig.mCodec));
-      return media::EncodeSupportSet{media::EncodeSupport::SoftwareEncode};
+      return supports;
     }
     LOG("Checking if %s supports codec %s: no", m->GetName(),
         GetCodecTypeString(aConfig.mCodec));
@@ -233,11 +234,12 @@ media::EncodeSupportSet PEMFactory::Supports(
 
 media::EncodeSupportSet PEMFactory::SupportsCodec(CodecType aCodec) const {
   for (const auto& m : mCurrentPEMs) {
-    if (m->SupportsCodec(aCodec)) {
+    media::EncodeSupportSet supports = m->SupportsCodec(aCodec);
+    if (!supports.isEmpty()) {
       // TODO name
       LOG("Checking if %s supports codec %d: yes", m->GetName(),
           static_cast<int>(aCodec));
-      return media::EncodeSupportSet{media::EncodeSupport::SoftwareEncode};
+      return supports;
     }
     LOG("Checking if %s supports codec %d: no", m->GetName(),
         static_cast<int>(aCodec));
@@ -250,7 +252,7 @@ already_AddRefed<PlatformEncoderModule> PEMFactory::FindPEM(
     const EncoderConfig& aConfig) const {
   RefPtr<PlatformEncoderModule> found;
   for (const auto& m : mCurrentPEMs) {
-    if (m->Supports(aConfig)) {
+    if (!m->Supports(aConfig).isEmpty()) {
       found = m;
       break;
     }

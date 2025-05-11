@@ -33,8 +33,8 @@ class RemoteEncoderModule final : public PlatformEncoderModule {
       const EncoderConfig& aEncoderConfig,
       const RefPtr<TaskQueue>& aTaskQueue) override;
 
-  bool Supports(const EncoderConfig& aConfig) const override;
-  bool SupportsCodec(CodecType aCodecType) const override;
+  media::EncodeSupportSet Supports(const EncoderConfig& aConfig) const override;
+  media::EncodeSupportSet SupportsCodec(CodecType aCodecType) const override;
 
   const char* GetName() const override { return "Remote Encoder Module"; }
 
