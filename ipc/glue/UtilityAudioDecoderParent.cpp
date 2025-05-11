@@ -11,6 +11,7 @@
 
 #include "mozilla/RemoteMediaManagerParent.h"
 #include "PDMFactory.h"
+#include "PEMFactory.h"
 
 #if defined(XP_WIN) && defined(MOZ_SANDBOX)
 #  include "WMF.h"
@@ -122,7 +123,7 @@ void UtilityAudioDecoderParent::Start(
   }
 #endif
 
-  auto supported = PDMFactory::Supported();
+  auto supported = PDMFactory::Supported() + PEMFactory::Supported();
   Unused << SendUpdateMediaCodecsSupported(GetRemoteMediaInFromKind(mKind),
                                            supported);
   PROFILER_MARKER_UNTYPED("UtilityAudioDecoderParent::Start", IPC,
@@ -182,7 +183,8 @@ IPCResult UtilityAudioDecoderParent::RecvUpdateVar(
           // The capabilities of the system may have changed, force a refresh by
           // re-initializing the PDM.
           Unused << self->SendUpdateMediaCodecsSupported(
-              location, PDMFactory::Supported(true /* force refresh */));
+              location, PDMFactory::Supported(true /* force refresh */) +
+                            PEMFactory::Supported(true /* force refresh */));
         }
       });
   gfx::gfxVars::ApplyUpdate(aUpdate);
