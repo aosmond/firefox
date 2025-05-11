@@ -1298,10 +1298,15 @@ nsresult GfxInfo::GetFeatureStatusImpl(
     int32_t mCodec;
   } kFeatureToCodecs[] = {
       {nsIGfxInfo::FEATURE_H264_HW_DECODE, CODEC_HW_DEC_H264},
+      {nsIGfxInfo::FEATURE_H264_HW_ENCODE, CODEC_HW_ENC_H264},
       {nsIGfxInfo::FEATURE_VP8_HW_DECODE, CODEC_HW_DEC_VP8},
+      {nsIGfxInfo::FEATURE_VP8_HW_ENCODE, CODEC_HW_ENC_VP8},
       {nsIGfxInfo::FEATURE_VP9_HW_DECODE, CODEC_HW_DEC_VP9},
+      {nsIGfxInfo::FEATURE_VP9_HW_ENCODE, CODEC_HW_ENC_VP9},
       {nsIGfxInfo::FEATURE_AV1_HW_DECODE, CODEC_HW_DEC_AV1},
-      {nsIGfxInfo::FEATURE_HEVC_HW_DECODE, CODEC_HW_DEC_HEVC}};
+      {nsIGfxInfo::FEATURE_AV1_HW_ENCODE, CODEC_HW_ENC_AV1},
+      {nsIGfxInfo::FEATURE_HEVC_HW_DECODE, CODEC_HW_DEC_HEVC},
+      {nsIGfxInfo::FEATURE_HEVC_HW_ENCODE, CODEC_HW_ENC_HEVC}};
 
   for (const auto& pair : kFeatureToCodecs) {
     if (aFeature != pair.mFeature) {
