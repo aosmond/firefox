@@ -47,7 +47,9 @@ EncodeSupportSet FFmpegEncoderModule<V>::SupportsCodec(CodecType aCodec) const {
     return EncodeSupportSet{};
   }
   EncodeSupportSet supports;
-  if (FFmpegDataEncoder<V>::FindHardwareEncoder(mLib, id)) {
+  if (StaticPrefs::media_ffvpx_hw_enabled() &&
+      FFmpegDataEncoder<V>::FindHardwareEncoder(mLib, id) &&
+      sSupportedHWCodecs.Contains(id)) {
     supports += EncodeSupport::HardwareEncode;
   }
   if (FFmpegDataEncoder<V>::FindSoftwareEncoder(mLib, id)) {
