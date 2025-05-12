@@ -214,19 +214,18 @@ media::EncodeSupportSet PEMFactory::Supports(
 }
 
 media::EncodeSupportSet PEMFactory::SupportsCodec(CodecType aCodec) const {
+  media::EncodeSupportSet supports{};
   for (const auto& m : mCurrentPEMs) {
-    media::EncodeSupportSet supports = m->SupportsCodec(aCodec);
-    if (!supports.isEmpty()) {
-      // TODO name
-      LOG("Checking if %s supports codec %d: yes", m->GetName(),
-          static_cast<int>(aCodec));
-      return supports;
-    }
-    LOG("Checking if %s supports codec %d: no", m->GetName(),
-        static_cast<int>(aCodec));
+    media::EncodeSupportSet pemSupports = m->SupportsCodec(aCodec);
+    // TODO name
+    LOG("Checking if %s supports codec %d: %s", m->GetName(),
+        static_cast<int>(aCodec), pemSupports.isEmpty() ? "no" : "yes");
+    supports += pemSupports;
   }
-  LOG("No PEM support %d", static_cast<int>(aCodec));
-  return media::EncodeSupportSet{};
+  if (supports.isEmpty()) {
+    LOG("No PEM support %d", static_cast<int>(aCodec));
+  }
+  return supports;
 }
 
 already_AddRefed<PlatformEncoderModule> PEMFactory::FindPEM(
@@ -250,14 +249,6 @@ media::MediaCodecsSupported PEMFactory::Supported(bool aForceRefresh) {
   static auto calculate = []() {
     auto pem = MakeRefPtr<PEMFactory>();
     MediaCodecsSupported supported;
-    // H264 and AAC depends on external framework that must be dynamically
-    // loaded.
-    // We currently only ship a single PDM per platform able to decode AAC or
-    // H264. As such we can assert that being able to create a H264 or AAC
-    // decoder indicates that with WMF on Windows or FFmpeg on Unixes is
-    // available.
-    // This logic will have to be revisited if a PDM supporting either codec
-    // will be added in addition to the WMF and FFmpeg PDM (such as OpenH264)
     for (const auto& cd : MCSInfo::GetAllCodecDefinitions()) {
       auto codecType = MediaCodecToCodecType(cd.codec);
       if (codecType == CodecType::Unknown) {
