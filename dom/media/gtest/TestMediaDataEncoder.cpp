@@ -191,7 +191,7 @@ already_AddRefed<MediaDataEncoder> CreateVideoEncoder(
     const Maybe<T>& aSpecific) {
   RefPtr<PEMFactory> f(new PEMFactory());
 
-  if (!f->SupportsCodec(aCodec)) {
+  if (f->SupportsCodec(aCodec).isEmpty()) {
     return nullptr;
   }
 
