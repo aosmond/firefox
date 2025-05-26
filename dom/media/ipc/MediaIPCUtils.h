@@ -20,6 +20,7 @@
 #include "mozilla/Maybe.h"
 #include "mozilla/ParamTraits_TiedFields.h"
 #include "mozilla/gfx/Rect.h"
+#include "mozilla/dom/MediaKeysBinding.h"
 #include "mozilla/dom/MFCDMSerializers.h"
 
 namespace IPC {
@@ -644,6 +645,13 @@ struct ParamTraits<mozilla::EncoderConfigurationChangeList*> {
     return true;
   }
 };
+
+template <>
+struct ParamTraits<mozilla::dom::MediaKeySessionType>
+    : public ContiguousEnumSerializerInclusive<
+          mozilla::dom::MediaKeySessionType,
+          mozilla::dom::MediaKeySessionType::Temporary,
+          mozilla::dom::MediaKeySessionType::Persistent_license> {};
 
 }  // namespace IPC
 
