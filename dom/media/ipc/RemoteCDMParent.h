@@ -10,39 +10,37 @@
 
 namespace mozilla {
 
-class RemoteCDMParent final : public PRemoteCDMParent {
+class RemoteCDMParent : public PRemoteCDMParent {
  public:
   NS_INLINE_DECL_THREADSAFE_REFCOUNTING(RemoteCDMParent, final);
 
   RemoteCDMParent();
 
   // PRemoteCDMParent
-  mozilla::ipc::IPCResult RecvInit(const RemoteCDMInitRequestIPDL& request,
-                                   InitResolver&& aResolver);
+  virtual mozilla::ipc::IPCResult RecvInit(
+      const RemoteCDMInitRequestIPDL& request, InitResolver&& aResolver) = 0;
 
-  mozilla::ipc::IPCResult RecvCreateSession(
+  virtual mozilla::ipc::IPCResult RecvCreateSession(
       const RemoteCDMCreateSessionRequestIPDL& request,
-      CreateSessionResolver&& aResolver);
+      CreateSessionResolver&& aResolver) = 0;
 
-  mozilla::ipc::IPCResult RecvLoadSession(
+  virtual mozilla::ipc::IPCResult RecvLoadSession(
       const RemoteCDMLoadSessionRequestIPDL& request,
-      LoadSessionResolver&& aResolver);
+      LoadSessionResolver&& aResolver) = 0;
 
-  mozilla::ipc::IPCResult RecvUpdateSession(
+  virtual mozilla::ipc::IPCResult RecvUpdateSession(
       const RemoteCDMUpdateSessionRequestIPDL& request,
-      UpdateSessionResolver&& aResolver);
+      UpdateSessionResolver&& aResolver) = 0;
 
-  mozilla::ipc::IPCResult RecvRemoveSession(const nsAString& sessionId,
-                                            RemoveSessionResolver&& aResolver);
+  virtual mozilla::ipc::IPCResult RecvRemoveSession(
+      const nsAString& sessionId, RemoveSessionResolver&& aResolver) = 0;
 
-  mozilla::ipc::IPCResult RecvCloseSession(const nsAString& sessionId,
-                                           CloseSessionResolver&& aResolver);
+  virtual mozilla::ipc::IPCResult RecvCloseSession(
+      const nsAString& sessionId, CloseSessionResolver&& aResolver) = 0;
 
-  mozilla::ipc::IPCResult RecvSetServerCertificate(
+  virtual mozilla::ipc::IPCResult RecvSetServerCertificate(
       mozilla::Span<uint8_t const> certificate,
-      SetServerCertificateResolver&& aResolver);
-
-  void ActorDestroy(ActorDestroyReason aWhy) override;
+      SetServerCertificateResolver&& aResolver) = 0;
 
  private:
   virtual ~RemoteCDMParent();
