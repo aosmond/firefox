@@ -7,10 +7,7 @@
 #ifndef MediaDrmNdkCDMProxy_h_
 #define MediaDrmNdkCDMProxy_h_
 
-#include "mozilla/CDMProxy.h"
-#include "mozilla/CDMCaps.h"
-#include "mozilla/dom/MediaKeys.h"
-#include "mozilla/dom/MediaKeySession.h"
+#include "mozilla/RemoteCDMParent.h"
 #include "mozilla/StaticMutex.h"
 #include "mozilla/StaticPtr.h"
 #include "mozilla/UniquePtr.h"
@@ -70,91 +67,37 @@ using AMediaDrmFnPtr_setOnExpirationUpdateListener =
 using AMediaDrmFnPtr_setOnKeysChangeListener =
     media_status_t (*)(AMediaDrm*, AMediaDrmFnPtr_KeysChangeListener);
 
-class MediaDrmNdkCDMProxy final : public CDMProxy {
+class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
  public:
-  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(MediaDrmNdkCDMProxy, override)
-
-  MediaDrmNdkCDMProxy(dom::MediaKeys* aKeys, const nsAString& aKeySystem,
+  MediaDrmNdkCDMProxy(const nsAString& aKeySystem,
                       bool aDistinctiveIdentifierRequired,
                       bool aPersistentStateRequired);
 
-  void Init(PromiseId aPromiseId, const nsAString& aOrigin,
-            const nsAString& aTopLevelOrigin,
-            const nsAString& aGMPName) override;
+  // PRemoteCDMParent
+  mozilla::ipc::IPCResult RecvInit(const RemoteCDMInitRequestIPDL& request,
+                                   InitResolver&& aResolver) override;
 
-  void CreateSession(uint32_t aCreateSessionToken,
-                     MediaKeySessionType aSessionType, PromiseId aPromiseId,
-                     const nsAString& aInitDataType,
-                     nsTArray<uint8_t>& aInitData) override;
+  mozilla::ipc::IPCResult RecvCreateSession(
+      const RemoteCDMCreateSessionRequestIPDL& request,
+      CreateSessionResolver&& aResolver) override;
 
-  void LoadSession(PromiseId aPromiseId, dom::MediaKeySessionType aSessionType,
-                   const nsAString& aSessionId) override;
+  mozilla::ipc::IPCResult RecvLoadSession(
+      const RemoteCDMLoadSessionRequestIPDL& request,
+      LoadSessionResolver&& aResolver) override;
 
-  void SetServerCertificate(PromiseId aPromiseId,
-                            nsTArray<uint8_t>& aCert) override;
+  mozilla::ipc::IPCResult RecvUpdateSession(
+      const RemoteCDMUpdateSessionRequestIPDL& request,
+      UpdateSessionResolver&& aResolver) override;
 
-  void UpdateSession(const nsAString& aSessionId, PromiseId aPromiseId,
-                     nsTArray<uint8_t>& aResponse) override;
+  mozilla::ipc::IPCResult RecvRemoveSession(
+      const nsAString& sessionId, RemoveSessionResolver&& aResolver) override;
 
-  void CloseSession(const nsAString& aSessionId, PromiseId aPromiseId) override;
+  mozilla::ipc::IPCResult RecvCloseSession(
+      const nsAString& sessionId, CloseSessionResolver&& aResolver) override;
 
-  void RemoveSession(const nsAString& aSessionId,
-                     PromiseId aPromiseId) override;
-
-  void QueryOutputProtectionStatus() override;
-
-  void NotifyOutputProtectionStatus(
-      OutputProtectionCheckStatus aCheckStatus,
-      OutputProtectionCaptureStatus aCaptureStatus) override;
-
-  void Shutdown() override;
-
-  void Terminated() override;
-
-  void OnSetSessionId(uint32_t aCreateSessionToken,
-                      const nsAString& aSessionId) override;
-
-  void OnResolveLoadSessionPromise(uint32_t aPromiseId, bool aSuccess) override;
-
-  void OnSessionMessage(const nsAString& aSessionId,
-                        dom::MediaKeyMessageType aMessageType,
-                        const nsTArray<uint8_t>& aMessage) override;
-
-  void OnExpirationChange(const nsAString& aSessionId,
-                          UnixTime aExpiryTime) override;
-
-  void OnSessionClosed(const nsAString& aSessionId) override;
-
-  void OnSessionError(const nsAString& aSessionId, nsresult aException,
-                      uint32_t aSystemCode, const nsAString& aMsg) override;
-
-  void OnRejectPromise(uint32_t aPromiseId, ErrorResult&& aException,
-                       const nsCString& aMsg) override;
-
-  RefPtr<DecryptPromise> Decrypt(MediaRawData* aSample) override;
-  void OnDecrypted(uint32_t aId, DecryptStatus aResult,
-                   const nsTArray<uint8_t>& aDecryptedData) override;
-
-  void RejectPromise(PromiseId aId, MediaResult&& aResult);
-
-  void RejectPromise(PromiseId aId, ErrorResult&& aException,
-                     const nsCString& aReason) override;
-
-  void RejectPromise(dom::PromiseId aPromiseId, media_status_t aStatus,
-                     const nsCString& aMessage);
-
-  // Resolves promise with "undefined".
-  // Can be called from any thread.
-  void ResolvePromise(PromiseId aId) override;
-
-  void OnKeyStatusesChange(const nsAString& aSessionId) override;
-
-  void GetStatusForPolicy(PromiseId aPromiseId,
-                          const dom::HDCPVersion& aMinHdcpVersion) override;
-
-#ifdef DEBUG
-  bool IsOnOwnerThread() override;
-#endif
+  mozilla::ipc::IPCResult RecvSetServerCertificate(
+      mozilla::Span<uint8_t const> certificate,
+      SetServerCertificateResolver&& aResolver) override;
 
  private:
   virtual ~MediaDrmNdkCDMProxy();
