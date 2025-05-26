@@ -122,6 +122,9 @@ class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
                    AMediaDrmEventType aEventType, int aExtra,
                    UniquePtr<uint8_t[]>&& aData, size_t aDataSize);
 
+  mozilla::ipc::IPCResult RequestProvision(InitResolver&& aResolver);
+  mozilla::ipc::IPCResult FinishInit(InitResolver&& aResolver);
+
   void OnProvisionResponse(const uint8_t* aResponse, size_t aResponseSize);
   media_status_t RequestProvision();
 
