@@ -121,12 +121,9 @@ void MediaDrmNdkCDMProxy::HandleKeysChangeCb(
     const AMediaDrmKeyStatus* aKeyStatus, size_t aNumKeys,
     bool aHasNewUsableKey) {}
 
-MediaDrmNdkCDMProxy::MediaDrmNdkCDMProxy(dom::MediaKeys* aKeys,
-                                         const nsAString& aKeySystem,
+MediaDrmNdkCDMProxy::MediaDrmNdkCDMProxy(const nsAString& aKeySystem,
                                          bool aDistinctiveIdentifierRequired,
-                                         bool aPersistentStateRequired)
-    : CDMProxy(aKeys, aKeySystem, aDistinctiveIdentifierRequired,
-               aPersistentStateRequired) {}
+                                         bool aPersistentStateRequired) {}
 
 MediaDrmNdkCDMProxy::~MediaDrmNdkCDMProxy() { Destroy(); }
 
@@ -145,25 +142,169 @@ void MediaDrmNdkCDMProxy::Destroy() {
   mCryptoSessionId = {};
 }
 
+mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
+    const RemoteCDMInitRequestIPDL& request, InitResolver&& aResolver) {
+  if (!InitializeStatics()) {
+    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                          "Cannot load media NDK symbols"_ns));
+    return IPC_OK();
+  }
+
+  static constexpr uint8_t WIDEVINE_UUID[] = {
+      0xed, 0xef, 0x8b, 0xa9, 0x79, 0xd6, 0x4a, 0xce,
+      0xa3, 0xc8, 0x27, 0xdc, 0xd5, 0x1d, 0x21, 0xed};
+
+  if (NS_WARN_IF(
+          !sMediaNdk->mAMediaCrypto_isCryptoSchemeSupported(WIDEVINE_UUID))) {
+    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                          "AMediaCrypto does not support UUID"_ns));
+    return IPC_OK();
+  }
+
+  mDrm = sMediaNdk->mAMediaDrm_createByUUID(WIDEVINE_UUID);
+  if (NS_WARN_IF(!mDrm)) {
+    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                          "Failed to create AMediaDrm with UUID"_ns));
+    return IPC_OK();
+  }
+
+  media_status_t status =
+      sMediaNdk->mAMediaDrm_setPropertyString(mDrm, "securityLevel", "L3");
+  if (NS_WARN_IF(status != AMEDIA_OK)) {
+    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                         "Failed to set AMediaDrm securityLevel property"_ns));
+    return IPC_OK();
+  }
+
+  status =
+      sMediaNdk->mAMediaDrm_setPropertyString(mDrm, "privacyMode", "enable");
+  if (NS_WARN_IF(status != AMEDIA_OK)) {
+    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                          "Failed to set AMediaDrm privateMode property"_ns));
+    return IPC_OK();
+  }
+
+  status =
+      sMediaNdk->mAMediaDrm_setPropertyString(mDrm, "sessionSharing", "enable");
+  if (NS_WARN_IF(status != AMEDIA_OK)) {
+    aResolver(
+        MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                    "Failed to set AMediaDrm sessionSharing property"_ns));
+    return IPC_OK();
+  }
+
+  status = sMediaNdk->mAMediaDrm_setOnEventListener(mDrm, HandleEventCb);
+  if (NS_WARN_IF(status != AMEDIA_OK)) {
+    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                          "Failed to set AMediaDrm event listener"_ns));
+    return IPC_OK();
+  }
+
+  if (sMediaNdk->mAMediaDrm_setOnExpirationUpdateListener) {
+    status = sMediaNdk->mAMediaDrm_setOnExpirationUpdateListener(
+        mDrm, HandleExpirationUpdateCb);
+    if (NS_WARN_IF(status != AMEDIA_OK)) {
+      aResolver(
+          MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                      "Failed to set AMediaDrm expiration update listener"_ns));
+      return IPC_OK();
+    }
+  }
+
+  if (sMediaNdk->mAMediaDrm_setOnKeysChangeListener) {
+    status =
+        sMediaNdk->mAMediaDrm_setOnKeysChangeListener(mDrm, HandleKeysChangeCb);
+    if (NS_WARN_IF(status != AMEDIA_OK)) {
+      aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                            "Failed to set AMediaDrm keys change listener"_ns));
+      return IPC_OK();
+    }
+  }
+
+  sMediaDrmCbMap[mDrm] = this;
+
+  status = sMediaNdk->mAMediaDrm_openSession(mDrm, &mCryptoSessionId);
+
+  if (status == AMEDIA_DRM_NOT_PROVISIONED) {
+    status = RequestProvision();
+    if (NS_WARN_IF(status != AMEDIA_OK)) {
+      aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                            "Failed to request provisioning for AMediaDrm"_ns));
+      return IPC_OK();
+    }
+    return IPC_OK();
+  }
+
+  if (NS_WARN_IF(status != AMEDIA_OK)) {
+    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                          "AMediaDrm failed to open sesssion"_ns));
+    return IPC_OK();
+  }
+
+  mCrypto = sMediaNdk->mAMediaCrypto_new(WIDEVINE_UUID, mCryptoSessionId.ptr,
+                                         mCryptoSessionId.length);
+  if (NS_WARN_IF(!mCrypto)) {
+    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                          "Failed to create AMediaCrypto"_ns));
+    return IPC_OK();
+  }
+
+  aResolver(MediaResult(NS_OK));
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvCreateSession(
+    const RemoteCDMCreateSessionRequestIPDL& request,
+    CreateSessionResolver&& aResolver) {
+  // If we are still provisioning, then the remote side should have queued the
+  // requests.
+  if (NS_WARN_IF(!mDrm) || NS_WARN_IF(!mCrypto)) {
+    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                          "Missing AMediaDrm and/or AMediaCrypto"_ns));
+    return IPC_OK();
+  }
+
+  AMediaDrmSessionId sessionId;
+  media_status_t status = sMediaNdk->mAMediaDrm_openSession(mDrm, &sessionId);
+  if (NS_WARN_IF(status != AMEDIA_OK)) {
+  }
+
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvLoadSession(
+    const RemoteCDMLoadSessionRequestIPDL& request,
+    LoadSessionResolver&& aResolver) {
+  aResolver(MediaResult(NS_ERROR_NOT_IMPLEMENTED));
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvUpdateSession(
+    const RemoteCDMUpdateSessionRequestIPDL& request,
+    UpdateSessionResolver&& aResolver) {
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvRemoveSession(
+    const nsAString& sessionId, RemoveSessionResolver&& aResolver) {
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvCloseSession(
+    const nsAString& sessionId, CloseSessionResolver&& aResolver) {
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvSetServerCertificate(
+    mozilla::Span<uint8_t const> certificate,
+    SetServerCertificateResolver&& aResolver) {
+  return IPC_OK();
+}
+
 void MediaDrmNdkCDMProxy::HandleEvent(const AMediaDrmSessionId* aSessionId,
                                       AMediaDrmEventType aEventType, int aExtra,
                                       UniquePtr<uint8_t[]>&& aData,
                                       size_t aDataSize) {}
-
-void MediaDrmNdkCDMProxy::RejectPromise(PromiseId aPromiseId,
-                                        MediaResult&& aResult) {
-  ErrorResult rv;
-  aResult.ThrowTo(rv);
-  RejectPromise(aPromiseId, std::move(rv), aResult.Message());
-}
-
-void MediaDrmNdkCDMProxy::RejectPromise(dom::PromiseId aPromiseId,
-                                        media_status_t aStatus,
-                                        const nsCString& aMessage) {
-  ErrorResult rv;
-  rv.ThrowInvalidStateError(aMessage);
-  RejectPromise(aPromiseId, std::move(rv), aMessage);
-}
 
 media_status_t MediaDrmNdkCDMProxy::RequestProvision() {
   if (mProvisionRequestOutstanding) {
@@ -201,204 +342,5 @@ void MediaDrmNdkCDMProxy::OnProvisionResponse(const uint8_t* aResponse,
     // TODO reject all outstanding promises
   }
 }
-
-void MediaDrmNdkCDMProxy::Init(PromiseId aPromiseId, const nsAString& aOrigin,
-                               const nsAString& aTopLevelOrigin,
-                               const nsAString& aGMPName) {
-  if (!InitializeStatics()) {
-    RejectPromise(aPromiseId, MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                                          "Cannot load media NDK symbols"_ns));
-    return;
-  }
-
-  static constexpr uint8_t WIDEVINE_UUID[] = {
-      0xed, 0xef, 0x8b, 0xa9, 0x79, 0xd6, 0x4a, 0xce,
-      0xa3, 0xc8, 0x27, 0xdc, 0xd5, 0x1d, 0x21, 0xed};
-
-  if (NS_WARN_IF(
-          !sMediaNdk->mAMediaCrypto_isCryptoSchemeSupported(WIDEVINE_UUID))) {
-    RejectPromise(aPromiseId,
-                  MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                              "AMediaCrypto does not support UUID"_ns));
-    return;
-  }
-
-  mDrm = sMediaNdk->mAMediaDrm_createByUUID(WIDEVINE_UUID);
-  if (NS_WARN_IF(!mDrm)) {
-    RejectPromise(aPromiseId,
-                  MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                              "Failed to create AMediaDrm with UUID"_ns));
-    return;
-  }
-
-  media_status_t status =
-      sMediaNdk->mAMediaDrm_setPropertyString(mDrm, "securityLevel", "L3");
-  if (NS_WARN_IF(status != AMEDIA_OK)) {
-    return RejectPromise(aPromiseId, status,
-                         "Failed to set AMediaDrm securityLevel property"_ns);
-  }
-
-  status =
-      sMediaNdk->mAMediaDrm_setPropertyString(mDrm, "privacyMode", "enable");
-  if (NS_WARN_IF(status != AMEDIA_OK)) {
-    return RejectPromise(aPromiseId, status,
-                         "Failed to set AMediaDrm privateMode property"_ns);
-  }
-
-  status =
-      sMediaNdk->mAMediaDrm_setPropertyString(mDrm, "sessionSharing", "enable");
-  if (NS_WARN_IF(status != AMEDIA_OK)) {
-    return RejectPromise(aPromiseId, status,
-                         "Failed to set AMediaDrm sessionSharing property"_ns);
-  }
-
-  status = sMediaNdk->mAMediaDrm_setOnEventListener(mDrm, HandleEventCb);
-  if (NS_WARN_IF(status != AMEDIA_OK)) {
-    return RejectPromise(aPromiseId, status,
-                         "Failed to set AMediaDrm event listener"_ns);
-  }
-
-  if (sMediaNdk->mAMediaDrm_setOnExpirationUpdateListener) {
-    status = sMediaNdk->mAMediaDrm_setOnExpirationUpdateListener(
-        mDrm, HandleExpirationUpdateCb);
-    if (NS_WARN_IF(status != AMEDIA_OK)) {
-      return RejectPromise(
-          aPromiseId, status,
-          "Failed to set AMediaDrm expiration update listener"_ns);
-    }
-  }
-
-  if (sMediaNdk->mAMediaDrm_setOnKeysChangeListener) {
-    status =
-        sMediaNdk->mAMediaDrm_setOnKeysChangeListener(mDrm, HandleKeysChangeCb);
-    if (NS_WARN_IF(status != AMEDIA_OK)) {
-      return RejectPromise(aPromiseId, status,
-                           "Failed to set AMediaDrm keys change listener"_ns);
-    }
-  }
-
-  sMediaDrmCbMap[mDrm] = this;
-
-  status = sMediaNdk->mAMediaDrm_openSession(mDrm, &mCryptoSessionId);
-
-  if (status == AMEDIA_DRM_NOT_PROVISIONED) {
-    status = RequestProvision();
-    if (NS_WARN_IF(status != AMEDIA_OK)) {
-      return RejectPromise(aPromiseId, status,
-                           "Failed to request provisioning for AMediaDrm"_ns);
-    }
-    return;
-  }
-
-  if (NS_WARN_IF(status != AMEDIA_OK)) {
-    return RejectPromise(aPromiseId, status,
-                         "AMediaDrm failed to open sesssion"_ns);
-  }
-
-  mCrypto = sMediaNdk->mAMediaCrypto_new(WIDEVINE_UUID, mCryptoSessionId.ptr,
-                                         mCryptoSessionId.length);
-  if (NS_WARN_IF(!mCrypto)) {
-    RejectPromise(aPromiseId, MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                                          "Failed to create AMediaCrypto"_ns));
-    return;
-  }
-
-  ResolvePromise(aPromiseId);
-}
-
-void MediaDrmNdkCDMProxy::CreateSession(uint32_t aCreateSessionToken,
-                                        MediaKeySessionType aSessionType,
-                                        PromiseId aPromiseId,
-                                        const nsAString& aInitDataType,
-                                        nsTArray<uint8_t>& aInitData) {
-  // If we are still provisioning, then the remote side should have queued the
-  // requests.
-  if (NS_WARN_IF(!mDrm) || NS_WARN_IF(!mCrypto)) {
-    RejectPromise(aPromiseId,
-                  MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                              "Missing AMediaDrm and/or AMediaCrypto"_ns));
-    return;
-  }
-
-  AMediaDrmSessionId sessionId;
-  media_status_t status = sMediaNdk->mAMediaDrm_openSession(mDrm, &sessionId);
-  if (NS_WARN_IF(status != AMEDIA_OK)) {
-  }
-}
-
-void MediaDrmNdkCDMProxy::LoadSession(PromiseId aPromiseId,
-                                      dom::MediaKeySessionType aSessionType,
-                                      const nsAString& aSessionId) {}
-
-void MediaDrmNdkCDMProxy::SetServerCertificate(PromiseId aPromiseId,
-                                               nsTArray<uint8_t>& aCert) {}
-
-void MediaDrmNdkCDMProxy::UpdateSession(const nsAString& aSessionId,
-                                        PromiseId aPromiseId,
-                                        nsTArray<uint8_t>& aResponse) {}
-
-void MediaDrmNdkCDMProxy::CloseSession(const nsAString& aSessionId,
-                                       PromiseId aPromiseId) {}
-
-void MediaDrmNdkCDMProxy::RemoveSession(const nsAString& aSessionId,
-                                        PromiseId aPromiseId) {}
-
-void MediaDrmNdkCDMProxy::QueryOutputProtectionStatus() {}
-
-void MediaDrmNdkCDMProxy::NotifyOutputProtectionStatus(
-    OutputProtectionCheckStatus aCheckStatus,
-    OutputProtectionCaptureStatus aCaptureStatus) {}
-
-void MediaDrmNdkCDMProxy::Shutdown() {}
-
-void MediaDrmNdkCDMProxy::Terminated() {}
-
-void MediaDrmNdkCDMProxy::OnSetSessionId(uint32_t aCreateSessionToken,
-                                         const nsAString& aSessionId) {}
-
-void MediaDrmNdkCDMProxy::OnResolveLoadSessionPromise(uint32_t aPromiseId,
-                                                      bool aSuccess) {}
-
-void MediaDrmNdkCDMProxy::OnSessionMessage(
-    const nsAString& aSessionId, dom::MediaKeyMessageType aMessageType,
-    const nsTArray<uint8_t>& aMessage) {}
-
-void MediaDrmNdkCDMProxy::OnExpirationChange(const nsAString& aSessionId,
-                                             UnixTime aExpiryTime) {}
-
-void MediaDrmNdkCDMProxy::OnSessionClosed(const nsAString& aSessionId) {}
-
-void MediaDrmNdkCDMProxy::OnSessionError(const nsAString& aSessionId,
-                                         nsresult aException,
-                                         uint32_t aSystemCode,
-                                         const nsAString& aMsg) {}
-
-void MediaDrmNdkCDMProxy::OnRejectPromise(uint32_t aPromiseId,
-                                          ErrorResult&& aException,
-                                          const nsCString& aMsg) {}
-
-RefPtr<DecryptPromise> MediaDrmNdkCDMProxy::Decrypt(MediaRawData* aSample) {
-  return nullptr;
-}
-
-void MediaDrmNdkCDMProxy::MediaDrmNdkCDMProxy::OnDecrypted(
-    uint32_t aId, DecryptStatus aResult,
-    const nsTArray<uint8_t>& aDecryptedData) {}
-
-void MediaDrmNdkCDMProxy::RejectPromise(PromiseId aId, ErrorResult&& aException,
-                                        const nsCString& aReason) {}
-
-// Resolves promise with "undefined".
-// Can be called from any thread.
-void MediaDrmNdkCDMProxy::ResolvePromise(PromiseId aId) {}
-
-void MediaDrmNdkCDMProxy::OnKeyStatusesChange(const nsAString& aSessionId) {}
-
-void MediaDrmNdkCDMProxy::GetStatusForPolicy(
-    PromiseId aPromiseId, const dom::HDCPVersion& aMinHdcpVersion) {}
-
-#ifdef DEBUG
-bool MediaDrmNdkCDMProxy::IsOnOwnerThread() { return false; }
-#endif
 
 }  // namespace mozilla
