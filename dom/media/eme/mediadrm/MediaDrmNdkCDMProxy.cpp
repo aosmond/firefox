@@ -144,6 +144,12 @@ void MediaDrmNdkCDMProxy::Destroy() {
 
 mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
     const RemoteCDMInitRequestIPDL& request, InitResolver&& aResolver) {
+  if (NS_WARN_IF(mDrm) || NS_WARN_IF(mCrypto)) {
+    aResolver(
+        MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR, "Already initialized"_ns));
+    return IPC_OK();
+  }
+
   if (!InitializeStatics()) {
     aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
                           "Cannot load media NDK symbols"_ns));
@@ -172,7 +178,7 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
       sMediaNdk->mAMediaDrm_setPropertyString(mDrm, "securityLevel", "L3");
   if (NS_WARN_IF(status != AMEDIA_OK)) {
     aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                         "Failed to set AMediaDrm securityLevel property"_ns));
+                          "Failed to set AMediaDrm securityLevel property"_ns));
     return IPC_OK();
   }
 
@@ -226,13 +232,7 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
   status = sMediaNdk->mAMediaDrm_openSession(mDrm, &mCryptoSessionId);
 
   if (status == AMEDIA_DRM_NOT_PROVISIONED) {
-    status = RequestProvision();
-    if (NS_WARN_IF(status != AMEDIA_OK)) {
-      aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                            "Failed to request provisioning for AMediaDrm"_ns));
-      return IPC_OK();
-    }
-    return IPC_OK();
+    return RequestProvision(std::move(aResolver));
   }
 
   if (NS_WARN_IF(status != AMEDIA_OK)) {
@@ -240,6 +240,66 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
                           "AMediaDrm failed to open sesssion"_ns));
     return IPC_OK();
   }
+
+  return FinishInit(std::move(aResolver));
+}
+
+mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RequestProvision(
+    InitResolver&& aResolver) {
+  MOZ_ASSERT(mDrm);
+  MOZ_ASSERT(!mCrypto);
+
+  const uint8_t* provisionRequest = nullptr;
+  size_t provisionRequestSize = 0;
+  const char* serverUrl = nullptr;
+  media_status_t status = sMediaNdk->mAMediaDrm_getProvisionRequest(
+      mDrm, &provisionRequest, &provisionRequestSize, &serverUrl);
+  if (NS_WARN_IF(status != AMEDIA_OK)) {
+    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                          "Failed to request provisioning for AMediaDrm"_ns));
+    return IPC_OK();
+  }
+
+  SendProvision(RemoteCDMProvisionRequestIPDL(
+                    nsCString(serverUrl),
+                    nsTArray<uint8_t>(provisionRequest, provisionRequestSize)))
+      ->Then(
+          GetCurrentSerialEventTarget(), __func__,
+          [self = RefPtr{this}, resolver = std::move(aResolver)](
+              RemoteCDMProvisionResponseIPDL&& aResponse) mutable {
+            if (aResponse.type() ==
+                RemoteCDMProvisionResponseIPDL::TMediaResult) {
+              resolver(MediaResult(
+                  NS_ERROR_DOM_INVALID_STATE_ERR,
+                  "Content failed to get provisioning response"_ns));
+              return;
+            }
+
+            media_status_t status =
+                sMediaNdk->mAMediaDrm_provideProvisionResponse(
+                    self->mDrm, aResponse.get_ArrayOfuint8_t().Elements(),
+                    aResponse.get_ArrayOfuint8_t().Length());
+            if (NS_WARN_IF(status != AMEDIA_OK)) {
+              resolver(MediaResult(
+                  NS_ERROR_DOM_INVALID_STATE_ERR,
+                  "AMediaDrm failed to accept provision response"_ns));
+              return;
+            }
+
+            self->FinishInit(std::move(resolver));
+          },
+          [](const mozilla::ipc::ResponseRejectReason& aReason) {});
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::FinishInit(
+    InitResolver&& aResolver) {
+  MOZ_ASSERT(mDrm);
+  MOZ_ASSERT(!mCrypto);
+
+  static constexpr uint8_t WIDEVINE_UUID[] = {
+      0xed, 0xef, 0x8b, 0xa9, 0x79, 0xd6, 0x4a, 0xce,
+      0xa3, 0xc8, 0x27, 0xdc, 0xd5, 0x1d, 0x21, 0xed};
 
   mCrypto = sMediaNdk->mAMediaCrypto_new(WIDEVINE_UUID, mCryptoSessionId.ptr,
                                          mCryptoSessionId.length);
