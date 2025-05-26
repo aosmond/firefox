@@ -14,7 +14,7 @@ class RemoteCDMParent : public PRemoteCDMParent {
  public:
   NS_INLINE_DECL_THREADSAFE_REFCOUNTING(RemoteCDMParent, final);
 
-  RemoteCDMParent();
+  RemoteCDMParent() = default;
 
   // PRemoteCDMParent
   virtual mozilla::ipc::IPCResult RecvInit(
@@ -42,8 +42,8 @@ class RemoteCDMParent : public PRemoteCDMParent {
       mozilla::Span<uint8_t const> certificate,
       SetServerCertificateResolver&& aResolver) = 0;
 
- private:
-  virtual ~RemoteCDMParent();
+ protected:
+  virtual ~RemoteCDMParent() = default;
 };
 
 }  // namespace mozilla
