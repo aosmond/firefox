@@ -34,6 +34,10 @@
 #  include "MFCDMParent.h"
 #endif
 
+#ifdef MOZ_WIDGET_ANDROID
+#  include "mozilla/MediaDrmRemoteCDMParent.h"
+#endif
+
 namespace mozilla {
 
 #define LOG(msg, ...) \
@@ -117,6 +121,17 @@ void RemoteMediaManagerParent::ShutdownVideoBridge() {
 
 bool RemoteMediaManagerParent::OnManagerThread() {
   return sRemoteMediaManagerParentThread->IsOnCurrentThread();
+}
+
+/* static */
+void RemoteMediaManagerParent::Dispatch(already_AddRefed<nsIRunnable> aRunnable) {
+  if (!sRemoteMediaManagerParentThread) {
+    MOZ_DIAGNOSTIC_CRASH("Dispatching after RemoteMediaManagerParent thread shutdown!");
+    return;
+  }
+
+  MOZ_ALWAYS_SUCCEEDS(
+      sRemoteMediaManagerParentThread->Dispatch(std::move(aRunnable)));
 }
 
 PDMFactory& RemoteMediaManagerParent::EnsurePDMFactory() {
@@ -276,6 +291,15 @@ bool RemoteMediaManagerParent::DeallocPMFCDMParent(PMFCDMParent* actor) {
   static_cast<MFCDMParent*>(actor)->Destroy();
 #endif
   return true;
+}
+
+PRemoteCDMParent* RemoteMediaManagerParent::AllocPRemoteCDMParent(
+    const nsAString& aKeySystem) {
+#ifdef MOZ_WIDGET_ANDROID
+  return new MediaDrmRemoteCDMParent(aKeySystem);
+#else
+  return nullptr;
+#endif
 }
 
 void RemoteMediaManagerParent::Open(

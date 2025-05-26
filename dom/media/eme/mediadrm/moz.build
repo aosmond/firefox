@@ -4,16 +4,37 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+LOCAL_INCLUDES += [
+    "!/ipc/ipdl/_ipdlheaders",
+    "/ipc/chromium/src",
+]
+
 EXPORTS.mozilla += [
     "MediaDrmCDMCallbackProxy.h",
     "MediaDrmCDMProxy.h",
     "MediaDrmProxySupport.h",
+    "MediaDrmRemoteCDMParent.h",
 ]
 
 UNIFIED_SOURCES += [
     "MediaDrmCDMCallbackProxy.cpp",
     "MediaDrmCDMProxy.cpp",
     "MediaDrmProxySupport.cpp",
+    "MediaDrmRemoteCDMParent.cpp",
+]
+
+XPIDL_SOURCES += [
+    "nsIMediaDrmProvisioning.idl",
+]
+
+XPIDL_MODULE = "dom_media"
+
+EXTRA_JS_MODULES.media += [
+    "MediaDrmProvisioning.sys.mjs",
+]
+
+XPCOM_MANIFESTS += [
+    "components.conf",
 ]
 
 FINAL_LIBRARY = "xul"
