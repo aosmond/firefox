@@ -4,7 +4,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "MediaDrmNdkCDMProxy.h"
+#include "MediaDrmRemoteCDMParent.h"
 
 #include "media/NdkMediaDrm.h"
 #include "mozilla/EMEUtils.h"
@@ -13,17 +13,19 @@
 
 namespace mozilla {
 
-StaticAutoPtr<MediaDrmNdkCDMProxy::Internals> MediaDrmNdkCDMProxy::sMediaNdk;
-std::map<AMediaDrm*, MediaDrmNdkCDMProxy*> MediaDrmNdkCDMProxy::sMediaDrmCbMap;
+StaticAutoPtr<MediaDrmRemoteCDMParent::Internals>
+    MediaDrmRemoteCDMParent::sMediaNdk;
+std::map<AMediaDrm*, MediaDrmRemoteCDMParent*>
+    MediaDrmRemoteCDMParent::sMediaDrmCbMap;
 
-MediaDrmNdkCDMProxy::Internals::~Internals() {
+MediaDrmRemoteCDMParent::Internals::~Internals() {
   if (mLib) {
     dlclose(mLib);
   }
 }
 
 /* static */
-bool MediaDrmNdkCDMProxy::InitializeStatics() {
+bool MediaDrmRemoteCDMParent::InitializeStatics() {
   if (sMediaNdk) {
     return true;
   }
@@ -33,7 +35,7 @@ bool MediaDrmNdkCDMProxy::InitializeStatics() {
     return false;
   }
 
-  auto mediaNdk = MakeUnique<MediaDrmNdkCDMProxy::Internals>(lib);
+  auto mediaNdk = MakeUnique<MediaDrmRemoteCDMParent::Internals>(lib);
 
 #define LOAD_OPTIONAL_SYMBOL(objName, fnName) \
   mediaNdk->m##objName##_##fnName =           \
@@ -73,11 +75,10 @@ bool MediaDrmNdkCDMProxy::InitializeStatics() {
 }
 
 /* static */
-void MediaDrmNdkCDMProxy::HandleEventCb(AMediaDrm* aDrm,
-                                        const AMediaDrmSessionId* aSessionId,
-                                        AMediaDrmEventType aEventType,
-                                        int aExtra, const uint8_t* aData,
-                                        size_t aDataSize) {
+void MediaDrmRemoteCDMParent::HandleEventCb(
+    AMediaDrm* aDrm, const AMediaDrmSessionId* aSessionId,
+    AMediaDrmEventType aEventType, int aExtra, const uint8_t* aData,
+    size_t aDataSize) {
   // Called from an internal NDK thread. We need to dispatch to the owning
   // thread of the actor with the same AMediaDrm object.
   NS_ConvertUTF8toUTF16 sessionIdStr(
@@ -104,7 +105,7 @@ void MediaDrmNdkCDMProxy::HandleEventCb(AMediaDrm* aDrm,
 }
 
 /* static */
-void MediaDrmNdkCDMProxy::HandleExpirationUpdateCb(
+void MediaDrmRemoteCDMParent::HandleExpirationUpdateCb(
     AMediaDrm* aDrm, const AMediaDrmSessionId* aSessionId,
     int64_t aExpiryTimeInMS) {
   // Called from an internal NDK thread. We need to dispatch to the owning
@@ -126,7 +127,7 @@ void MediaDrmNdkCDMProxy::HandleExpirationUpdateCb(
 }
 
 /* static */
-void MediaDrmNdkCDMProxy::HandleKeysChangeCb(
+void MediaDrmRemoteCDMParent::HandleKeysChangeCb(
     AMediaDrm* aDrm, const AMediaDrmSessionId* aSessionId,
     const AMediaDrmKeyStatus* aKeyStatus, size_t aNumKeys,
     bool aHasNewUsableKey) {
@@ -179,9 +180,9 @@ void MediaDrmNdkCDMProxy::HandleKeysChangeCb(
       }));
 }
 
-MediaDrmNdkCDMProxy::MediaDrmNdkCDMProxy(const nsAString& aKeySystem,
-                                         bool aDistinctiveIdentifierRequired,
-                                         bool aPersistentStateRequired) {
+MediaDrmRemoteCDMParent::MediaDrmRemoteCDMParent(
+    const nsAString& aKeySystem, bool aDistinctiveIdentifierRequired,
+    bool aPersistentStateRequired) {
   if (IsWidevineKeySystem(aKeySystem)) {
     mUuid = WIDEVINE_UUID;
   } else if (IsClearkeyKeySystem(aKeySystem)) {
@@ -189,11 +190,13 @@ MediaDrmNdkCDMProxy::MediaDrmNdkCDMProxy(const nsAString& aKeySystem,
   }
 }
 
-MediaDrmNdkCDMProxy::~MediaDrmNdkCDMProxy() { Destroy(); }
+MediaDrmRemoteCDMParent::~MediaDrmRemoteCDMParent() { Destroy(); }
 
-void MediaDrmNdkCDMProxy::ActorDestroy(ActorDestroyReason aWhy) { Destroy(); }
+void MediaDrmRemoteCDMParent::ActorDestroy(ActorDestroyReason aWhy) {
+  Destroy();
+}
 
-void MediaDrmNdkCDMProxy::Destroy() {
+void MediaDrmRemoteCDMParent::Destroy() {
   mProvisionPromise.RejectIfExists(
       MediaResult(NS_ERROR_DOM_ABORT_ERR, "Destroyed"_ns), __func__);
 
@@ -215,7 +218,7 @@ void MediaDrmNdkCDMProxy::Destroy() {
   }
 }
 
-mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
+mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvInit(
     const RemoteCDMInitRequestIPDL& request, InitResolver&& aResolver) {
   if (NS_WARN_IF(!mUuid)) {
     aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR, "Invalid uuid"_ns));
@@ -306,8 +309,8 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
   return IPC_OK();
 }
 
-RefPtr<MediaDrmNdkCDMProxy::InternalPromise>
-MediaDrmNdkCDMProxy::EnsureHasAMediaCrypto() {
+RefPtr<MediaDrmRemoteCDMParent::InternalPromise>
+MediaDrmRemoteCDMParent::EnsureHasAMediaCrypto() {
   if (NS_WARN_IF(!mDrm)) {
     return InternalPromise::CreateAndReject(
         MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR, "Missing AMediaDrm"_ns),
@@ -351,8 +354,8 @@ MediaDrmNdkCDMProxy::EnsureHasAMediaCrypto() {
   return InternalPromise::CreateAndResolve(true, __func__);
 }
 
-RefPtr<MediaDrmNdkCDMProxy::InternalPromise>
-MediaDrmNdkCDMProxy::EnsureProvisioned() {
+RefPtr<MediaDrmRemoteCDMParent::InternalPromise>
+MediaDrmRemoteCDMParent::EnsureProvisioned() {
   if (NS_WARN_IF(!mDrm)) {
     return InternalPromise::CreateAndReject(
         MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR, "Missing AMediaDrm"_ns),
@@ -416,7 +419,7 @@ MediaDrmNdkCDMProxy::EnsureProvisioned() {
   return p.forget();
 }
 
-mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvCreateSession(
+mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvCreateSession(
     RemoteCDMCreateSessionRequestIPDL&& aRequest,
     CreateSessionResolver&& aResolver) {
   // If we are still provisioning, then the remote side should have queued the
@@ -513,14 +516,14 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvCreateSession(
   return IPC_OK();
 }
 
-mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvLoadSession(
+mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvLoadSession(
     const RemoteCDMLoadSessionRequestIPDL& aRequest,
     LoadSessionResolver&& aResolver) {
   aResolver(MediaResult(NS_ERROR_NOT_IMPLEMENTED));
   return IPC_OK();
 }
 
-mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvUpdateSession(
+mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvUpdateSession(
     const RemoteCDMUpdateSessionRequestIPDL& aRequest,
     UpdateSessionResolver&& aResolver) {
   const auto i = mSessions.find(aRequest.sessionId());
@@ -547,13 +550,13 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvUpdateSession(
   return IPC_OK();
 }
 
-mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvRemoveSession(
+mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvRemoveSession(
     const nsString& aSessionId, RemoveSessionResolver&& aResolver) {
   aResolver(MediaResult(NS_ERROR_NOT_IMPLEMENTED));
   return IPC_OK();
 }
 
-mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvCloseSession(
+mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvCloseSession(
     const nsString& aSessionId, CloseSessionResolver&& aResolver) {
   const auto i = mSessions.find(aSessionId);
   if (i == mSessions.end()) {
@@ -578,7 +581,7 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvCloseSession(
   return IPC_OK();
 }
 
-mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvSetServerCertificate(
+mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvSetServerCertificate(
     mozilla::Span<uint8_t const> aCertificate,
     SetServerCertificateResolver&& aResolver) {
   if (NS_WARN_IF(!mDrm)) {
@@ -598,9 +601,10 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvSetServerCertificate(
   return IPC_OK();
 }
 
-void MediaDrmNdkCDMProxy::HandleEvent(nsString&& aSessionId,
-                                      AMediaDrmEventType aEventType, int aExtra,
-                                      nsTArray<uint8_t>&& aData) {
+void MediaDrmRemoteCDMParent::HandleEvent(nsString&& aSessionId,
+                                          AMediaDrmEventType aEventType,
+                                          int aExtra,
+                                          nsTArray<uint8_t>&& aData) {
   const auto i = mSessions.find(aSessionId);
   if (i == mSessions.end()) {
     return;
@@ -689,8 +693,8 @@ void MediaDrmNdkCDMProxy::HandleEvent(nsString&& aSessionId,
   }
 }
 
-void MediaDrmNdkCDMProxy::HandleExpirationUpdate(nsString&& aSessionId,
-                                                 int aExpiryTimeInMS) {
+void MediaDrmRemoteCDMParent::HandleExpirationUpdate(nsString&& aSessionId,
+                                                     int aExpiryTimeInMS) {
   const auto i = mSessions.find(aSessionId);
   if (i == mSessions.end()) {
     return;
@@ -700,9 +704,9 @@ void MediaDrmNdkCDMProxy::HandleExpirationUpdate(nsString&& aSessionId,
       RemoteCDMKeyExpirationIPDL(std::move(aSessionId), aExpiryTimeInMS));
 }
 
-void MediaDrmNdkCDMProxy::HandleKeysChange(nsString&& aSessionId,
-                                           bool aHasNewUsableKey,
-                                           nsTArray<CDMKeyInfo>&& aKeyInfo) {
+void MediaDrmRemoteCDMParent::HandleKeysChange(
+    nsString&& aSessionId, bool aHasNewUsableKey,
+    nsTArray<CDMKeyInfo>&& aKeyInfo) {
   const auto i = mSessions.find(aSessionId);
   if (i == mSessions.end()) {
     return;
