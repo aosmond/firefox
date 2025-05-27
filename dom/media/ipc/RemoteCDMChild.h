@@ -6,36 +6,84 @@
 #ifndef include_dom_media_ipc_RemoteCDMChild_h
 #define include_dom_media_ipc_RemoteCDMChild_h
 
+#include "mozilla/CDMProxy.h"
 #include "mozilla/PRemoteCDMChild.h"
 #include "mozilla/RemoteMediaManagerChild.h"
 
 namespace mozilla {
 
-class RemoteCDMChild final : public PRemoteCDMChild {
+class RemoteCDMChild final : public PRemoteCDMChild, public CDMProxy {
  public:
   NS_INLINE_DECL_THREADSAFE_REFCOUNTING(RemoteCDMChild, final);
 
   RemoteCDMChild(nsCOMPtr<nsISerialEventTarget>&& aThread,
-                 RemoteMediaIn aLocation);
+                 RemoteMediaIn aLocation, dom::MediaKeys* aKeys,
+                 const nsAString& aKeySystem,
+                 bool aDistinctiveIdentifierRequired,
+                 bool aPersistentStateRequired);
 
   nsISerialEventTarget* GetManagerThread() const { return mThread; }
   RemoteMediaIn GetLocation() const { return mLocation; }
 
-  void ActorDestroy(ActorDestroyReason aWhy) override;
-
   // PRemoteCDMChild
+  void ActorDestroy(ActorDestroyReason aWhy) override;
   mozilla::ipc::IPCResult RecvProvision(
       const RemoteCDMProvisionRequestIPDL& request,
       ProvisionResolver&& aResolver);
-
   mozilla::ipc::IPCResult RecvOnSessionKeyStatus(
       const RemoteCDMKeyStatusIPDL& msg);
-
   mozilla::ipc::IPCResult RecvOnSessionKeyExpiration(
       const RemoteCDMKeyExpirationIPDL& msg);
-
   mozilla::ipc::IPCResult RecvOnSessionKeyMessage(
       const RemoteCDMKeyMessageIPDL& msg);
+
+  // CDMProxy
+  void Init(PromiseId aPromiseId, const nsAString& aOrigin,
+            const nsAString& aTopLevelOrigin, const nsAString& aName) override;
+  void CreateSession(uint32_t aCreateSessionToken,
+                     MediaKeySessionType aSessionType, PromiseId aPromiseId,
+                     const nsAString& aInitDataType,
+                     nsTArray<uint8_t>& aInitData) override;
+  void LoadSession(PromiseId aPromiseId, dom::MediaKeySessionType aSessionType,
+                   const nsAString& aSessionId) override;
+  void SetServerCertificate(PromiseId aPromiseId,
+                            nsTArray<uint8_t>& aCert) override;
+  void UpdateSession(const nsAString& aSessionId, PromiseId aPromiseId,
+                     nsTArray<uint8_t>& aResponse) override;
+  void CloseSession(const nsAString& aSessionId, PromiseId aPromiseId) override;
+  void RemoveSession(const nsAString& aSessionId,
+                     PromiseId aPromiseId) override;
+  void QueryOutputProtectionStatus() override;
+  void NotifyOutputProtectionStatus(
+      OutputProtectionCheckStatus aCheckStatus,
+      OutputProtectionCaptureStatus aCaptureStatus) override;
+  void Shutdown() override;
+  void Terminated() override;
+  void OnSetSessionId(uint32_t aCreateSessionToken,
+                      const nsAString& aSessionId) override;
+  void OnResolveLoadSessionPromise(uint32_t aPromiseId, bool aSuccess) override;
+  void OnSessionMessage(const nsAString& aSessionId,
+                        dom::MediaKeyMessageType aMessageType,
+                        const nsTArray<uint8_t>& aMessage) override;
+  void OnExpirationChange(const nsAString& aSessionId,
+                          UnixTime aExpiryTime) override;
+  void OnSessionClosed(const nsAString& aSessionId) override;
+  void OnSessionError(const nsAString& aSessionId, nsresult aException,
+                      uint32_t aSystemCode, const nsAString& aMsg) override;
+  void OnRejectPromise(uint32_t aPromiseId, ErrorResult&& aException,
+                       const nsCString& aMsg) override;
+  RefPtr<DecryptPromise> Decrypt(MediaRawData* aSample) override;
+  void OnDecrypted(uint32_t aId, DecryptStatus aResult,
+                   const nsTArray<uint8_t>& aDecryptedData) override;
+  void RejectPromise(PromiseId aId, ErrorResult&& aException,
+                     const nsCString& aReason) override;
+  void ResolvePromise(PromiseId aId) override;
+  void OnKeyStatusesChange(const nsAString& aSessionId) override;
+  void GetStatusForPolicy(PromiseId aPromiseId,
+                          const dom::HDCPVersion& aMinHdcpVersion) override;
+#ifdef DEBUG
+  bool IsOnOwnerThread() override;
+#endif
 
  private:
   virtual ~RemoteCDMChild();
