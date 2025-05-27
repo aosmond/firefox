@@ -7,6 +7,7 @@ include "mozilla/dom/MediaIPCUtils.h";
 
 include protocol PRemoteMediaManager;
 
+using mozilla::CDMKeyInfo from "mozilla/CDMProxy.h";
 using mozilla::MediaResult from "MediaResult.h";
 using mozilla::dom::MediaKeyMessageType from "mozilla/dom/MediaKeyMessageEventBinding.h";
 using mozilla::dom::MediaKeySessionType from "mozilla/dom/MediaKeysBinding.h";
@@ -71,16 +72,10 @@ struct RemoteCDMKeyMessageIPDL
 
 // For EME spec 'keystatuseschange' event
 // https://w3c.github.io/encrypted-media/#dom-evt-keystatuseschange
-struct RemoteCDMKeyInformation
-{
-  uint8_t[] keyId;
-  MediaKeyStatus status;
-};
-
 struct RemoteCDMKeyStatusIPDL
 {
   nsString sessionId;
-  RemoteCDMKeyInformation[] keyInfo;
+  CDMKeyInfo[] keyInfo;
 };
 
 // For EME spec Update Expiration algorithm
