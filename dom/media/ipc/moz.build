@@ -52,6 +52,7 @@ SOURCES += [
     "RDDProcessImpl.cpp",
     "RDDProcessManager.cpp",
     "RemoteAudioDecoder.cpp",
+    "RemoteCDMChild.cpp",
     "RemoteDecoderChild.cpp",
     "RemoteDecoderModule.cpp",
     "RemoteDecoderParent.cpp",
