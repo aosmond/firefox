@@ -119,6 +119,16 @@ bool RemoteMediaManagerParent::OnManagerThread() {
   return sRemoteMediaManagerParentThread->IsOnCurrentThread();
 }
 
+/* static */
+void RemoteMediaManagerParent::Dispatch(already_AddRefed<nsIRunnable> aRunnable) {
+  if (!sRemoteMediaManagerParentThread) {
+    MOZ_DIAGNOSTIC_CRASH("Dispatching after RemoteMediaManagerParent thread shutdown!");
+    return;
+  }
+
+  sRemoteMediaManagerParentThread->Dispatch(std::move(aRunnable));
+}
+
 PDMFactory& RemoteMediaManagerParent::EnsurePDMFactory() {
   MOZ_ASSERT(OnManagerThread());
   if (!mPDMFactory) {
