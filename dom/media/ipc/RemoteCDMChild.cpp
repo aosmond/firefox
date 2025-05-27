@@ -5,6 +5,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "RemoteCDMChild.h"
+#include "mozilla/dom/MediaKeySession.h"
 
 namespace mozilla {
 
@@ -33,45 +34,279 @@ mozilla::ipc::IPCResult RemoteCDMChild::RecvProvision(
 }
 
 mozilla::ipc::IPCResult RemoteCDMChild::RecvOnSessionKeyStatus(
-    const RemoteCDMKeyStatusIPDL& msg) {
+    const RemoteCDMKeyStatusIPDL& aMsg) {
+  bool changed = false;
+  {
+    auto caps = mCapabilites.Lock();
+    for (const auto& keyInfo : aMsg.keyInfo()) {
+      changed |=
+          caps->SetKeyStatus(keyInfo.mKeyId, aMsg.sessionId(), keyInfo.mStatus);
+    }
+  }
+
+  if (!changed) {
+    return IPC_OK();
+  }
+
+  NS_DispatchToMainThread(NS_NewRunnableFunction(
+      __func__, [self = RefPtr{this}, sessionId = aMsg.sessionId()]() {
+        if (self->mKeys.IsNull()) {
+          return;
+        }
+        if (RefPtr<dom::MediaKeySession> session =
+                self->mKeys->GetSession(sessionId)) {
+          session->DispatchKeyStatusesChange();
+        }
+      }));
   return IPC_OK();
 }
 
 mozilla::ipc::IPCResult RemoteCDMChild::RecvOnSessionKeyExpiration(
-    const RemoteCDMKeyExpirationIPDL& msg) {
+    RemoteCDMKeyExpirationIPDL&& aMsg) {
+  NS_DispatchToMainThread(NS_NewRunnableFunction(
+      __func__, [self = RefPtr{this}, msg = std::move(aMsg)]() {
+        if (self->mKeys.IsNull()) {
+          return;
+        }
+        if (RefPtr<dom::MediaKeySession> session =
+                self->mKeys->GetSession(msg.sessionId())) {
+          session->SetExpiration(msg.expiredTimeMilliSecondsSinceEpoch());
+        }
+      }));
   return IPC_OK();
 }
+
 mozilla::ipc::IPCResult RemoteCDMChild::RecvOnSessionKeyMessage(
-    const RemoteCDMKeyMessageIPDL& msg) {
+    RemoteCDMKeyMessageIPDL&& aMsg) {
+  NS_DispatchToMainThread(NS_NewRunnableFunction(
+      __func__, [self = RefPtr{this}, msg = std::move(aMsg)]() {
+        if (self->mKeys.IsNull()) {
+          return;
+        }
+        if (RefPtr<dom::MediaKeySession> session =
+                self->mKeys->GetSession(msg.sessionId())) {
+          session->DispatchKeyMessage(msg.type(), msg.message());
+        }
+      }));
   return IPC_OK();
 }
 
 void RemoteCDMChild::Init(PromiseId aPromiseId, const nsAString& aOrigin,
                           const nsAString& aTopLevelOrigin,
-                          const nsAString& aName) {}
+                          const nsAString& aName) {
+  MOZ_ALWAYS_SUCCEEDS(mThread->Dispatch(
+      NS_NewRunnableFunction(__func__, [self = RefPtr{this}, aPromiseId]() {
+        self->SendInit(
+                RemoteCDMInitRequestIPDL(self->mDistinctiveIdentifierRequired,
+                                         self->mPersistentStateRequired))
+            ->Then(
+                GetMainThreadSerialEventTarget(), __func__,
+                [self,
+                 aPromiseId](const InitPromise::ResolveOrRejectValue& aValue) {
+                  if (self->mKeys.IsNull()) {
+                    return;
+                  }
+
+                  if (aValue.IsReject()) {
+                    self->RejectPromise(
+                        aPromiseId,
+                        MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                                    "PRemoteCDMChild::SendInit IPC fail"_ns));
+                    return;
+                  }
+
+                  self->mKeys->OnCDMCreated(aPromiseId, 0);
+                });
+      })));
+}
 
 void RemoteCDMChild::CreateSession(uint32_t aCreateSessionToken,
                                    MediaKeySessionType aSessionType,
                                    PromiseId aPromiseId,
                                    const nsAString& aInitDataType,
-                                   nsTArray<uint8_t>& aInitData) {}
+                                   nsTArray<uint8_t>& aInitData) {
+  MOZ_ALWAYS_SUCCEEDS(mThread->Dispatch(NS_NewRunnableFunction(
+      __func__, [self = RefPtr{this}, aCreateSessionToken, aSessionType,
+                 aPromiseId, initDataType = nsString(aInitDataType),
+                 initData = std::move(aInitData)]() mutable {
+        self
+            ->SendCreateSession(RemoteCDMCreateSessionRequestIPDL(
+                aSessionType, std::move(initDataType), std::move(initData)))
+            ->Then(
+                GetMainThreadSerialEventTarget(), __func__,
+                [self, aCreateSessionToken, aPromiseId](
+                    const CreateSessionPromise::ResolveOrRejectValue& aValue) {
+                  if (self->mKeys.IsNull()) {
+                    return;
+                  }
+
+                  if (aValue.IsReject()) {
+                    self->RejectPromise(
+                        aPromiseId,
+                        MediaResult(
+                            NS_ERROR_DOM_INVALID_STATE_ERR,
+                            "PRemoteCDMChild::SendCreateSession IPC fail"_ns));
+                    return;
+                  }
+
+                  const auto& response = aValue.ResolveValue();
+                  if (response.type() ==
+                      RemoteCDMSessionResponseIPDL::TMediaResult) {
+                    self->RejectPromise(aPromiseId, response.get_MediaResult());
+                    return;
+                  }
+
+                  const auto& sessionId = response.get_nsString();
+                  if (RefPtr<dom::MediaKeySession> session =
+                          self->mKeys->GetPendingSession(aCreateSessionToken)) {
+                    session->SetSessionId(sessionId);
+                  }
+
+                  self->ResolvePromise(aPromiseId);
+                });
+      })));
+}
 
 void RemoteCDMChild::LoadSession(PromiseId aPromiseId,
                                  dom::MediaKeySessionType aSessionType,
-                                 const nsAString& aSessionId) {}
+                                 const nsAString& aSessionId) {
+  MOZ_ALWAYS_SUCCEEDS(mThread->Dispatch(NS_NewRunnableFunction(
+      __func__, [self = RefPtr{this}, aPromiseId, aSessionType,
+                 sessionId = nsString(aSessionId)]() mutable {
+        self->SendLoadSession(RemoteCDMLoadSessionRequestIPDL(
+                                  aSessionType, std::move(sessionId)))
+            ->Then(GetMainThreadSerialEventTarget(), __func__,
+                   [self, aPromiseId](
+                       const LoadSessionPromise::ResolveOrRejectValue& aValue) {
+                     if (self->mKeys.IsNull()) {
+                       return;
+                     }
+
+                     self->mKeys->OnSessionLoaded(
+                         aPromiseId, aValue.IsResolve() &&
+                                         NS_SUCCEEDED(aValue.ResolveValue()));
+                   });
+      })));
+}
 
 void RemoteCDMChild::SetServerCertificate(PromiseId aPromiseId,
-                                          nsTArray<uint8_t>& aCert) {}
+                                          nsTArray<uint8_t>& aCert) {
+  MOZ_ALWAYS_SUCCEEDS(mThread->Dispatch(NS_NewRunnableFunction(
+      __func__,
+      [self = RefPtr{this}, aPromiseId, cert = std::move(aCert)]() mutable {
+        self->SendSetServerCertificate(std::move(cert))
+            ->Then(
+                GetMainThreadSerialEventTarget(), __func__,
+                [self, aPromiseId](
+                    const SetServerCertificatePromise::ResolveOrRejectValue&
+                        aValue) {
+                  if (self->mKeys.IsNull()) {
+                    return;
+                  }
+
+                  if (aValue.IsReject()) {
+                    self->RejectPromise(
+                        aPromiseId,
+                        MediaResult(
+                            NS_ERROR_DOM_INVALID_STATE_ERR,
+                            "PRemoteCDMChild::SendSetServerCertificate IPC fail"_ns));
+                    return;
+                  }
+
+                  self->ResolveOrRejectPromise(aPromiseId,
+                                               aValue.ResolveValue());
+                });
+      })));
+}
 
 void RemoteCDMChild::UpdateSession(const nsAString& aSessionId,
                                    PromiseId aPromiseId,
-                                   nsTArray<uint8_t>& aResponse) {}
+                                   nsTArray<uint8_t>& aResponse) {
+  MOZ_ALWAYS_SUCCEEDS(mThread->Dispatch(NS_NewRunnableFunction(
+      __func__, [self = RefPtr{this}, sessionId = nsString(aSessionId),
+                 aPromiseId, response = std::move(aResponse)]() mutable {
+        self->SendUpdateSession(RemoteCDMUpdateSessionRequestIPDL(
+                                    std::move(sessionId), std::move(response)))
+            ->Then(
+                GetMainThreadSerialEventTarget(), __func__,
+                [self, aPromiseId](
+                    const UpdateSessionPromise::ResolveOrRejectValue& aValue) {
+                  if (self->mKeys.IsNull()) {
+                    return;
+                  }
+
+                  if (aValue.IsReject()) {
+                    self->RejectPromise(
+                        aPromiseId,
+                        MediaResult(
+                            NS_ERROR_DOM_INVALID_STATE_ERR,
+                            "PRemoteCDMChild::SendUpdateSession IPC fail"_ns));
+                    return;
+                  }
+
+                  self->ResolveOrRejectPromise(aPromiseId,
+                                               aValue.ResolveValue());
+                });
+      })));
+}
 
 void RemoteCDMChild::CloseSession(const nsAString& aSessionId,
-                                  PromiseId aPromiseId) {}
+                                  PromiseId aPromiseId) {
+  MOZ_ALWAYS_SUCCEEDS(mThread->Dispatch(NS_NewRunnableFunction(
+      __func__, [self = RefPtr{this}, sessionId = nsString(aSessionId),
+                 aPromiseId]() mutable {
+        self->SendCloseSession(std::move(sessionId))
+            ->Then(
+                GetMainThreadSerialEventTarget(), __func__,
+                [self, aPromiseId](
+                    const CloseSessionPromise::ResolveOrRejectValue& aValue) {
+                  if (self->mKeys.IsNull()) {
+                    return;
+                  }
+
+                  if (aValue.IsReject()) {
+                    self->RejectPromise(
+                        aPromiseId,
+                        MediaResult(
+                            NS_ERROR_DOM_INVALID_STATE_ERR,
+                            "PRemoteCDMChild::SendCloseSession IPC fail"_ns));
+                    return;
+                  }
+
+                  self->ResolveOrRejectPromise(aPromiseId,
+                                               aValue.ResolveValue());
+                });
+      })));
+}
 
 void RemoteCDMChild::RemoveSession(const nsAString& aSessionId,
-                                   PromiseId aPromiseId) {}
+                                   PromiseId aPromiseId) {
+  MOZ_ALWAYS_SUCCEEDS(mThread->Dispatch(NS_NewRunnableFunction(
+      __func__, [self = RefPtr{this}, sessionId = nsString(aSessionId),
+                 aPromiseId]() mutable {
+        self->SendRemoveSession(std::move(sessionId))
+            ->Then(
+                GetMainThreadSerialEventTarget(), __func__,
+                [self, aPromiseId](
+                    const RemoveSessionPromise::ResolveOrRejectValue& aValue) {
+                  if (self->mKeys.IsNull()) {
+                    return;
+                  }
+
+                  if (aValue.IsReject()) {
+                    self->RejectPromise(
+                        aPromiseId,
+                        MediaResult(
+                            NS_ERROR_DOM_INVALID_STATE_ERR,
+                            "PRemoteCDMChild::SendRemoveSession IPC fail"_ns));
+                    return;
+                  }
+
+                  self->ResolveOrRejectPromise(aPromiseId,
+                                               aValue.ResolveValue());
+                });
+      })));
+}
 
 void RemoteCDMChild::QueryOutputProtectionStatus() {}
 
@@ -114,9 +349,35 @@ void RemoteCDMChild::OnDecrypted(uint32_t aId, DecryptStatus aResult,
                                  const nsTArray<uint8_t>& aDecryptedData) {}
 
 void RemoteCDMChild::RejectPromise(PromiseId aId, ErrorResult&& aException,
-                                   const nsCString& aReason) {}
+                                   const nsCString& aReason) {
+  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(!mKeys.IsNull());
+  mKeys->RejectPromise(aId, std::move(aException), aReason);
+}
 
-void RemoteCDMChild::ResolvePromise(PromiseId aId) {}
+void RemoteCDMChild::ResolvePromise(PromiseId aId) {
+  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(!mKeys.IsNull());
+  mKeys->ResolvePromise(aId);
+}
+
+void RemoteCDMChild::RejectPromise(PromiseId aId, const MediaResult& aResult) {
+  MOZ_ASSERT(NS_FAILED(aResult.Code()));
+
+  ErrorResult rv;
+  aResult.ThrowTo(rv);
+  RejectPromise(aId, std::move(rv), aResult.Message());
+}
+
+void RemoteCDMChild::ResolveOrRejectPromise(PromiseId aId,
+                                            const MediaResult& aResult) {
+  if (aResult.Code() == NS_OK) {
+    ResolvePromise(aId);
+    return;
+  }
+
+  RejectPromise(aId, aResult);
+}
 
 void RemoteCDMChild::OnKeyStatusesChange(const nsAString& aSessionId) {}
 

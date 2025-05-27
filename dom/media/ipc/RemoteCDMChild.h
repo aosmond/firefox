@@ -31,11 +31,11 @@ class RemoteCDMChild final : public PRemoteCDMChild, public CDMProxy {
       const RemoteCDMProvisionRequestIPDL& request,
       ProvisionResolver&& aResolver);
   mozilla::ipc::IPCResult RecvOnSessionKeyStatus(
-      const RemoteCDMKeyStatusIPDL& msg);
+      const RemoteCDMKeyStatusIPDL& aMsg);
   mozilla::ipc::IPCResult RecvOnSessionKeyExpiration(
-      const RemoteCDMKeyExpirationIPDL& msg);
+      RemoteCDMKeyExpirationIPDL&& aMsg);
   mozilla::ipc::IPCResult RecvOnSessionKeyMessage(
-      const RemoteCDMKeyMessageIPDL& msg);
+      RemoteCDMKeyMessageIPDL&& aMsg);
 
   // CDMProxy
   void Init(PromiseId aPromiseId, const nsAString& aOrigin,
@@ -88,6 +88,9 @@ class RemoteCDMChild final : public PRemoteCDMChild, public CDMProxy {
  private:
   virtual ~RemoteCDMChild();
   RemoteMediaManagerChild* GetManager();
+
+  void RejectPromise(PromiseId aId, const MediaResult& aResult);
+  void ResolveOrRejectPromise(PromiseId aId, const MediaResult& aResult);
 
   void MaybeDestroyActor();
 
