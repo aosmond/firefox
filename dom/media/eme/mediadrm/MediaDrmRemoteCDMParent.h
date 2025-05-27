@@ -73,9 +73,7 @@ using AMediaDrmFnPtr_setOnKeysChangeListener =
 
 class MediaDrmRemoteCDMParent final : public RemoteCDMParent {
  public:
-  MediaDrmRemoteCDMParent(const nsAString& aKeySystem,
-                          bool aDistinctiveIdentifierRequired,
-                          bool aPersistentStateRequired);
+  explicit MediaDrmRemoteCDMParent(const nsAString& aKeySystem);
 
   // PRemoteCDMParent
   mozilla::ipc::IPCResult RecvInit(const RemoteCDMInitRequestIPDL& aRequest,
