@@ -294,11 +294,9 @@ bool RemoteMediaManagerParent::DeallocPMFCDMParent(PMFCDMParent* actor) {
 }
 
 PRemoteCDMParent* RemoteMediaManagerParent::AllocPRemoteCDMParent(
-    const nsAString& aKeySystem, bool aDistinctiveIdentifierRequired,
-    bool aPersistentStateRequired) {
+    const nsAString& aKeySystem) {
 #ifdef MOZ_WIDGET_ANDROID
-  return new MediaDrmRemoteCDMParent(aKeySystem, aDistinctiveIdentifierRequired,
-                                     aPersistentStateRequired);
+  return new MediaDrmRemoteCDMParent(aKeySystem);
 #else
   return nullptr;
 #endif
