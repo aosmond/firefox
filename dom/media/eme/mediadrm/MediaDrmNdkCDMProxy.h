@@ -78,7 +78,7 @@ class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
                                    InitResolver&& aResolver) override;
 
   mozilla::ipc::IPCResult RecvCreateSession(
-      const RemoteCDMCreateSessionRequestIPDL& aRequest,
+      RemoteCDMCreateSessionRequestIPDL&& aRequest,
       CreateSessionResolver&& aResolver) override;
 
   mozilla::ipc::IPCResult RecvLoadSession(
@@ -98,6 +98,8 @@ class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
   mozilla::ipc::IPCResult RecvSetServerCertificate(
       mozilla::Span<uint8_t const> aCertificate,
       SetServerCertificateResolver&& aResolver) override;
+
+  void ActorDestroy(ActorDestroyReason aWhy) override;
 
  private:
   virtual ~MediaDrmNdkCDMProxy();
@@ -134,11 +136,12 @@ class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
   void HandleKeysChange(nsString&& aSessionId, bool aHasNewUsableKey,
                         nsTArray<CDMKeyInfo>&& aKeyInfo);
 
-  using ProvisionPromise =
+  using InternalPromise =
       MozPromise<bool, MediaResult, /* IsExclusive */ false>;
-  RefPtr<ProvisionPromise> RequestProvision();
 
-  void FinishInit(InitResolver&& aResolver);
+  RefPtr<InternalPromise> EnsureHasAMediaCrypto();
+  RefPtr<InternalPromise> EnsureProvisioned();
+
   void Destroy();
 
   struct Internals {
@@ -179,12 +182,15 @@ class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
   };
 
   std::map<nsString, SessionEntry> mSessions;
-  MozPromiseHolder<ProvisionPromise> mProvisionPromise;
+  MozPromiseHolder<InternalPromise> mProvisionPromise;
 
   const uint8_t* mUuid = nullptr;
   AMediaDrm* mDrm = nullptr;
   AMediaCrypto* mCrypto = nullptr;
   AMediaDrmSessionId mCryptoSessionId;
+
+  Maybe<MediaResult> mCryptoError;
+  Maybe<MediaResult> mProvisionError;
 };
 
 }  // namespace mozilla
