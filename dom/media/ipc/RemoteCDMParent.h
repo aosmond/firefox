@@ -21,25 +21,25 @@ class RemoteCDMParent : public PRemoteCDMParent {
       const RemoteCDMInitRequestIPDL& request, InitResolver&& aResolver) = 0;
 
   virtual mozilla::ipc::IPCResult RecvCreateSession(
-      const RemoteCDMCreateSessionRequestIPDL& request,
+      const RemoteCDMCreateSessionRequestIPDL& aRequest,
       CreateSessionResolver&& aResolver) = 0;
 
   virtual mozilla::ipc::IPCResult RecvLoadSession(
-      const RemoteCDMLoadSessionRequestIPDL& request,
+      const RemoteCDMLoadSessionRequestIPDL& aRequest,
       LoadSessionResolver&& aResolver) = 0;
 
   virtual mozilla::ipc::IPCResult RecvUpdateSession(
-      const RemoteCDMUpdateSessionRequestIPDL& request,
+      const RemoteCDMUpdateSessionRequestIPDL& aRequest,
       UpdateSessionResolver&& aResolver) = 0;
 
   virtual mozilla::ipc::IPCResult RecvRemoveSession(
-      const nsAString& sessionId, RemoveSessionResolver&& aResolver) = 0;
+      const nsString& aSessionId, RemoveSessionResolver&& aResolver) = 0;
 
   virtual mozilla::ipc::IPCResult RecvCloseSession(
-      const nsAString& sessionId, CloseSessionResolver&& aResolver) = 0;
+      const nsString& aSessionId, CloseSessionResolver&& aResolver) = 0;
 
   virtual mozilla::ipc::IPCResult RecvSetServerCertificate(
-      mozilla::Span<uint8_t const> certificate,
+      mozilla::Span<uint8_t const> aCertificate,
       SetServerCertificateResolver&& aResolver) = 0;
 
  protected:
