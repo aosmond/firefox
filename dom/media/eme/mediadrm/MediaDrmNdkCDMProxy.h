@@ -134,9 +134,11 @@ class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
   void HandleKeysChange(nsString&& aSessionId, bool aHasNewUsableKey,
                         nsTArray<CDMKeyInfo>&& aKeyInfo);
 
-  mozilla::ipc::IPCResult RequestProvision(InitResolver&& aResolver);
-  mozilla::ipc::IPCResult FinishInit(InitResolver&& aResolver);
+  using ProvisionPromise =
+      MozPromise<bool, MediaResult, /* IsExclusive */ false>;
+  RefPtr<ProvisionPromise> RequestProvision();
 
+  void FinishInit(InitResolver&& aResolver);
   void Destroy();
 
   struct Internals {
@@ -173,9 +175,11 @@ class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
 
   struct SessionEntry {
     AMediaDrmSessionId id;
+    nsAutoCString mimeType;
   };
 
   std::map<nsString, SessionEntry> mSessions;
+  MozPromiseHolder<ProvisionPromise> mProvisionPromise;
 
   const uint8_t* mUuid = nullptr;
   AMediaDrm* mDrm = nullptr;
