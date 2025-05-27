@@ -67,6 +67,9 @@ parent:
                        uint64_t? mediaEngineId,
                        TrackingId? trackingId);
   async PRemoteEncoder(EncoderConfig config);
+  async PRemoteCDM(nsString keySystem,
+                   bool distinctiveIdentifierRequired,
+                   bool persistentStateRequired);
 
   sync Readback(SurfaceDescriptorGPUVideo sd) returns (SurfaceDescriptor aResult);
 
