@@ -74,33 +74,41 @@ class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
                       bool aPersistentStateRequired);
 
   // PRemoteCDMParent
-  mozilla::ipc::IPCResult RecvInit(const RemoteCDMInitRequestIPDL& request,
+  mozilla::ipc::IPCResult RecvInit(const RemoteCDMInitRequestIPDL& aRequest,
                                    InitResolver&& aResolver) override;
 
   mozilla::ipc::IPCResult RecvCreateSession(
-      const RemoteCDMCreateSessionRequestIPDL& request,
+      const RemoteCDMCreateSessionRequestIPDL& aRequest,
       CreateSessionResolver&& aResolver) override;
 
   mozilla::ipc::IPCResult RecvLoadSession(
-      const RemoteCDMLoadSessionRequestIPDL& request,
+      const RemoteCDMLoadSessionRequestIPDL& aRequest,
       LoadSessionResolver&& aResolver) override;
 
   mozilla::ipc::IPCResult RecvUpdateSession(
-      const RemoteCDMUpdateSessionRequestIPDL& request,
+      const RemoteCDMUpdateSessionRequestIPDL& aRequest,
       UpdateSessionResolver&& aResolver) override;
 
   mozilla::ipc::IPCResult RecvRemoveSession(
-      const nsAString& sessionId, RemoveSessionResolver&& aResolver) override;
+      const nsString& aSessionId, RemoveSessionResolver&& aResolver) override;
 
   mozilla::ipc::IPCResult RecvCloseSession(
-      const nsAString& sessionId, CloseSessionResolver&& aResolver) override;
+      const nsString& aSessionId, CloseSessionResolver&& aResolver) override;
 
   mozilla::ipc::IPCResult RecvSetServerCertificate(
-      mozilla::Span<uint8_t const> certificate,
+      mozilla::Span<uint8_t const> aCertificate,
       SetServerCertificateResolver&& aResolver) override;
 
  private:
   virtual ~MediaDrmNdkCDMProxy();
+
+  static constexpr uint8_t CLEARKEY_UUID[] = {
+      0xe2, 0x71, 0x9d, 0x58, 0xa9, 0x85, 0xb3, 0xc9,
+      0x78, 0x1a, 0xb0, 0x30, 0xaf, 0x78, 0xd3, 0x0e};
+
+  static constexpr uint8_t WIDEVINE_UUID[] = {
+      0xed, 0xef, 0x8b, 0xa9, 0x79, 0xd6, 0x4a, 0xce,
+      0xa3, 0xc8, 0x27, 0xdc, 0xd5, 0x1d, 0x21, 0xed};
 
   static bool InitializeStatics();
 
@@ -118,15 +126,16 @@ class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
                                  const AMediaDrmKeyStatus* aKeyStatus,
                                  size_t aNumKeys, bool aHasNewUsableKey);
 
-  void HandleEvent(const AMediaDrmSessionId* aSessionId,
-                   AMediaDrmEventType aEventType, int aExtra,
-                   UniquePtr<uint8_t[]>&& aData, size_t aDataSize);
+  void HandleEvent(nsString&& aSessionId, AMediaDrmEventType aEventType,
+                   int aExtra, nsTArray<uint8_t>&& aData);
+
+  void HandleExpirationUpdate(nsString&& aSessionId, int aExpiryTimeInMS);
+
+  void HandleKeysChange(nsString&& aSessionId, bool aHasNewUsableKey,
+                        nsTArray<CDMKeyInfo>&& aKeyInfo);
 
   mozilla::ipc::IPCResult RequestProvision(InitResolver&& aResolver);
   mozilla::ipc::IPCResult FinishInit(InitResolver&& aResolver);
-
-  void OnProvisionResponse(const uint8_t* aResponse, size_t aResponseSize);
-  media_status_t RequestProvision();
 
   void Destroy();
 
@@ -162,14 +171,16 @@ class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
 
   static std::map<AMediaDrm*, MediaDrmNdkCDMProxy*> sMediaDrmCbMap;
 
-  struct SessionEntry {};
+  struct SessionEntry {
+    AMediaDrmSessionId id;
+  };
 
-  std::map<nsCString, SessionEntry> mSessions;
+  std::map<nsString, SessionEntry> mSessions;
 
+  const uint8_t* mUuid = nullptr;
   AMediaDrm* mDrm = nullptr;
   AMediaCrypto* mCrypto = nullptr;
   AMediaDrmSessionId mCryptoSessionId;
-  bool mProvisionRequestOutstanding = false;
 };
 
 }  // namespace mozilla
