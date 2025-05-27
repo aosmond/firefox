@@ -180,9 +180,7 @@ void MediaDrmRemoteCDMParent::HandleKeysChangeCb(
       }));
 }
 
-MediaDrmRemoteCDMParent::MediaDrmRemoteCDMParent(
-    const nsAString& aKeySystem, bool aDistinctiveIdentifierRequired,
-    bool aPersistentStateRequired) {
+MediaDrmRemoteCDMParent::MediaDrmRemoteCDMParent(const nsAString& aKeySystem) {
   if (IsWidevineKeySystem(aKeySystem)) {
     mUuid = WIDEVINE_UUID;
   } else if (IsClearkeyKeySystem(aKeySystem)) {
