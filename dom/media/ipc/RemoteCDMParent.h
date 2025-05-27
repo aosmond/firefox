@@ -21,7 +21,7 @@ class RemoteCDMParent : public PRemoteCDMParent {
       const RemoteCDMInitRequestIPDL& request, InitResolver&& aResolver) = 0;
 
   virtual mozilla::ipc::IPCResult RecvCreateSession(
-      const RemoteCDMCreateSessionRequestIPDL& aRequest,
+      RemoteCDMCreateSessionRequestIPDL&& aRequest,
       CreateSessionResolver&& aResolver) = 0;
 
   virtual mozilla::ipc::IPCResult RecvLoadSession(

@@ -192,6 +192,8 @@ MediaDrmNdkCDMProxy::MediaDrmNdkCDMProxy(const nsAString& aKeySystem,
 
 MediaDrmNdkCDMProxy::~MediaDrmNdkCDMProxy() { Destroy(); }
 
+void MediaDrmNdkCDMProxy::ActorDestroy(ActorDestroyReason aWhy) { Destroy(); }
+
 void MediaDrmNdkCDMProxy::Destroy() {
   mProvisionPromise.RejectIfExists(
       MediaResult(NS_ERROR_DOM_ABORT_ERR, "Destroyed"_ns), __func__);
@@ -300,41 +302,70 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
   }
 
   sMediaDrmCbMap[mDrm] = this;
-
-  status = sMediaNdk->mAMediaDrm_openSession(mDrm, &mCryptoSessionId);
-
-  if (status == AMEDIA_DRM_NOT_PROVISIONED) {
-    RequestProvision()->Then(
-        GetCurrentSerialEventTarget(), __func__,
-        [self = RefPtr{this}, resolver = std::move(aResolver)](
-            const ProvisionPromise::ResolveOrRejectValue& aValue) mutable {
-          if (aValue.IsReject()) {
-            resolver(aValue.RejectValue());
-            return;
-          }
-          self->FinishInit(std::move(resolver));
-        });
-    return IPC_OK();
-  }
-
-  if (NS_WARN_IF(status != AMEDIA_OK)) {
-    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "AMediaDrm failed to open sesssion"_ns));
-    return IPC_OK();
-  }
-
-  FinishInit(std::move(aResolver));
+  aResolver(MediaResult(NS_OK));
   return IPC_OK();
 }
 
-RefPtr<MediaDrmNdkCDMProxy::ProvisionPromise>
-MediaDrmNdkCDMProxy::RequestProvision() {
-  MOZ_ASSERT(mDrm);
-  MOZ_ASSERT(!mCrypto);
+RefPtr<MediaDrmNdkCDMProxy::InternalPromise>
+MediaDrmNdkCDMProxy::EnsureHasAMediaCrypto() {
+  if (NS_WARN_IF(!mDrm)) {
+    return InternalPromise::CreateAndReject(
+        MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR, "Missing AMediaDrm"_ns),
+        __func__);
+  }
+
+  if (mCrypto) {
+    return InternalPromise::CreateAndResolve(true, __func__);
+  }
+
+  if (mCryptoError) {
+    return InternalPromise::CreateAndReject(*mCryptoError, __func__);
+  }
+
+  media_status_t status =
+      sMediaNdk->mAMediaDrm_openSession(mDrm, &mCryptoSessionId);
+  if (status == AMEDIA_DRM_NOT_PROVISIONED) {
+    return EnsureProvisioned()->Then(
+        GetCurrentSerialEventTarget(), __func__,
+        [self = RefPtr{this}](const InternalPromise::ResolveOrRejectValue&) {
+          return self->EnsureHasAMediaCrypto();
+        });
+  }
+
+  if (NS_WARN_IF(status != AMEDIA_OK)) {
+    mCryptoError.emplace(NS_ERROR_DOM_INVALID_STATE_ERR,
+                         "AMediaDrm_openSession failed for crypto"_ns);
+    return InternalPromise::CreateAndReject(*mCryptoError, __func__);
+  }
+
+  mCrypto = sMediaNdk->mAMediaCrypto_new(mUuid, mCryptoSessionId.ptr,
+                                         mCryptoSessionId.length);
+  if (NS_WARN_IF(!mCrypto)) {
+    sMediaNdk->mAMediaDrm_closeSession(mDrm, &mCryptoSessionId);
+    mCryptoSessionId = {};
+    mCryptoError.emplace(NS_ERROR_DOM_INVALID_STATE_ERR,
+                         "AMediaCrypto_new failed"_ns);
+    return InternalPromise::CreateAndReject(*mCryptoError, __func__);
+  }
+
+  return InternalPromise::CreateAndResolve(true, __func__);
+}
+
+RefPtr<MediaDrmNdkCDMProxy::InternalPromise>
+MediaDrmNdkCDMProxy::EnsureProvisioned() {
+  if (NS_WARN_IF(!mDrm)) {
+    return InternalPromise::CreateAndReject(
+        MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR, "Missing AMediaDrm"_ns),
+        __func__);
+  }
+
+  if (mProvisionError) {
+    return InternalPromise::CreateAndReject(*mProvisionError, __func__);
+  }
 
   // There may already be a provision request outstanding.
   bool outstanding = !mProvisionPromise.IsEmpty();
-  RefPtr<ProvisionPromise> p = mProvisionPromise.Ensure(__func__);
+  RefPtr<InternalPromise> p = mProvisionPromise.Ensure(__func__);
   if (outstanding) {
     return p.forget();
   }
@@ -345,10 +376,9 @@ MediaDrmNdkCDMProxy::RequestProvision() {
   media_status_t status = sMediaNdk->mAMediaDrm_getProvisionRequest(
       mDrm, &provisionRequest, &provisionRequestSize, &serverUrl);
   if (NS_WARN_IF(status != AMEDIA_OK)) {
-    mProvisionPromise.Reject(
-        MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                    "Failed to request provisioning for AMediaDrm"_ns),
-        __func__);
+    mProvisionError.emplace(NS_ERROR_DOM_INVALID_STATE_ERR,
+                            "Failed to request provisioning for AMediaDrm"_ns);
+    mProvisionPromise.Reject(*mProvisionError, __func__);
     return p.forget();
   }
 
@@ -360,10 +390,10 @@ MediaDrmNdkCDMProxy::RequestProvision() {
           [self = RefPtr{this}](RemoteCDMProvisionResponseIPDL&& aResponse) {
             if (aResponse.type() ==
                 RemoteCDMProvisionResponseIPDL::TMediaResult) {
-              self->mProvisionPromise.RejectIfExists(
-                  MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                              "Content failed to get provisioning response"_ns),
-                  __func__);
+              self->mProvisionError.emplace(
+                  std::move(aResponse.get_MediaResult()));
+              self->mProvisionPromise.RejectIfExists(*self->mProvisionError,
+                                                     __func__);
               return;
             }
 
@@ -372,11 +402,11 @@ MediaDrmNdkCDMProxy::RequestProvision() {
                     self->mDrm, aResponse.get_ArrayOfuint8_t().Elements(),
                     aResponse.get_ArrayOfuint8_t().Length());
             if (NS_WARN_IF(status != AMEDIA_OK)) {
-              self->mProvisionPromise.RejectIfExists(
-                  MediaResult(
-                      NS_ERROR_DOM_INVALID_STATE_ERR,
-                      "AMediaDrm failed to accept provision response"_ns),
-                  __func__);
+              self->mProvisionError.emplace(
+                  NS_ERROR_DOM_INVALID_STATE_ERR,
+                  "AMediaDrm_provideProvisionResponse failed"_ns);
+              self->mProvisionPromise.RejectIfExists(*self->mProvisionError,
+                                                     __func__);
               return;
             }
 
@@ -386,35 +416,51 @@ MediaDrmNdkCDMProxy::RequestProvision() {
   return p.forget();
 }
 
-void MediaDrmNdkCDMProxy::FinishInit(InitResolver&& aResolver) {
-  MOZ_ASSERT(mUuid);
-  MOZ_ASSERT(mDrm);
-  MOZ_ASSERT(!mCrypto);
-
-  mCrypto = sMediaNdk->mAMediaCrypto_new(mUuid, mCryptoSessionId.ptr,
-                                         mCryptoSessionId.length);
-  if (NS_WARN_IF(!mCrypto)) {
-    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "Failed to create AMediaCrypto"_ns));
-    return;
-  }
-
-  aResolver(MediaResult(NS_OK));
-}
-
 mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvCreateSession(
-    const RemoteCDMCreateSessionRequestIPDL& aRequest,
+    RemoteCDMCreateSessionRequestIPDL&& aRequest,
     CreateSessionResolver&& aResolver) {
   // If we are still provisioning, then the remote side should have queued the
   // requests.
-  if (NS_WARN_IF(!mDrm) || NS_WARN_IF(!mCrypto)) {
-    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "Missing AMediaDrm and/or AMediaCrypto"_ns));
+  if (NS_WARN_IF(!mDrm)) {
+    aResolver(
+        MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR, "Missing AMediaDrm"_ns));
+    return IPC_OK();
+  }
+
+  if (!mCrypto) {
+    EnsureHasAMediaCrypto()->Then(
+        GetCurrentSerialEventTarget(), __func__,
+        [self = RefPtr{this}, request = std::move(aRequest),
+         resolver = std::move(aResolver)](
+            const InternalPromise::ResolveOrRejectValue& aValue) mutable {
+          if (aValue.IsReject()) {
+            resolver(aValue.RejectValue());
+            return;
+          }
+
+          self->RecvCreateSession(std::move(request), std::move(resolver));
+        });
     return IPC_OK();
   }
 
   AMediaDrmSessionId sessionId;
   media_status_t status = sMediaNdk->mAMediaDrm_openSession(mDrm, &sessionId);
+  if (status == AMEDIA_DRM_NOT_PROVISIONED) {
+    EnsureProvisioned()->Then(
+        GetCurrentSerialEventTarget(), __func__,
+        [self = RefPtr{this}, request = std::move(aRequest),
+         resolver = std::move(aResolver)](
+            const InternalPromise::ResolveOrRejectValue& aValue) mutable {
+          if (aValue.IsReject()) {
+            resolver(aValue.RejectValue());
+            return;
+          }
+
+          self->RecvCreateSession(std::move(request), std::move(resolver));
+        });
+    return IPC_OK();
+  }
+
   if (NS_WARN_IF(status != AMEDIA_OK)) {
     aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
                           "AMediaDrm_openSession failed"_ns));
@@ -431,6 +477,23 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvCreateSession(
       AMediaDrmKeyType::KEY_TYPE_STREAMING, nullptr, 0, &keyRequest,
       &keyRequestSize);
 
+  if (status == AMEDIA_DRM_NOT_PROVISIONED) {
+    sMediaNdk->mAMediaDrm_closeSession(mDrm, &sessionId);
+    EnsureProvisioned()->Then(
+        GetCurrentSerialEventTarget(), __func__,
+        [self = RefPtr{this}, request = std::move(aRequest),
+         resolver = std::move(aResolver)](
+            const InternalPromise::ResolveOrRejectValue& aValue) mutable {
+          if (aValue.IsReject()) {
+            resolver(aValue.RejectValue());
+            return;
+          }
+
+          self->RecvCreateSession(std::move(request), std::move(resolver));
+        });
+    return IPC_OK();
+  }
+
   if (NS_WARN_IF(status != AMEDIA_OK)) {
     sMediaNdk->mAMediaDrm_closeSession(mDrm, &sessionId);
     aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
@@ -441,9 +504,7 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvCreateSession(
   NS_ConvertUTF8toUTF16 sessionIdStr(
       reinterpret_cast<const char*>(sessionId.ptr), sessionId.length);
   mSessions[sessionIdStr] = {sessionId, std::move(mimeType)};
-
   aResolver(std::move(sessionIdStr));
-
   return IPC_OK();
 }
 
