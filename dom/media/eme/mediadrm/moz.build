@@ -12,15 +12,15 @@ LOCAL_INCLUDES += [
 EXPORTS.mozilla += [
     "MediaDrmCDMCallbackProxy.h",
     "MediaDrmCDMProxy.h",
-    "MediaDrmNdkCDMProxy.h",
     "MediaDrmProxySupport.h",
+    "MediaDrmRemoteCDMParent.h",
 ]
 
 UNIFIED_SOURCES += [
     "MediaDrmCDMCallbackProxy.cpp",
     "MediaDrmCDMProxy.cpp",
-    "MediaDrmNdkCDMProxy.cpp",
     "MediaDrmProxySupport.cpp",
+    "MediaDrmRemoteCDMParent.cpp",
 ]
 
 FINAL_LIBRARY = "xul"

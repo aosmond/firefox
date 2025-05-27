@@ -4,8 +4,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifndef MediaDrmNdkCDMProxy_h_
-#define MediaDrmNdkCDMProxy_h_
+#ifndef MediaDrmRemoteCDMParent_h_
+#define MediaDrmRemoteCDMParent_h_
 
 #include "mozilla/RemoteCDMParent.h"
 #include "mozilla/StaticMutex.h"
@@ -71,11 +71,11 @@ using AMediaDrmFnPtr_setOnExpirationUpdateListener =
 using AMediaDrmFnPtr_setOnKeysChangeListener =
     media_status_t (*)(AMediaDrm*, AMediaDrmFnPtr_KeysChangeListener);
 
-class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
+class MediaDrmRemoteCDMParent final : public RemoteCDMParent {
  public:
-  MediaDrmNdkCDMProxy(const nsAString& aKeySystem,
-                      bool aDistinctiveIdentifierRequired,
-                      bool aPersistentStateRequired);
+  MediaDrmRemoteCDMParent(const nsAString& aKeySystem,
+                          bool aDistinctiveIdentifierRequired,
+                          bool aPersistentStateRequired);
 
   // PRemoteCDMParent
   mozilla::ipc::IPCResult RecvInit(const RemoteCDMInitRequestIPDL& aRequest,
@@ -106,7 +106,7 @@ class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
   void ActorDestroy(ActorDestroyReason aWhy) override;
 
  private:
-  virtual ~MediaDrmNdkCDMProxy();
+  virtual ~MediaDrmRemoteCDMParent();
 
   static constexpr uint8_t CLEARKEY_UUID[] = {
       0xe2, 0x71, 0x9d, 0x58, 0xa9, 0x85, 0xb3, 0xc9,
@@ -179,7 +179,7 @@ class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
 
   static StaticAutoPtr<Internals> sMediaNdk;
 
-  static std::map<AMediaDrm*, MediaDrmNdkCDMProxy*> sMediaDrmCbMap;
+  static std::map<AMediaDrm*, MediaDrmRemoteCDMParent*> sMediaDrmCbMap;
 
   struct SessionEntry {
     AMediaDrmSessionId id;
@@ -200,4 +200,4 @@ class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
 
 }  // namespace mozilla
 
-#endif  // MediaDrmNdkCDMProxy_h_
+#endif  // MediaDrmRemoteCDMParent_h_
