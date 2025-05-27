@@ -39,6 +39,10 @@ using AMediaDrmFnPtr_getKeyRequest = media_status_t (*)(
     AMediaDrm*, const AMediaDrmScope*, const uint8_t*, size_t, const char*,
     AMediaDrmKeyType, const AMediaDrmKeyValue*, size_t, const uint8_t**,
     size_t*);
+using AMediaDrmFnPtr_getKeyRequestWithDefaultUrlAndType = media_status_t (*)(
+    AMediaDrm*, const AMediaDrmScope*, const uint8_t*, size_t, const char*,
+    AMediaDrmKeyType, const AMediaDrmKeyValue*, size_t, const uint8_t**,
+    size_t*, const char**, AMediaDrmKeyRequestType* keyRequestType);
 using AMediaDrmFnPtr_provideProvisionResponse =
     media_status_t (*)(AMediaDrm*, const uint8_t*, size_t);
 using AMediaDrmFnPtr_provideKeyResponse =
@@ -157,6 +161,7 @@ class MediaDrmNdkCDMProxy final : public RemoteCDMParent {
     DEFINE_AMEDIA_SYMBOL(AMediaDrm, closeSession);
     DEFINE_AMEDIA_SYMBOL(AMediaDrm, getProvisionRequest);
     DEFINE_AMEDIA_SYMBOL(AMediaDrm, getKeyRequest);
+    DEFINE_AMEDIA_SYMBOL(AMediaDrm, getKeyRequestWithDefaultUrlAndType);
     DEFINE_AMEDIA_SYMBOL(AMediaDrm, provideProvisionResponse);
     DEFINE_AMEDIA_SYMBOL(AMediaDrm, provideKeyResponse);
     DEFINE_AMEDIA_SYMBOL(AMediaDrm, setOnEventListener);
