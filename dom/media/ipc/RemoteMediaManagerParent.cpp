@@ -130,7 +130,8 @@ void RemoteMediaManagerParent::Dispatch(already_AddRefed<nsIRunnable> aRunnable)
     return;
   }
 
-  sRemoteMediaManagerParentThread->Dispatch(std::move(aRunnable));
+  MOZ_ALWAYS_SUCCEEDS(
+      sRemoteMediaManagerParentThread->Dispatch(std::move(aRunnable)));
 }
 
 PDMFactory& RemoteMediaManagerParent::EnsurePDMFactory() {
