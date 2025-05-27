@@ -8,6 +8,7 @@
 
 #include "media/NdkMediaDrm.h"
 #include "mozilla/EMEUtils.h"
+#include "mozilla/RemoteMediaManagerParent.h"
 #include <dlfcn.h>
 
 namespace mozilla {
@@ -58,6 +59,7 @@ bool MediaDrmNdkCDMProxy::InitializeStatics() {
   LOAD_REQUIRED_SYMBOL(AMediaDrm, setOnEventListener);
   LOAD_OPTIONAL_SYMBOL(AMediaDrm, setOnExpirationUpdateListener);
   LOAD_OPTIONAL_SYMBOL(AMediaDrm, setOnKeysChangeListener);
+  LOAD_OPTIONAL_SYMBOL(AMediaDrm, getKeyRequestWithDefaultUrlAndType);
 
   LOAD_REQUIRED_SYMBOL(AMediaCrypto, isCryptoSchemeSupported);
   LOAD_REQUIRED_SYMBOL(AMediaCrypto, delete);
@@ -87,8 +89,7 @@ void MediaDrmNdkCDMProxy::HandleEventCb(AMediaDrm* aDrm,
     data.AppendElements(aData, dataSize);
   }
 
-  // FIXME(aosmond) dispatch to RemoteMediaManagerParent owning thread
-  NS_DispatchToMainThread(NS_NewRunnableFunction(
+  RemoteMediaManagerParent::Dispatch(NS_NewRunnableFunction(
       __func__,
       [aDrm, aEventType, aExtra, sessionIdStr = std::move(sessionIdStr),
        data = std::move(data)]() mutable {
@@ -111,8 +112,7 @@ void MediaDrmNdkCDMProxy::HandleExpirationUpdateCb(
   NS_ConvertUTF8toUTF16 sessionIdStr(
       reinterpret_cast<const char*>(aSessionId->ptr), aSessionId->length);
 
-  // FIXME(aosmond) dispatch to RemoteMediaManagerParent owning thread
-  NS_DispatchToMainThread(NS_NewRunnableFunction(
+  RemoteMediaManagerParent::Dispatch(NS_NewRunnableFunction(
       __func__, [aDrm, aExpiryTimeInMS,
                  sessionIdStr = std::move(sessionIdStr)]() mutable {
         auto i = sMediaDrmCbMap.find(aDrm);
@@ -166,8 +166,7 @@ void MediaDrmNdkCDMProxy::HandleKeysChangeCb(
     }
   }
 
-  // FIXME(aosmond) dispatch to RemoteMediaManagerParent owning thread
-  NS_DispatchToMainThread(NS_NewRunnableFunction(
+  RemoteMediaManagerParent::Dispatch(NS_NewRunnableFunction(
       __func__, [aDrm, aHasNewUsableKey, sessionIdStr = std::move(sessionIdStr),
                  keyInfo = std::move(keyInfo)]() mutable {
         auto i = sMediaDrmCbMap.find(aDrm);
@@ -223,9 +222,9 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
     return IPC_OK();
   }
 
-  if (NS_WARN_IF(mDrm) || NS_WARN_IF(mCrypto)) {
-    aResolver(
-        MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR, "Already initialized"_ns));
+  if (NS_WARN_IF(mDrm)) {
+    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                          "AMediaDrm already initialized"_ns));
     return IPC_OK();
   }
 
@@ -237,22 +236,23 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
 
   if (NS_WARN_IF(!sMediaNdk->mAMediaCrypto_isCryptoSchemeSupported(mUuid))) {
     aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "AMediaCrypto does not support UUID"_ns));
+                          "AMediaCrypto_isCryptoSchemeSupported failed"_ns));
     return IPC_OK();
   }
 
   mDrm = sMediaNdk->mAMediaDrm_createByUUID(mUuid);
   if (NS_WARN_IF(!mDrm)) {
     aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "Failed to create AMediaDrm with UUID"_ns));
+                          "AMediaDrm_createByUUID failed"_ns));
     return IPC_OK();
   }
 
   media_status_t status =
       sMediaNdk->mAMediaDrm_setPropertyString(mDrm, "securityLevel", "L3");
   if (NS_WARN_IF(status != AMEDIA_OK)) {
-    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "Failed to set AMediaDrm securityLevel property"_ns));
+    aResolver(
+        MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                    "AMediaDrm_setPropertyString securityLevel failed"_ns));
     return IPC_OK();
   }
 
@@ -260,7 +260,7 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
       sMediaNdk->mAMediaDrm_setPropertyString(mDrm, "privacyMode", "enable");
   if (NS_WARN_IF(status != AMEDIA_OK)) {
     aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "Failed to set AMediaDrm privateMode property"_ns));
+                          "AMediaDrm_setPropertyString privateMode failed"_ns));
     return IPC_OK();
   }
 
@@ -269,14 +269,14 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
   if (NS_WARN_IF(status != AMEDIA_OK)) {
     aResolver(
         MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                    "Failed to set AMediaDrm sessionSharing property"_ns));
+                    "AMediaDrm_setPropertyString sessionSharing failed"_ns));
     return IPC_OK();
   }
 
   status = sMediaNdk->mAMediaDrm_setOnEventListener(mDrm, HandleEventCb);
   if (NS_WARN_IF(status != AMEDIA_OK)) {
     aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "Failed to set AMediaDrm event listener"_ns));
+                          "AMediaDrm_setOnEventListener failed"_ns));
     return IPC_OK();
   }
 
@@ -286,7 +286,7 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
     if (NS_WARN_IF(status != AMEDIA_OK)) {
       aResolver(
           MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                      "Failed to set AMediaDrm expiration update listener"_ns));
+                      "AMediaDrm_setOnExpirationUpdateListener failed"_ns));
       return IPC_OK();
     }
   }
@@ -296,7 +296,7 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
         sMediaNdk->mAMediaDrm_setOnKeysChangeListener(mDrm, HandleKeysChangeCb);
     if (NS_WARN_IF(status != AMEDIA_OK)) {
       aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                            "Failed to set AMediaDrm keys change listener"_ns));
+                            "AMediaDrm_setOnKeysChangeListener failed"_ns));
       return IPC_OK();
     }
   }
@@ -377,7 +377,7 @@ MediaDrmNdkCDMProxy::EnsureProvisioned() {
       mDrm, &provisionRequest, &provisionRequestSize, &serverUrl);
   if (NS_WARN_IF(status != AMEDIA_OK)) {
     mProvisionError.emplace(NS_ERROR_DOM_INVALID_STATE_ERR,
-                            "Failed to request provisioning for AMediaDrm"_ns);
+                            "AMediaDrm_getProvisionRequest failed"_ns);
     mProvisionPromise.Reject(*mProvisionError, __func__);
     return p.forget();
   }
@@ -505,6 +505,11 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvCreateSession(
       reinterpret_cast<const char*>(sessionId.ptr), sessionId.length);
   mSessions[sessionIdStr] = {sessionId, std::move(mimeType)};
   aResolver(std::move(sessionIdStr));
+
+  Unused << SendOnSessionKeyMessage(RemoteCDMKeyMessageIPDL(
+      std::move(sessionIdStr), MediaKeyMessageType::License_request,
+      nsTArray<uint8_t>(reinterpret_cast<const uint8_t*>(keyRequest),
+                        keyRequestSize)));
   return IPC_OK();
 }
 
@@ -518,18 +523,15 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvLoadSession(
 mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvUpdateSession(
     const RemoteCDMUpdateSessionRequestIPDL& aRequest,
     UpdateSessionResolver&& aResolver) {
-  if (NS_WARN_IF(!mDrm) || NS_WARN_IF(!mCrypto)) {
-    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "Missing AMediaDrm and/or AMediaCrypto"_ns));
-    return IPC_OK();
-  }
-
   const auto i = mSessions.find(aRequest.sessionId());
   if (i == mSessions.end()) {
     aResolver(
         MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR, "Invalid session id"_ns));
     return IPC_OK();
   }
+
+  MOZ_ASSERT(mDrm);
+  MOZ_ASSERT(mCrypto);
 
   AMediaDrmKeySetId keySetId{};
   media_status_t status = sMediaNdk->mAMediaDrm_provideKeyResponse(
@@ -553,18 +555,15 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvRemoveSession(
 
 mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvCloseSession(
     const nsString& aSessionId, CloseSessionResolver&& aResolver) {
-  if (NS_WARN_IF(!mDrm) || NS_WARN_IF(!mCrypto)) {
-    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "Missing AMediaDrm and/or AMediaCrypto"_ns));
-    return IPC_OK();
-  }
-
   const auto i = mSessions.find(aSessionId);
   if (i == mSessions.end()) {
     aResolver(
         MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR, "Invalid session id"_ns));
     return IPC_OK();
   }
+
+  MOZ_ASSERT(mDrm);
+  MOZ_ASSERT(mCrypto);
 
   media_status_t status =
       sMediaNdk->mAMediaDrm_closeSession(mDrm, &i->second.id);
@@ -582,17 +581,18 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvCloseSession(
 mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvSetServerCertificate(
     mozilla::Span<uint8_t const> aCertificate,
     SetServerCertificateResolver&& aResolver) {
-  if (NS_WARN_IF(!mDrm) || NS_WARN_IF(!mCrypto)) {
-    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "Missing AMediaDrm and/or AMediaCrypto"_ns));
+  if (NS_WARN_IF(!mDrm)) {
+    aResolver(
+        MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR, "Missing AMediaDrm"_ns));
     return IPC_OK();
   }
 
   media_status_t status = sMediaNdk->mAMediaDrm_setPropertyByteArray(
       mDrm, "certificate", aCertificate.Elements(), aCertificate.Length());
   if (NS_WARN_IF(status != AMEDIA_OK)) {
-    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "Failed to set AMediaDrm certificate property"_ns));
+    aResolver(
+        MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                    "AMediaDrm_setPropertyByteArray certificate failed"_ns));
     return IPC_OK();
   }
   return IPC_OK();
@@ -606,11 +606,78 @@ void MediaDrmNdkCDMProxy::HandleEvent(nsString&& aSessionId,
     return;
   }
 
+  MOZ_ASSERT(mDrm);
+
   switch (aEventType) {
     case AMediaDrmEventType::EVENT_PROVISION_REQUIRED:
+      EnsureProvisioned();
       break;
-    case AMediaDrmEventType::EVENT_KEY_REQUIRED:
-      break;
+    case AMediaDrmEventType::EVENT_KEY_REQUIRED: {
+      const uint8_t* keyRequest = nullptr;
+      size_t keyRequestSize = 0;
+      AMediaDrmKeyRequestType keyRequestType =
+          AMediaDrmKeyRequestType::KEY_REQUEST_TYPE_INITIAL;
+      media_status_t status;
+
+      if (sMediaNdk->mAMediaDrm_getKeyRequestWithDefaultUrlAndType) {
+        status = sMediaNdk->mAMediaDrm_getKeyRequestWithDefaultUrlAndType(
+            mDrm, &i->second.id, aData.Elements(), aData.Length(),
+            i->second.mimeType.get(), AMediaDrmKeyType::KEY_TYPE_STREAMING,
+            nullptr, 0, &keyRequest, &keyRequestSize, nullptr, &keyRequestType);
+      } else {
+        status = sMediaNdk->mAMediaDrm_getKeyRequest(
+            mDrm, &i->second.id, aData.Elements(), aData.Length(),
+            i->second.mimeType.get(), AMediaDrmKeyType::KEY_TYPE_STREAMING,
+            nullptr, 0, &keyRequest, &keyRequestSize);
+      }
+
+      if (status == AMEDIA_DRM_NOT_PROVISIONED) {
+        EnsureProvisioned()->Then(
+            GetCurrentSerialEventTarget(), __func__,
+            [self = RefPtr{this}, sessionId = std::move(aSessionId),
+             data = std::move(aData), aEventType, aExtra](
+                const InternalPromise::ResolveOrRejectValue& aValue) mutable {
+              if (aValue.IsReject()) {
+                return;
+              }
+
+              self->HandleEvent(std::move(sessionId), aEventType, aExtra,
+                                std::move(data));
+            });
+        return;
+      }
+
+      if (NS_WARN_IF(status != AMEDIA_OK)) {
+        return;
+      }
+
+      dom::MediaKeyMessageType keyMessageType;
+      switch (keyRequestType) {
+        case AMediaDrmKeyRequestType::KEY_REQUEST_TYPE_NONE:
+          // Already have what we need.
+          return;
+        case AMediaDrmKeyRequestType::KEY_REQUEST_TYPE_RELEASE:
+          keyMessageType = MediaKeyMessageType::License_release;
+          break;
+        case AMediaDrmKeyRequestType::KEY_REQUEST_TYPE_RENEWAL:
+          keyMessageType = MediaKeyMessageType::License_renewal;
+          break;
+        case AMediaDrmKeyRequestType::KEY_REQUEST_TYPE_UPDATE:
+          // Not directly equivalent but needs an additional license request.
+          keyMessageType = MediaKeyMessageType::License_request;
+          break;
+        default:
+          MOZ_FALLTHROUGH_ASSERT("Unhandled AMediaDrmKeyRequestType");
+        case AMediaDrmKeyRequestType::KEY_REQUEST_TYPE_INITIAL:
+          keyMessageType = MediaKeyMessageType::License_request;
+          break;
+      }
+
+      Unused << SendOnSessionKeyMessage(RemoteCDMKeyMessageIPDL(
+          std::move(aSessionId), keyMessageType,
+          nsTArray<uint8_t>(reinterpret_cast<const uint8_t*>(keyRequest),
+                            keyRequestSize)));
+    } break;
     case AMediaDrmEventType::EVENT_KEY_EXPIRED:
       break;
     case AMediaDrmEventType::EVENT_VENDOR_DEFINED:
