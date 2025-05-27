@@ -193,6 +193,9 @@ MediaDrmNdkCDMProxy::MediaDrmNdkCDMProxy(const nsAString& aKeySystem,
 MediaDrmNdkCDMProxy::~MediaDrmNdkCDMProxy() { Destroy(); }
 
 void MediaDrmNdkCDMProxy::Destroy() {
+  mProvisionPromise.RejectIfExists(
+      MediaResult(NS_ERROR_DOM_ABORT_ERR, "Destroyed"_ns), __func__);
+
   for (const auto& i : mSessions) {
     sMediaNdk->mAMediaDrm_closeSession(mDrm, &i.second.id);
   }
@@ -301,7 +304,17 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
   status = sMediaNdk->mAMediaDrm_openSession(mDrm, &mCryptoSessionId);
 
   if (status == AMEDIA_DRM_NOT_PROVISIONED) {
-    return RequestProvision(std::move(aResolver));
+    RequestProvision()->Then(
+        GetCurrentSerialEventTarget(), __func__,
+        [self = RefPtr{this}, resolver = std::move(aResolver)](
+            const ProvisionPromise::ResolveOrRejectValue& aValue) mutable {
+          if (aValue.IsReject()) {
+            resolver(aValue.RejectValue());
+            return;
+          }
+          self->FinishInit(std::move(resolver));
+        });
+    return IPC_OK();
   }
 
   if (NS_WARN_IF(status != AMEDIA_OK)) {
@@ -310,13 +323,21 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvInit(
     return IPC_OK();
   }
 
-  return FinishInit(std::move(aResolver));
+  FinishInit(std::move(aResolver));
+  return IPC_OK();
 }
 
-mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RequestProvision(
-    InitResolver&& aResolver) {
+RefPtr<MediaDrmNdkCDMProxy::ProvisionPromise>
+MediaDrmNdkCDMProxy::RequestProvision() {
   MOZ_ASSERT(mDrm);
   MOZ_ASSERT(!mCrypto);
+
+  // There may already be a provision request outstanding.
+  bool outstanding = !mProvisionPromise.IsEmpty();
+  RefPtr<ProvisionPromise> p = mProvisionPromise.Ensure(__func__);
+  if (outstanding) {
+    return p.forget();
+  }
 
   const uint8_t* provisionRequest = nullptr;
   size_t provisionRequestSize = 0;
@@ -324,9 +345,11 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RequestProvision(
   media_status_t status = sMediaNdk->mAMediaDrm_getProvisionRequest(
       mDrm, &provisionRequest, &provisionRequestSize, &serverUrl);
   if (NS_WARN_IF(status != AMEDIA_OK)) {
-    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "Failed to request provisioning for AMediaDrm"_ns));
-    return IPC_OK();
+    mProvisionPromise.Reject(
+        MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                    "Failed to request provisioning for AMediaDrm"_ns),
+        __func__);
+    return p.forget();
   }
 
   SendProvision(RemoteCDMProvisionRequestIPDL(
@@ -334,13 +357,13 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RequestProvision(
                     nsTArray<uint8_t>(provisionRequest, provisionRequestSize)))
       ->Then(
           GetCurrentSerialEventTarget(), __func__,
-          [self = RefPtr{this}, resolver = std::move(aResolver)](
-              RemoteCDMProvisionResponseIPDL&& aResponse) mutable {
+          [self = RefPtr{this}](RemoteCDMProvisionResponseIPDL&& aResponse) {
             if (aResponse.type() ==
                 RemoteCDMProvisionResponseIPDL::TMediaResult) {
-              resolver(MediaResult(
-                  NS_ERROR_DOM_INVALID_STATE_ERR,
-                  "Content failed to get provisioning response"_ns));
+              self->mProvisionPromise.RejectIfExists(
+                  MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                              "Content failed to get provisioning response"_ns),
+                  __func__);
               return;
             }
 
@@ -349,20 +372,21 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RequestProvision(
                     self->mDrm, aResponse.get_ArrayOfuint8_t().Elements(),
                     aResponse.get_ArrayOfuint8_t().Length());
             if (NS_WARN_IF(status != AMEDIA_OK)) {
-              resolver(MediaResult(
-                  NS_ERROR_DOM_INVALID_STATE_ERR,
-                  "AMediaDrm failed to accept provision response"_ns));
+              self->mProvisionPromise.RejectIfExists(
+                  MediaResult(
+                      NS_ERROR_DOM_INVALID_STATE_ERR,
+                      "AMediaDrm failed to accept provision response"_ns),
+                  __func__);
               return;
             }
 
-            self->FinishInit(std::move(resolver));
+            self->mProvisionPromise.ResolveIfExists(true, __func__);
           },
           [](const mozilla::ipc::ResponseRejectReason& aReason) {});
-  return IPC_OK();
+  return p.forget();
 }
 
-mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::FinishInit(
-    InitResolver&& aResolver) {
+void MediaDrmNdkCDMProxy::FinishInit(InitResolver&& aResolver) {
   MOZ_ASSERT(mUuid);
   MOZ_ASSERT(mDrm);
   MOZ_ASSERT(!mCrypto);
@@ -372,11 +396,10 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::FinishInit(
   if (NS_WARN_IF(!mCrypto)) {
     aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
                           "Failed to create AMediaCrypto"_ns));
-    return IPC_OK();
+    return;
   }
 
   aResolver(MediaResult(NS_OK));
-  return IPC_OK();
 }
 
 mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvCreateSession(
@@ -398,11 +421,29 @@ mozilla::ipc::IPCResult MediaDrmNdkCDMProxy::RecvCreateSession(
     return IPC_OK();
   }
 
+  NS_ConvertUTF16toUTF8 mimeType(aRequest.initDataType());
+
+  const uint8_t* keyRequest = nullptr;
+  size_t keyRequestSize = 0;
+  status = sMediaNdk->mAMediaDrm_getKeyRequest(
+      mDrm, &sessionId, aRequest.initData().Elements(),
+      aRequest.initData().Length(), mimeType.get(),
+      AMediaDrmKeyType::KEY_TYPE_STREAMING, nullptr, 0, &keyRequest,
+      &keyRequestSize);
+
+  if (NS_WARN_IF(status != AMEDIA_OK)) {
+    sMediaNdk->mAMediaDrm_closeSession(mDrm, &sessionId);
+    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                          "AMediaDrm_getKeyRequest failed"_ns));
+    return IPC_OK();
+  }
+
   NS_ConvertUTF8toUTF16 sessionIdStr(
       reinterpret_cast<const char*>(sessionId.ptr), sessionId.length);
-  mSessions[sessionIdStr] = {sessionId};
+  mSessions[sessionIdStr] = {sessionId, std::move(mimeType)};
 
   aResolver(std::move(sessionIdStr));
+
   return IPC_OK();
 }
 
