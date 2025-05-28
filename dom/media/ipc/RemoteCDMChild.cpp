@@ -6,6 +6,7 @@
 
 #include "RemoteCDMChild.h"
 #include "mozilla/dom/MediaKeySession.h"
+#include "nsICDMProvisioning.h"
 
 namespace mozilla {
 
@@ -28,8 +29,20 @@ void RemoteCDMChild::MaybeDestroyActor() {}
 void RemoteCDMChild::ActorDestroy(ActorDestroyReason aWhy) {}
 
 mozilla::ipc::IPCResult RemoteCDMChild::RecvProvision(
-    const RemoteCDMProvisionRequestIPDL& request,
+    RemoteCDMProvisionRequestIPDL&& aRequest,
     ProvisionResolver&& aResolver) {
+  NS_DispatchToMainThread(NS_NewRunnableFunction(
+      __func__, [self = RefPtr{this}, request = std::move(aRequest), resolver = std::move(aResolver)]() {
+  nsresult rv;
+  nsCOMPtr<nsICDMProvisioning> provisioning =
+      do_CreateInstance("@mozilla.org/dom/media/eme/cdm-provisioning;1", &rv);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR, "nsICDMProvisioning do_createInstance failed"_ns));
+    return;
+  }
+
+  provisioning->provisionAMediaDrm(serverUrl, requestData;
+  }));
   return IPC_OK();
 }
 
