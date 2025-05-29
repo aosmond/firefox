@@ -59,7 +59,11 @@ class GfxInfo final : public GfxInfoBase {
 
 #ifdef DEBUG
   NS_DECL_ISUPPORTS_INHERITED
-  NS_DECL_NSIGFXINFODEBUG
+
+  NS_IMETHOD SpoofVendorID(const nsAString& aVendorID) override;
+  NS_IMETHOD SpoofDeviceID(const nsAString& aDeviceID) override;
+  NS_IMETHOD SpoofDriverVersion(const nsAString& aDriverVersion) override;
+  NS_IMETHOD SpoofOSVersion(uint32_t aVersion) override;
 #endif
 
  protected:
