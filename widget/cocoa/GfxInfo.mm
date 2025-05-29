@@ -478,6 +478,12 @@ OperatingSystem GfxInfo::GetOperatingSystem() {
   return OSXVersionToOperatingSystem(mOSXVersion);
 }
 
+GfxVersionEx GfxInfo::GetOperatingSystemVersionEx() {
+  return GfxVersionEx(nsCocoaFeatures::ExtractMajorVersion(mOSXVersion),
+                      nsCocoaFeatures::ExtractMinorVersion(mOSXVersion),
+                      nsCocoaFeatures::ExtractBugFixVersion(mOSXVersion));
+}
+
 nsresult GfxInfo::GetFeatureStatusImpl(
     int32_t aFeature, int32_t* aStatus, nsAString& aSuggestedDriverVersion,
     const nsTArray<RefPtr<GfxDriverInfo>>& aDriverInfo, nsACString& aFailureId,
