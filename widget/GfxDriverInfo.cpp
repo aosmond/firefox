@@ -65,6 +65,10 @@ GfxDriverInfo::GfxDriverInfo(
 GfxDriverInfo::GfxDriverInfo(const GfxDriverInfo& aOrig)
     : mOperatingSystem(aOrig.mOperatingSystem),
       mOperatingSystemVersion(aOrig.mOperatingSystemVersion),
+      mOperatingSystemVersionEx(aOrig.mOperatingSystemVersionEx),
+      mOperatingSystemVersionExMax(aOrig.mOperatingSystemVersionExMax),
+      mOperatingSystemVersionExComparisonOp(
+          aOrig.mOperatingSystemVersionExComparisonOp),
       mScreen(aOrig.mScreen),
       mBattery(aOrig.mBattery),
       mWindowProtocol(aOrig.mWindowProtocol),
