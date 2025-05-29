@@ -1171,7 +1171,7 @@ void GfxInfo::AddCrashReportAnnotations() {
 }
 
 static OperatingSystem WindowsVersionToOperatingSystem(
-    int32_t aWindowsVersion) {
+    int32_t aWindowsVersion, int32_t aWindowsBuildNumber) {
   switch (aWindowsVersion) {
     case kWindows7:
       return OperatingSystem::Windows7;
@@ -1180,7 +1180,10 @@ static OperatingSystem WindowsVersionToOperatingSystem(
     case kWindows8_1:
       return OperatingSystem::Windows8_1;
     case kWindows10:
-      return OperatingSystem::Windows10;
+      if (aWindowsBuildNumber < 22000) {
+        return OperatingSystem::Windows10;
+      }
+      return OperatingSystem::Windows11;
     case kWindowsUnknown:
     default:
       return OperatingSystem::Unknown;
@@ -1293,7 +1296,7 @@ const nsTArray<RefPtr<GfxDriverInfo>>& GfxInfo::GetGfxDriverInfo() {
     // gpu use with this particular (very old) driver, restricted
     // to Win10 since we only have reports from that platform.
     APPEND_TO_DRIVER_BLOCKLIST2(
-        OperatingSystem::Windows10, DeviceFamily::AtiAll,
+        OperatingSystem::Windows10Or11, DeviceFamily::AtiAll,
         GfxDriverInfo::optionalFeatures,
         nsIGfxInfo::FEATURE_BLOCKED_DRIVER_VERSION, DRIVER_EQUAL,
         V(22, 19, 162, 4), "FEATURE_FAILURE_BUG_1587155");
@@ -1318,13 +1321,13 @@ const nsTArray<RefPtr<GfxDriverInfo>>& GfxInfo::GetGfxDriverInfo() {
 
     // Bug 1267970
     APPEND_TO_DRIVER_BLOCKLIST_RANGE(
-        OperatingSystem::Windows10, DeviceFamily::AtiAll,
+        OperatingSystem::Windows10Or11, DeviceFamily::AtiAll,
         nsIGfxInfo::FEATURE_HARDWARE_VIDEO_DECODING,
         nsIGfxInfo::FEATURE_BLOCKED_DRIVER_VERSION, DRIVER_BETWEEN_INCLUSIVE,
         V(15, 200, 0, 0), V(15, 301, 2301, 1002), "FEATURE_FAILURE_BUG_1267970",
         "15.200.0.0-15.301.2301.1002");
     APPEND_TO_DRIVER_BLOCKLIST_RANGE(
-        OperatingSystem::Windows10, DeviceFamily::AtiAll,
+        OperatingSystem::Windows10Or11, DeviceFamily::AtiAll,
         nsIGfxInfo::FEATURE_HARDWARE_VIDEO_DECODING,
         nsIGfxInfo::FEATURE_BLOCKED_DRIVER_VERSION, DRIVER_BETWEEN_INCLUSIVE,
         V(16, 100, 0, 0), V(16, 300, 2311, 0), "FEATURE_FAILURE_BUG_1267970",
@@ -1344,7 +1347,7 @@ const nsTArray<RefPtr<GfxDriverInfo>>& GfxInfo::GetGfxDriverInfo() {
      *  Bug 1599981 - crashes in AMD driver on Windows 10
      */
     APPEND_TO_DRIVER_BLOCKLIST2(
-        OperatingSystem::Windows10, DeviceFamily::RadeonCaicos,
+        OperatingSystem::Windows10Or11, DeviceFamily::RadeonCaicos,
         nsIGfxInfo::FEATURE_DIRECT3D_11_LAYERS,
         nsIGfxInfo::FEATURE_BLOCKED_DRIVER_VERSION, DRIVER_LESS_THAN,
         V(15, 301, 1901, 0), "FEATURE_FAILURE_BUG_1599981");
@@ -1539,7 +1542,7 @@ const nsTArray<RefPtr<GfxDriverInfo>>& GfxInfo::GetGfxDriverInfo() {
         "FEATURE_FAILURE_BUG_1207665_2");
 
     APPEND_TO_DRIVER_BLOCKLIST2(
-        OperatingSystem::Windows10, DeviceFamily::QualcommAll,
+        OperatingSystem::Windows10Or11, DeviceFamily::QualcommAll,
         nsIGfxInfo::FEATURE_DIRECT2D,
         nsIGfxInfo::FEATURE_BLOCKED_DRIVER_VERSION, DRIVER_LESS_THAN,
         GfxDriverInfo::allDriverVersions, "FEATURE_FAILURE_QUALCOMM");
@@ -1549,7 +1552,7 @@ const nsTArray<RefPtr<GfxDriverInfo>>& GfxInfo::GetGfxDriverInfo() {
     // cause BSOD's and output suprious green frames while decoding video.
     // Bug 1592826 expands the blocklist.
     APPEND_TO_DRIVER_BLOCKLIST2(
-        OperatingSystem::Windows10, DeviceFamily::QualcommAll,
+        OperatingSystem::Windows10Or11, DeviceFamily::QualcommAll,
         nsIGfxInfo::FEATURE_HARDWARE_VIDEO_DECODING,
         nsIGfxInfo::FEATURE_BLOCKED_DRIVER_VERSION, DRIVER_LESS_THAN_OR_EQUAL,
         V(25, 18, 10440, 0), "FEATURE_FAILURE_BUG_1592826");
@@ -1589,7 +1592,7 @@ const nsTArray<RefPtr<GfxDriverInfo>>& GfxInfo::GetGfxDriverInfo() {
 
     /* Bug 1139503: DXVA crashes with ATI cards on windows 10. */
     APPEND_TO_DRIVER_BLOCKLIST2(
-        OperatingSystem::Windows10, DeviceFamily::AtiAll,
+        OperatingSystem::Windows10Or11, DeviceFamily::AtiAll,
         nsIGfxInfo::FEATURE_HARDWARE_VIDEO_DECODING,
         nsIGfxInfo::FEATURE_BLOCKED_DRIVER_VERSION, DRIVER_EQUAL,
         V(15, 200, 1006, 0), "FEATURE_FAILURE_BUG_1139503");
@@ -1745,21 +1748,21 @@ const nsTArray<RefPtr<GfxDriverInfo>>& GfxInfo::GetGfxDriverInfo() {
     // FEATURE_HW_DECODED_VIDEO_ZERO_COPY
 
     APPEND_TO_DRIVER_BLOCKLIST_RANGE(
-        OperatingSystem::Windows10, DeviceFamily::IntelSkylake,
+        OperatingSystem::Windows10Or11, DeviceFamily::IntelSkylake,
         nsIGfxInfo::FEATURE_HW_DECODED_VIDEO_ZERO_COPY,
         nsIGfxInfo::FEATURE_BLOCKED_DRIVER_VERSION, DRIVER_BETWEEN_INCLUSIVE,
         V(20, 19, 15, 4285), V(20, 19, 15, 4390), "FEATURE_FAILURE_BUG_1763280",
         "Intel driver 20.19.15.*");
 
     APPEND_TO_DRIVER_BLOCKLIST_RANGE(
-        OperatingSystem::Windows10, DeviceFamily::IntelSkylake,
+        OperatingSystem::Windows10Or11, DeviceFamily::IntelSkylake,
         nsIGfxInfo::FEATURE_HW_DECODED_VIDEO_ZERO_COPY,
         nsIGfxInfo::FEATURE_BLOCKED_DRIVER_VERSION, DRIVER_BETWEEN_INCLUSIVE,
         V(10, 18, 15, 4256), V(10, 18, 15, 4293), "FEATURE_FAILURE_BUG_1763280",
         "Intel driver 10.18.15.*");
 
     APPEND_TO_DRIVER_BLOCKLIST2(
-        OperatingSystem::Windows10, DeviceFamily::IntelKabyLake,
+        OperatingSystem::Windows10Or11, DeviceFamily::IntelKabyLake,
         nsIGfxInfo::FEATURE_HW_DECODED_VIDEO_ZERO_COPY,
         nsIGfxInfo::FEATURE_BLOCKED_DRIVER_VERSION, DRIVER_LESS_THAN,
         GfxDriverInfo::allDriverVersions, "FEATURE_FAILURE_BUG_1802357");
@@ -1807,14 +1810,14 @@ const nsTArray<RefPtr<GfxDriverInfo>>& GfxInfo::GetGfxDriverInfo() {
     // FEATURE_REUSE_DECODER_DEVICE
 
     APPEND_TO_DRIVER_BLOCKLIST_RANGE(
-        OperatingSystem::Windows10, DeviceFamily::IntelSkylake,
+        OperatingSystem::Windows10Or11, DeviceFamily::IntelSkylake,
         nsIGfxInfo::FEATURE_REUSE_DECODER_DEVICE,
         nsIGfxInfo::FEATURE_BLOCKED_DRIVER_VERSION, DRIVER_BETWEEN_INCLUSIVE,
         V(20, 19, 15, 4285), V(20, 19, 15, 4390), "FEATURE_FAILURE_BUG_1833809",
         "Intel driver 20.19.15.*");
 
     APPEND_TO_DRIVER_BLOCKLIST_RANGE(
-        OperatingSystem::Windows10, DeviceFamily::IntelSkylake,
+        OperatingSystem::Windows10Or11, DeviceFamily::IntelSkylake,
         nsIGfxInfo::FEATURE_REUSE_DECODER_DEVICE,
         nsIGfxInfo::FEATURE_BLOCKED_DRIVER_VERSION, DRIVER_BETWEEN_INCLUSIVE,
         V(10, 18, 15, 4256), V(10, 18, 15, 4293), "FEATURE_FAILURE_BUG_1833809",
@@ -1905,7 +1908,7 @@ const nsTArray<RefPtr<GfxDriverInfo>>& GfxInfo::GetGfxDriverInfo() {
 #endif
 
     APPEND_TO_DRIVER_BLOCKLIST2(
-        OperatingSystem::Windows10, DeviceFamily::NvidiaPascal,
+        OperatingSystem::Windows10Or11, DeviceFamily::NvidiaPascal,
         nsIGfxInfo::FEATURE_WEBRENDER_COMPOSITOR,
         nsIGfxInfo::FEATURE_BLOCKED_DEVICE, DRIVER_COMPARISON_IGNORED,
         V(0, 0, 0, 0), "FEATURE_FAILURE_BUG_1923697");
@@ -1932,7 +1935,7 @@ const nsTArray<RefPtr<GfxDriverInfo>>& GfxInfo::GetGfxDriverInfo() {
 }
 
 OperatingSystem GfxInfo::GetOperatingSystem() {
-  return WindowsVersionToOperatingSystem(mWindowsVersion);
+  return WindowsVersionToOperatingSystem(mWindowsVersion, mWindowsBuildNumber);
 }
 
 nsresult GfxInfo::GetFeatureStatusImpl(
@@ -1943,7 +1946,8 @@ nsresult GfxInfo::GetFeatureStatusImpl(
 
   NS_ENSURE_ARG_POINTER(aStatus);
   aSuggestedDriverVersion.SetIsVoid(true);
-  OperatingSystem os = WindowsVersionToOperatingSystem(mWindowsVersion);
+  OperatingSystem os =
+      WindowsVersionToOperatingSystem(mWindowsVersion, mWindowsBuildNumber);
   *aStatus = nsIGfxInfo::FEATURE_STATUS_UNKNOWN;
   if (aOS) *aOS = os;
 
