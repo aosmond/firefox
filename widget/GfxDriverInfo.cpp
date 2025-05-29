@@ -19,23 +19,11 @@ nsString* GfxDriverInfo::sDeviceVendors[static_cast<size_t>(DeviceVendor::Max)];
 nsString* GfxDriverInfo::sDriverVendors[static_cast<size_t>(DriverVendor::Max)];
 
 GfxDriverInfo::GfxDriverInfo()
-    : mOperatingSystem(OperatingSystem::Unknown),
-      mOperatingSystemVersion(0),
-      mScreen(ScreenSizeStatus::All),
-      mBattery(BatteryStatus::All),
-      mWindowProtocol(GfxDriverInfo::GetWindowProtocol(WindowProtocol::All)),
+    : mWindowProtocol(GfxDriverInfo::GetWindowProtocol(WindowProtocol::All)),
       mAdapterVendor(GfxDriverInfo::GetDeviceVendor(DeviceFamily::All)),
       mDriverVendor(GfxDriverInfo::GetDriverVendor(DriverVendor::All)),
       mDevices(GfxDriverInfo::GetDeviceFamily(DeviceFamily::All)),
-      mDeleteDevices(false),
-      mFeature(optionalFeatures),
-      mFeatureStatus(nsIGfxInfo::FEATURE_STATUS_OK),
-      mComparisonOp(DRIVER_COMPARISON_IGNORED),
-      mDriverVersion(0),
-      mDriverVersionMax(0),
-      mSuggestedVersion(nullptr),
-      mRuleId(nullptr),
-      mGpu2(false) {}
+      mFeatureStatus(nsIGfxInfo::FEATURE_STATUS_OK) {}
 
 GfxDriverInfo::GfxDriverInfo(
     OperatingSystem os, ScreenSizeStatus screen, BatteryStatus battery,
@@ -45,7 +33,6 @@ GfxDriverInfo::GfxDriverInfo(
     const char* ruleId, const char* suggestedVersion /* = nullptr */,
     bool ownDevices /* = false */, bool gpu2 /* = false */)
     : mOperatingSystem(os),
-      mOperatingSystemVersion(0),
       mScreen(screen),
       mBattery(battery),
       mWindowProtocol(windowProtocol),
@@ -57,10 +44,33 @@ GfxDriverInfo::GfxDriverInfo(
       mFeatureStatus(featureStatus),
       mComparisonOp(op),
       mDriverVersion(driverVersion),
-      mDriverVersionMax(0),
       mSuggestedVersion(suggestedVersion),
       mRuleId(ruleId),
       mGpu2(gpu2) {}
+
+GfxDriverInfo::GfxDriverInfo(
+    OperatingSystem os, GfxDeviceFamily* devices, int32_t feature,
+    int32_t featureStatus, RefreshRateStatus refreshRateStatus,
+    VersionComparisonOp minRefreshRateOp, uint32_t minRefreshRate,
+    uint32_t minRefreshRateMax, VersionComparisonOp maxRefreshRateOp,
+    uint32_t maxRefreshRate, uint32_t maxRefreshRateMax, const char* ruleId,
+    const char* suggestedVersion /* = nullptr */)
+    : mOperatingSystem(os),
+      mMinRefreshRate(minRefreshRate),
+      mMinRefreshRateMax(minRefreshRate),
+      mMinRefreshRateComparisonOp(minRefreshRateOp),
+      mMaxRefreshRate(maxRefreshRate),
+      mMaxRefreshRateMax(maxRefreshRateMax),
+      mMaxRefreshRateComparisonOp(maxRefreshRateOp),
+      mRefreshRateStatus(refreshRateStatus),
+      mWindowProtocol(GfxDriverInfo::GetWindowProtocol(WindowProtocol::All)),
+      mAdapterVendor(GfxDriverInfo::GetDeviceVendor(DeviceFamily::All)),
+      mDriverVendor(GfxDriverInfo::GetDriverVendor(DriverVendor::All)),
+      mDevices(devices),
+      mFeature(feature),
+      mFeatureStatus(featureStatus),
+      mSuggestedVersion(suggestedVersion),
+      mRuleId(ruleId) {}
 
 GfxDriverInfo::GfxDriverInfo(const GfxDriverInfo& aOrig)
     : mOperatingSystem(aOrig.mOperatingSystem),
@@ -69,6 +79,13 @@ GfxDriverInfo::GfxDriverInfo(const GfxDriverInfo& aOrig)
       mOperatingSystemVersionExMax(aOrig.mOperatingSystemVersionExMax),
       mOperatingSystemVersionExComparisonOp(
           aOrig.mOperatingSystemVersionExComparisonOp),
+      mMinRefreshRate(aOrig.mMinRefreshRate),
+      mMinRefreshRateMax(aOrig.mMinRefreshRate),
+      mMinRefreshRateComparisonOp(aOrig.mMinRefreshRateComparisonOp),
+      mMaxRefreshRate(aOrig.mMaxRefreshRate),
+      mMaxRefreshRateMax(aOrig.mMaxRefreshRateMax),
+      mMaxRefreshRateComparisonOp(aOrig.mMaxRefreshRateComparisonOp),
+      mRefreshRateStatus(aOrig.mRefreshRateStatus),
       mScreen(aOrig.mScreen),
       mBattery(aOrig.mBattery),
       mWindowProtocol(aOrig.mWindowProtocol),
