@@ -6,8 +6,61 @@
 
 #include "RemoteCDMChild.h"
 #include "mozilla/dom/MediaKeySession.h"
+#include "mozilla/dom/Fetch.h"
+#include "mozilla/dom/InternalRequest.h"
+#include "mozilla/dom/Request.h"
 
 namespace mozilla {
+
+class RemoteCDMChildFetchHandler final : public dom::PromiseNativeHandler {
+ public:
+  NS_DECL_ISUPPORTS
+
+  explicit RemoteCDMChildFetchHandler(
+      PRemoteCDMChild::ProvisionResolver&& aResolver)
+      : mResolver(std::move(aResolver)) {}
+
+  void ResolvedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue,
+                        ErrorResult& aRv) override {
+    if (NS_WARN_IF(!aValue.isObject())) {
+      Resolve(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                          "Fetch handler invalid resolve"_ns));
+      return;
+    }
+
+    JS::Rooted<JSObject*> obj(aCx, &aValue.toObject());
+    MOZ_ASSERT(obj);
+
+    dom::Response* response = nullptr;
+    if (NS_WARN_IF(NS_FAILED(UNWRAP_OBJECT(Response, &obj, response)))) {
+      Resolve(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                          "Fetch handler cannot unwrap response"_ns));
+      return;
+    }
+  }
+
+  void RejectedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue,
+                        ErrorResult& aRv) override {
+    Resolve(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                        "Fetch handler rejected"_ns));
+  }
+
+ private:
+  ~RemoteCDMChildFetchHandler() override {
+    Resolve(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                        "Fetch handler destroyed without resolving"_ns));
+  }
+
+  void Resolve(MediaResult&& aResult) {
+    if (!mResolver) {
+      return;
+    }
+    mResolver(aResult);
+    mResolver = {};
+  }
+
+  PRemoteCDMChild::ProvisionResolver mResolver;
+};
 
 RemoteCDMChild::RemoteCDMChild(nsCOMPtr<nsISerialEventTarget>&& aThread,
                                RemoteMediaIn aLocation, dom::MediaKeys* aKeys,
@@ -28,8 +81,55 @@ void RemoteCDMChild::MaybeDestroyActor() {}
 void RemoteCDMChild::ActorDestroy(ActorDestroyReason aWhy) {}
 
 mozilla::ipc::IPCResult RemoteCDMChild::RecvProvision(
-    const RemoteCDMProvisionRequestIPDL& request,
-    ProvisionResolver&& aResolver) {
+    RemoteCDMProvisionRequestIPDL&& aRequest, ProvisionResolver&& aResolver) {
+#ifdef MOZ_WIDGET_ANDROID
+  NS_DispatchToMainThread(NS_NewRunnableFunction(
+      __func__, [self = RefPtr{this}, request = std::move(aRequest),
+                 resolver = std::move(aResolver)]() {
+        if (self->mKeys.IsNull()) {
+          resolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR));
+          return;
+        }
+
+        nsIGlobalObject* global = nullptr;
+        if (nsPIDOMWindowInner* parentObj = self->mKeys->GetParentObject()) {
+          global = parentObj->AsGlobal();
+        }
+
+        if (NS_WARN_IF(!global)) {
+          resolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR));
+          return;
+        }
+
+        nsAutoCString url(request.serverUrl());
+        url.Append('&');
+        url.Append(reinterpret_cast<const char*>(request.request().Elements()),
+                   request.request().Length());
+
+        auto internalRequest = MakeSafeRefPtr<dom::InternalRequest>(url, ""_ns);
+        internalRequest->SetMethod("POST"_ns);
+        internalRequest->SetSkipServiceWorker();
+        internalRequest->SetMode(dom::RequestMode::Cors);
+
+        auto fetchRequest = MakeRefPtr<dom::Request>(
+            global, std::move(internalRequest), nullptr);
+
+        dom::RequestOrUTF8String fetchInput;
+        fetchInput.SetAsRequest() = fetchRequest;
+
+        IgnoredErrorResult error;
+        dom::RootedDictionary<dom::RequestInit> requestInit(dom::RootingCx());
+        RefPtr<dom::Promise> promise = dom::FetchRequest(
+            global, fetchInput, requestInit, dom::CallerType::NonSystem, error);
+        if (error.Failed()) {
+          resolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR));
+          return;
+        }
+      }));
+#else
+  aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                        "Provisioning not supported!"_ns));
+#endif
   return IPC_OK();
 }
 
