@@ -204,6 +204,155 @@ enum class ScreenSizeStatus : uint8_t {
   Large            // > 3440x1440
 };
 
+class GfxVersionEx final {
+ public:
+  GfxVersionEx() = default;
+  explicit GfxVersionEx(const GfxVersionEx& aOther) = default;
+  GfxVersionEx(GfxVersionEx&& aOther) = default;
+  GfxVersionEx& operator=(const GfxVersionEx& aOther) = default;
+  GfxVersionEx& operator=(GfxVersionEx&& aOther) = default;
+
+  explicit GfxVersionEx(uint32_t aMajor) { mParts.AppendElement(aMajor); }
+
+  GfxVersionEx(uint32_t aMajor, uint32_t aMinor) {
+    mParts.AppendElement(aMajor);
+    mParts.AppendElement(aMinor);
+  }
+
+  GfxVersionEx(uint32_t aMajor, uint32_t aMinor, uint32_t aBuild) {
+    mParts.AppendElement(aMajor);
+    mParts.AppendElement(aMinor);
+    mParts.AppendElement(aBuild);
+  }
+
+  GfxVersionEx(uint32_t aMajor, uint32_t aMinor, uint32_t aBuild,
+               uint32_t aRevision) {
+    mParts.AppendElement(aMajor);
+    mParts.AppendElement(aMinor);
+    mParts.AppendElement(aBuild);
+    mParts.AppendElement(aRevision);
+  }
+
+  bool Parse(const nsACString& aVersion) {
+    mParts.Clear();
+
+    for (const auto& part : aVersion.Split('.')) {
+      nsresult rv;
+      *mParts.AppendElement() = part.ToUnsignedInteger(&rv);
+      if (NS_WARN_IF(NS_FAILED(rv))) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  bool Compare(const GfxVersionEx& aOther, const GfxVersionEx& aOtherMax,
+               VersionComparisonOp aCmp) const {
+    if (aCmp == DRIVER_COMPARISON_IGNORED) {
+      return true;
+    }
+
+    // Pad out the parts to make comparison easier.
+    size_t partsLength = mParts.Length();
+    size_t otherPartsLength = aOther.mParts.Length();
+    size_t otherMaxPartsLength = aOther.mParts.Length();
+    size_t maxLength =
+        std::max(std::max(partsLength, otherPartsLength), otherMaxPartsLength);
+
+    if (maxLength > partsLength) {
+      mParts.AppendElements(maxLength - partsLength);
+    }
+    if (maxLength > otherPartsLength) {
+      aOther.mParts.AppendElements(maxLength - otherPartsLength);
+    }
+    if (maxLength > otherMaxPartsLength) {
+      aOtherMax.mParts.AppendElements(maxLength - otherMaxPartsLength);
+    }
+
+    switch (aCmp) {
+      case DRIVER_LESS_THAN:
+        for (size_t i = 0; i < maxLength; ++i) {
+          if (mParts[i] < aOther.mParts[i]) {
+            return true;
+          }
+        }
+        return false;
+      case DRIVER_LESS_THAN_OR_EQUAL:
+        for (size_t i = 0; i < maxLength; ++i) {
+          if (mParts[i] <= aOther.mParts[i]) {
+            return true;
+          }
+        }
+        return false;
+      case DRIVER_GREATER_THAN:
+        for (size_t i = 0; i < maxLength; ++i) {
+          if (mParts[i] > aOther.mParts[i]) {
+            return true;
+          }
+        }
+        return false;
+      case DRIVER_GREATER_THAN_OR_EQUAL:
+        for (size_t i = 0; i < maxLength; ++i) {
+          if (mParts[i] >= aOther.mParts[i]) {
+            return true;
+          }
+        }
+        return false;
+      case DRIVER_EQUAL:
+        for (size_t i = 0; i < maxLength; ++i) {
+          if (mParts[i] == aOther.mParts[i]) {
+            continue;
+          }
+          return false;
+        }
+        return true;
+      case DRIVER_NOT_EQUAL:
+        for (size_t i = 0; i < maxLength; ++i) {
+          if (mParts[i] != aOther.mParts[i]) {
+            continue;
+          }
+          return false;
+        }
+        return true;
+      case DRIVER_BETWEEN_EXCLUSIVE:
+        for (size_t i = 0; i < maxLength; ++i) {
+          if (mParts[i] > aOther.mParts[i] && mParts[i] < aOtherMax.mParts[i]) {
+            continue;
+          }
+          return false;
+        }
+        return true;
+      case DRIVER_BETWEEN_INCLUSIVE:
+        for (size_t i = 0; i < maxLength; ++i) {
+          if (mParts[i] >= aOther.mParts[i] &&
+              mParts[i] <= aOtherMax.mParts[i]) {
+            continue;
+          }
+          return false;
+        }
+        return true;
+      case DRIVER_BETWEEN_INCLUSIVE_START:
+        for (size_t i = 0; i < maxLength; ++i) {
+          if (mParts[i] >= aOther.mParts[i] &&
+              mParts[i] < aOtherMax.mParts[i]) {
+            continue;
+          }
+          return false;
+        }
+        return true;
+      default:
+        NS_WARNING("Unsupported op in GfxDriverInfo");
+        break;
+    }
+
+    return false;
+  }
+
+ private:
+  mutable CopyableAutoTArray<uint32_t, 4> mParts;
+};
+
 /* Array of devices to match, or an empty array for all devices */
 class GfxDeviceFamily final {
  public:
@@ -249,6 +398,12 @@ class GfxDriverInfo final {
 
   OperatingSystem mOperatingSystem;
   uint32_t mOperatingSystemVersion;
+
+  GfxVersionEx mOperatingSystemVersionEx;
+  GfxVersionEx mOperatingSystemVersionExMax;
+  VersionComparisonOp mOperatingSystemVersionExComparisonOp =
+      DRIVER_COMPARISON_IGNORED;
+
   ScreenSizeStatus mScreen;
   BatteryStatus mBattery;
   nsString mWindowProtocol;
