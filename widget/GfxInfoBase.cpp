@@ -89,7 +89,6 @@ class ShutdownObserver : public nsIObserver {
     GfxInfoBase::sDriverInfo = nullptr;
 
     for (auto& deviceFamily : GfxDriverInfo::sDeviceFamilies) {
-      delete deviceFamily;
       deviceFamily = nullptr;
     }
 
@@ -237,13 +236,13 @@ static OperatingSystem BlocklistOSToOperatingSystem(const nsAString& os) {
   return OperatingSystem::Unknown;
 }
 
-static GfxDeviceFamily* BlocklistDevicesToDeviceFamily(
+static already_AddRefed<const GfxDeviceFamily> BlocklistDevicesToDeviceFamily(
     nsTArray<nsCString>& devices) {
   if (devices.Length() == 0) return nullptr;
 
   // For each device, get its device ID, and return a freshly-allocated
   // GfxDeviceFamily with the contents of that array.
-  GfxDeviceFamily* deviceIds = new GfxDeviceFamily;
+  auto deviceIds = MakeRefPtr<GfxDeviceFamily>();
 
   for (uint32_t i = 0; i < devices.Length(); ++i) {
     // We make sure we don't add any "empty" device entries to the array, so
@@ -251,7 +250,7 @@ static GfxDeviceFamily* BlocklistDevicesToDeviceFamily(
     deviceIds->Append(NS_ConvertUTF8toUTF16(devices[i]));
   }
 
-  return deviceIds;
+  return deviceIds.forget();
 }
 
 static int32_t BlocklistFeatureToGfxFeature(const nsAString& aFeature) {
@@ -421,12 +420,7 @@ static bool BlocklistEntryToDriverInfo(const nsACString& aBlocklistEntry,
     } else if (key.EqualsLiteral("devices")) {
       nsTArray<nsCString> devices;
       ParseString(value, ',', devices);
-      GfxDeviceFamily* deviceIds = BlocklistDevicesToDeviceFamily(devices);
-      if (deviceIds) {
-        // Get GfxDriverInfo to adopt the devices array we created.
-        aDriverInfo.mDeleteDevices = true;
-        aDriverInfo.mDevices = deviceIds;
-      }
+      aDriverInfo.mDevices = BlocklistDevicesToDeviceFamily(devices);
     }
     // We explicitly ignore unknown elements.
   }
@@ -447,8 +441,6 @@ GfxInfoBase::Observe(nsISupports* aSubject, const char* aTopic,
         // XXX Changing this to driverInfo.AppendElement(di) causes leaks.
         // Probably some non-standard semantics of the copy/move operations?
         *driverInfo.AppendElement() = di;
-        // Prevent di falling out of scope from destroying the devices.
-        di.mDeleteDevices = false;
       } else {
         driverInfo.AppendElement();
       }
