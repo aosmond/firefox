@@ -223,6 +223,8 @@ enum class ScreenSizeStatus : uint8_t {
 };
 
 class GfxVersionEx final {
+  static constexpr size_t MAX_PARTS = 4;
+
  public:
   GfxVersionEx() = default;
   explicit GfxVersionEx(const GfxVersionEx& aOther) = default;
@@ -230,36 +232,29 @@ class GfxVersionEx final {
   GfxVersionEx& operator=(const GfxVersionEx& aOther) = default;
   GfxVersionEx& operator=(GfxVersionEx&& aOther) = default;
 
-  explicit GfxVersionEx(uint32_t aMajor) { mParts.AppendElement(aMajor); }
-
-  GfxVersionEx(uint32_t aMajor, uint32_t aMinor) {
-    mParts.AppendElement(aMajor);
-    mParts.AppendElement(aMinor);
-  }
-
-  GfxVersionEx(uint32_t aMajor, uint32_t aMinor, uint32_t aBuild) {
-    mParts.AppendElement(aMajor);
-    mParts.AppendElement(aMinor);
-    mParts.AppendElement(aBuild);
-  }
+  GfxVersionEx(uint32_t aMajor, uint32_t aMinor, uint32_t aBuild)
+      : mParts{aMajor, aMinor, aBuild, 0} {}
 
   GfxVersionEx(uint32_t aMajor, uint32_t aMinor, uint32_t aBuild,
-               uint32_t aRevision) {
-    mParts.AppendElement(aMajor);
-    mParts.AppendElement(aMinor);
-    mParts.AppendElement(aBuild);
-    mParts.AppendElement(aRevision);
-  }
+               uint32_t aRevision)
+      : mParts{aMajor, aMinor, aBuild, aRevision} {}
 
   bool Parse(const nsACString& aVersion) {
-    mParts.Clear();
-
+    size_t i = 0;
     for (const auto& part : aVersion.Split('.')) {
       nsresult rv;
-      *mParts.AppendElement() = part.ToUnsignedInteger(&rv);
+      mParts[i] = part.ToUnsignedInteger(&rv);
       if (NS_WARN_IF(NS_FAILED(rv))) {
         return false;
       }
+
+      if (++i == MAX_PARTS) {
+        break;
+      }
+    }
+
+    while (i < MAX_PARTS) {
+      mParts[i++] = 0;
     }
 
     return true;
@@ -271,54 +266,37 @@ class GfxVersionEx final {
       return true;
     }
 
-    // Pad out the parts to make comparison easier.
-    size_t partsLength = mParts.Length();
-    size_t otherPartsLength = aOther.mParts.Length();
-    size_t otherMaxPartsLength = aOther.mParts.Length();
-    size_t maxLength =
-        std::max(std::max(partsLength, otherPartsLength), otherMaxPartsLength);
-
-    if (maxLength > partsLength) {
-      mParts.AppendElements(maxLength - partsLength);
-    }
-    if (maxLength > otherPartsLength) {
-      aOther.mParts.AppendElements(maxLength - otherPartsLength);
-    }
-    if (maxLength > otherMaxPartsLength) {
-      aOtherMax.mParts.AppendElements(maxLength - otherMaxPartsLength);
-    }
-
     switch (aCmp) {
       case DRIVER_LESS_THAN:
-        for (size_t i = 0; i < maxLength; ++i) {
+        for (size_t i = 0; i < MAX_PARTS; ++i) {
           if (mParts[i] < aOther.mParts[i]) {
             return true;
           }
         }
         return false;
       case DRIVER_LESS_THAN_OR_EQUAL:
-        for (size_t i = 0; i < maxLength; ++i) {
+        for (size_t i = 0; i < MAX_PARTS; ++i) {
           if (mParts[i] <= aOther.mParts[i]) {
             return true;
           }
         }
         return false;
       case DRIVER_GREATER_THAN:
-        for (size_t i = 0; i < maxLength; ++i) {
+        for (size_t i = 0; i < MAX_PARTS; ++i) {
           if (mParts[i] > aOther.mParts[i]) {
             return true;
           }
         }
         return false;
       case DRIVER_GREATER_THAN_OR_EQUAL:
-        for (size_t i = 0; i < maxLength; ++i) {
+        for (size_t i = 0; i < MAX_PARTS; ++i) {
           if (mParts[i] >= aOther.mParts[i]) {
             return true;
           }
         }
         return false;
       case DRIVER_EQUAL:
-        for (size_t i = 0; i < maxLength; ++i) {
+        for (size_t i = 0; i < MAX_PARTS; ++i) {
           if (mParts[i] == aOther.mParts[i]) {
             continue;
           }
@@ -326,7 +304,7 @@ class GfxVersionEx final {
         }
         return true;
       case DRIVER_NOT_EQUAL:
-        for (size_t i = 0; i < maxLength; ++i) {
+        for (size_t i = 0; i < MAX_PARTS; ++i) {
           if (mParts[i] != aOther.mParts[i]) {
             continue;
           }
@@ -334,7 +312,7 @@ class GfxVersionEx final {
         }
         return true;
       case DRIVER_BETWEEN_EXCLUSIVE:
-        for (size_t i = 0; i < maxLength; ++i) {
+        for (size_t i = 0; i < MAX_PARTS; ++i) {
           if (mParts[i] > aOther.mParts[i] && mParts[i] < aOtherMax.mParts[i]) {
             continue;
           }
@@ -342,7 +320,7 @@ class GfxVersionEx final {
         }
         return true;
       case DRIVER_BETWEEN_INCLUSIVE:
-        for (size_t i = 0; i < maxLength; ++i) {
+        for (size_t i = 0; i < MAX_PARTS; ++i) {
           if (mParts[i] >= aOther.mParts[i] &&
               mParts[i] <= aOtherMax.mParts[i]) {
             continue;
@@ -351,7 +329,7 @@ class GfxVersionEx final {
         }
         return true;
       case DRIVER_BETWEEN_INCLUSIVE_START:
-        for (size_t i = 0; i < maxLength; ++i) {
+        for (size_t i = 0; i < MAX_PARTS; ++i) {
           if (mParts[i] >= aOther.mParts[i] &&
               mParts[i] < aOtherMax.mParts[i]) {
             continue;
@@ -368,7 +346,7 @@ class GfxVersionEx final {
   }
 
  private:
-  mutable CopyableAutoTArray<uint32_t, 4> mParts;
+  uint32_t mParts[MAX_PARTS]{};
 };
 
 /* Array of devices to match, or an empty array for all devices */
