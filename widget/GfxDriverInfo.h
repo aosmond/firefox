@@ -17,7 +17,7 @@
 #define APPEND_TO_DRIVER_BLOCKLIST_EXT(                                       \
     os, screen, battery, windowProtocol, driverVendor, devices, feature,      \
     featureStatus, driverComparator, driverVersion, ruleId, suggestedVersion) \
-  sDriverInfo->AppendElement(GfxDriverInfo(                                   \
+  sDriverInfo->AppendElement(MakeAndAddRef<GfxDriverInfo>(                    \
       os, screen, battery,                                                    \
       (nsAString&)GfxDriverInfo::GetWindowProtocol(windowProtocol),           \
       (nsAString&)GfxDriverInfo::GetDeviceVendor(devices),                    \
@@ -36,7 +36,7 @@
 #define APPEND_TO_DRIVER_BLOCKLIST2_EXT(                                 \
     os, screen, battery, windowProtocol, driverVendor, devices, feature, \
     featureStatus, driverComparator, driverVersion, ruleId)              \
-  sDriverInfo->AppendElement(GfxDriverInfo(                              \
+  sDriverInfo->AppendElement(MakeAndAddRef<GfxDriverInfo>(               \
       os, screen, battery,                                               \
       (nsAString&)GfxDriverInfo::GetWindowProtocol(windowProtocol),      \
       (nsAString&)GfxDriverInfo::GetDeviceVendor(devices),               \
@@ -59,15 +59,15 @@
     MOZ_ASSERT((driverComparator) == DRIVER_BETWEEN_EXCLUSIVE ||              \
                (driverComparator) == DRIVER_BETWEEN_INCLUSIVE ||              \
                (driverComparator) == DRIVER_BETWEEN_INCLUSIVE_START);         \
-    GfxDriverInfo info(                                                       \
+    auto info = MakeRefPtr<GfxDriverInfo>(                                    \
         os, screen, battery,                                                  \
         (nsAString&)GfxDriverInfo::GetWindowProtocol(windowProtocol),         \
         (nsAString&)GfxDriverInfo::GetDeviceVendor(devices),                  \
         (nsAString&)GfxDriverInfo::GetDriverVendor(driverVendor),             \
         GfxDriverInfo::GetDeviceFamily(devices), feature, featureStatus,      \
         driverComparator, driverVersion, ruleId, suggestedVersion);           \
-    info.mDriverVersionMax = driverVersionMax;                                \
-    sDriverInfo->AppendElement(info);                                         \
+    info->mDriverVersionMax = driverVersionMax;                               \
+    sDriverInfo->AppendElement(info.forget());                                \
   } while (false)
 
 #define APPEND_TO_DRIVER_BLOCKLIST_RANGE(                                   \
@@ -86,7 +86,7 @@
     MOZ_ASSERT((driverComparator) == DRIVER_BETWEEN_EXCLUSIVE ||              \
                (driverComparator) == DRIVER_BETWEEN_INCLUSIVE ||              \
                (driverComparator) == DRIVER_BETWEEN_INCLUSIVE_START);         \
-    GfxDriverInfo info(                                                       \
+    auto info = MakeRefPtr<GfxDriverInfo>(                                    \
         os, screen, battery,                                                  \
         (nsAString&)GfxDriverInfo::GetWindowProtocol(windowProtocol),         \
         (nsAString&)GfxDriverInfo::GetDeviceVendor(devices),                  \
@@ -94,8 +94,8 @@
         GfxDriverInfo::GetDeviceFamily(devices), feature, featureStatus,      \
         driverComparator, driverVersion, ruleId, suggestedVersion, false,     \
         true);                                                                \
-    info.mDriverVersionMax = driverVersionMax;                                \
-    sDriverInfo->AppendElement(info);                                         \
+    info->mDriverVersionMax = driverVersionMax;                               \
+    sDriverInfo->AppendElement(info.forget());                                \
   } while (false)
 
 #define APPEND_TO_DRIVER_BLOCKLIST_RANGE_GPU2(                              \
@@ -230,7 +230,10 @@ class GfxDeviceFamily final {
   nsTArray<DeviceRange> mRanges;
 };
 
-struct GfxDriverInfo {
+class GfxDriverInfo final {
+ public:
+  NS_INLINE_DECL_REFCOUNTING(GfxDriverInfo);
+
   // If |ownDevices| is true, you are transferring ownership of the devices
   // array, and it will be deleted when this GfxDriverInfo is destroyed.
   GfxDriverInfo(OperatingSystem os, ScreenSizeStatus aScreen,
@@ -243,8 +246,6 @@ struct GfxDriverInfo {
                 bool gpu2 = false);
 
   GfxDriverInfo();
-  GfxDriverInfo(const GfxDriverInfo&) = default;
-  ~GfxDriverInfo() = default;
 
   OperatingSystem mOperatingSystem;
   uint32_t mOperatingSystemVersion;
@@ -295,6 +296,9 @@ struct GfxDriverInfo {
   nsString mModel, mHardware, mProduct, mManufacturer;
 
   bool mGpu2;
+
+ private:
+  ~GfxDriverInfo() = default;
 };
 
 inline uint64_t DriverVersion(uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
