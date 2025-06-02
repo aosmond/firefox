@@ -412,7 +412,10 @@ void RemoteCDMChild::NotifyOutputProtectionStatus(
     OutputProtectionCheckStatus aCheckStatus,
     OutputProtectionCaptureStatus aCaptureStatus) {}
 
-void RemoteCDMChild::Shutdown() {}
+void RemoteCDMChild::Shutdown() {
+  MOZ_ALWAYS_SUCCEEDS(mThread->Dispatch(NS_NewRunnableFunction(
+      __func__, [self = RefPtr{this}] { self->Send__delete__(self); })));
+}
 
 void RemoteCDMChild::Terminated() {}
 
@@ -480,10 +483,12 @@ void RemoteCDMChild::ResolveOrRejectPromise(PromiseId aId,
 void RemoteCDMChild::OnKeyStatusesChange(const nsAString& aSessionId) {}
 
 void RemoteCDMChild::GetStatusForPolicy(
-    PromiseId aPromiseId, const dom::HDCPVersion& aMinHdcpVersion) {}
+    PromiseId aPromiseId, const dom::HDCPVersion& aMinHdcpVersion) {
+  RejectPromise(aPromiseId, MediaResult(NS_ERROR_DOM_MEDIA_NOT_SUPPORTED_ERR));
+}
 
 #ifdef DEBUG
-bool RemoteCDMChild::IsOnOwnerThread() { return false; }
+bool RemoteCDMChild::IsOnOwnerThread() { return mThread->IsOnCurrentThread(); }
 #endif
 
 }  // namespace mozilla
