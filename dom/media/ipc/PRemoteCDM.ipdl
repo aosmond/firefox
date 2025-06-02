@@ -51,7 +51,7 @@ union RemoteCDMSessionResponseIPDL
 
 struct RemoteCDMProvisionRequestIPDL
 {
-  nsCString serverUrl;
+  nsString serverUrl;
   uint8_t[] request;
 };
 

@@ -6,8 +6,78 @@
 
 #include "RemoteCDMChild.h"
 #include "mozilla/dom/MediaKeySession.h"
+#include "mozilla/dom/PromiseNativeHandler.h"
+#include "nsComponentManagerUtils.h"
+#include "nsICDMProvisioning.h"
 
 namespace mozilla {
+
+class RemoteCDMProvisionHelper final : public dom::PromiseNativeHandler {
+ public:
+  NS_DECL_THREADSAFE_ISUPPORTS
+
+  explicit RemoteCDMProvisionHelper(
+      PRemoteCDMChild::ProvisionResolver&& aResolver)
+      : mEventTarget(GetCurrentSerialEventTarget()),
+        mResolver(std::move(aResolver)) {}
+
+  template <class T>
+  void MaybeResolve(T&& aResult) {
+    if (!mResolver) {
+      return;
+    }
+
+    Unused << mEventTarget->Dispatch(NS_NewRunnableFunction(
+        __func__, [result = std::move(aResult),
+                   resolver = std::move(mResolver)]() { resolver(result); }));
+    mResolver = nullptr;
+  }
+
+  MOZ_CAN_RUN_SCRIPT
+  void ResolvedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue,
+                        ErrorResult& aRv) override {
+    MOZ_ASSERT(NS_IsMainThread());
+    MOZ_ASSERT(mResolver);
+
+    dom::ArrayBufferView view;
+    if (!view.Init(aValue.toObjectOrNull())) {
+      MaybeResolve(MediaResult(
+          NS_ERROR_DOM_INVALID_STATE_ERR,
+          "Failed to initialize ArrayBufferView for provisioning response"_ns));
+      return;
+    }
+
+    nsTArray<uint8_t> response;
+    if (!view.AppendDataTo(response)) {
+      MaybeResolve(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                               "Failed to copy provision response"_ns));
+      return;
+    }
+
+    MaybeResolve(std::move(response));
+  }
+
+  MOZ_CAN_RUN_SCRIPT
+  void RejectedCallback(JSContext* aCx, JS::Handle<JS::Value> aValue,
+                        ErrorResult& aRv) override {
+    MOZ_ASSERT(NS_IsMainThread());
+    MOZ_ASSERT(mResolver);
+    MaybeResolve(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                             "Failed to fetch provisioning response"_ns));
+  }
+
+ private:
+  ~RemoteCDMProvisionHelper() override {
+    MaybeResolve(
+        MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                    "Failed to resolve or reject provisioning promise"_ns));
+  }
+
+  nsCOMPtr<nsISerialEventTarget> mEventTarget;
+  PRemoteCDMChild::ProvisionResolver mResolver;
+};
+
+NS_IMPL_ISUPPORTS0(RemoteCDMProvisionHelper);
 
 RemoteCDMChild::RemoteCDMChild(nsCOMPtr<nsISerialEventTarget>&& aThread,
                                RemoteMediaIn aLocation, dom::MediaKeys* aKeys,
@@ -28,8 +98,36 @@ void RemoteCDMChild::MaybeDestroyActor() {}
 void RemoteCDMChild::ActorDestroy(ActorDestroyReason aWhy) {}
 
 mozilla::ipc::IPCResult RemoteCDMChild::RecvProvision(
-    const RemoteCDMProvisionRequestIPDL& request,
-    ProvisionResolver&& aResolver) {
+    RemoteCDMProvisionRequestIPDL&& aRequest, ProvisionResolver&& aResolver) {
+  auto helper = MakeRefPtr<RemoteCDMProvisionHelper>(std::move(aResolver));
+  NS_DispatchToMainThread(NS_NewRunnableFunction(
+      __func__, [request = std::move(aRequest), helper = std::move(helper)]() {
+        nsresult rv;
+        nsCOMPtr<nsICDMProvisioning> provisioning = do_CreateInstance(
+            "@mozilla.org/dom/media/eme/cdm-provisioning;1", &rv);
+        if (!provisioning) {
+          helper->MaybeResolve(
+              MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                          "Failed to create nsICDMProvisioning object"_ns));
+          return;
+        }
+
+        NS_ConvertUTF8toUTF16 requestData(
+            reinterpret_cast<const char*>(request.request().Elements()),
+            request.request().Length());
+
+        RefPtr<dom::Promise> promise;
+        rv = provisioning->ProvisionAMediaDrm(request.serverUrl(), requestData,
+                                              getter_AddRefs(promise));
+        if (NS_FAILED(rv)) {
+          helper->MaybeResolve(MediaResult(
+              NS_ERROR_DOM_INVALID_STATE_ERR,
+              "nsICDMProvisioning::ProvisionAMediaDrm call failed"_ns));
+          return;
+        }
+
+        promise->AppendNativeHandler(helper);
+      }));
   return IPC_OK();
 }
 
