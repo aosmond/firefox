@@ -28,8 +28,7 @@ class RemoteCDMChild final : public PRemoteCDMChild, public CDMProxy {
   // PRemoteCDMChild
   void ActorDestroy(ActorDestroyReason aWhy) override;
   mozilla::ipc::IPCResult RecvProvision(
-      const RemoteCDMProvisionRequestIPDL& request,
-      ProvisionResolver&& aResolver);
+      RemoteCDMProvisionRequestIPDL&& aRequest, ProvisionResolver&& aResolver);
   mozilla::ipc::IPCResult RecvOnSessionKeyStatus(
       const RemoteCDMKeyStatusIPDL& aMsg);
   mozilla::ipc::IPCResult RecvOnSessionKeyExpiration(
