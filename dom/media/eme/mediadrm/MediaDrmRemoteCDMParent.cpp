@@ -384,7 +384,7 @@ MediaDrmRemoteCDMParent::EnsureProvisioned() {
   }
 
   SendProvision(RemoteCDMProvisionRequestIPDL(
-                    NS_ConvertUTF8ToUTF16(serverUrl),
+                    NS_ConvertUTF8toUTF16(serverUrl),
                     nsTArray<uint8_t>(provisionRequest, provisionRequestSize)))
       ->Then(
           GetCurrentSerialEventTarget(), __func__,

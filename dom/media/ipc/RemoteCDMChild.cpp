@@ -11,6 +11,7 @@
 #  include "mozilla/dom/PromiseNativeHandler.h"
 #  include "nsComponentManagerUtils.h"
 #  include "nsIMediaDrmProvisioning.h"
+#endif
 
 namespace mozilla {
 
