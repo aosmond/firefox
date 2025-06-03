@@ -9,12 +9,15 @@
 #include "mozilla/Atomics.h"
 #include "mozilla/CDMProxy.h"
 #include "mozilla/MediaActorUtils.h"
+#include "mozilla/PRemoteCDMActor.h"
 #include "mozilla/PRemoteCDMChild.h"
 #include "mozilla/RemoteMediaManagerChild.h"
 
 namespace mozilla {
 
-class RemoteCDMChild final : public PRemoteCDMChild, public CDMProxy {
+class RemoteCDMChild final : public PRemoteCDMChild,
+                             public PRemoteCDMActor,
+                             public CDMProxy {
  public:
   MEDIA_INLINE_DECL_THREADSAFE_REFCOUNTING_META(RemoteCDMChild, NS_IMETHOD_,
                                                 delete(this), Shutdown(),
@@ -27,7 +30,6 @@ class RemoteCDMChild final : public PRemoteCDMChild, public CDMProxy {
                  bool aPersistentStateRequired);
 
   nsISerialEventTarget* GetManagerThread() const { return mThread; }
-  RemoteMediaIn GetLocation() const { return mLocation; }
 
   // PRemoteCDMChild
   void ActorDestroy(ActorDestroyReason aWhy) override;
@@ -88,6 +90,11 @@ class RemoteCDMChild final : public PRemoteCDMChild, public CDMProxy {
 #ifdef DEBUG
   bool IsOnOwnerThread() override;
 #endif
+  RemoteCDMChild* AsRemoteCDMChild() final { return this; }
+
+  // PRemoteCDMActor
+  PRemoteCDMChild* AsPRemoteCDMChild() final { return this; }
+  RemoteMediaIn GetLocation() const final { return mLocation; }
 
  private:
   virtual ~RemoteCDMChild();
