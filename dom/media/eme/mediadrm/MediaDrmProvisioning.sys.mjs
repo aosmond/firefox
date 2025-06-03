@@ -3,15 +3,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-export function CDMProvisioning() {}
+export function MediaDrmProvisioning() {}
 
-CDMProvisioning.prototype = {
+MediaDrmProvisioning.prototype = {
   QueryInterface: ChromeUtils.generateQI([
-    "nsICDMProvisioning",
+    "nsIMediaDrmProvisioning",
     "nsISupport",
   ]),
 
-  provisionAMediaDrm(serverUrl, request) {
+  provision(serverUrl, request) {
     const url = serverUrl + "&signedRequest=" + request;
     return new Promise((resolve, reject) => {
       fetch(url, {method: "POST"})

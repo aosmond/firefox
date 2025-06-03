@@ -6,12 +6,15 @@
 
 #include "RemoteCDMChild.h"
 #include "mozilla/dom/MediaKeySession.h"
-#include "mozilla/dom/PromiseNativeHandler.h"
-#include "nsComponentManagerUtils.h"
-#include "nsICDMProvisioning.h"
+
+#ifdef MOZ_WIDGET_ANDROID
+#  include "mozilla/dom/PromiseNativeHandler.h"
+#  include "nsComponentManagerUtils.h"
+#  include "nsIMediaDrmProvisioning.h"
 
 namespace mozilla {
 
+#  ifdef MOZ_WIDGET_ANDROID
 class RemoteCDMProvisionHelper final : public dom::PromiseNativeHandler {
  public:
   NS_DECL_THREADSAFE_ISUPPORTS
@@ -78,6 +81,7 @@ class RemoteCDMProvisionHelper final : public dom::PromiseNativeHandler {
 };
 
 NS_IMPL_ISUPPORTS0(RemoteCDMProvisionHelper);
+#  endif  // MOZ_WIDGET_ANDROID
 
 RemoteCDMChild::RemoteCDMChild(nsCOMPtr<nsISerialEventTarget>&& aThread,
                                RemoteMediaIn aLocation, dom::MediaKeys* aKeys,
@@ -99,16 +103,17 @@ void RemoteCDMChild::ActorDestroy(ActorDestroyReason aWhy) {}
 
 mozilla::ipc::IPCResult RemoteCDMChild::RecvProvision(
     RemoteCDMProvisionRequestIPDL&& aRequest, ProvisionResolver&& aResolver) {
+#  ifdef MOZ_WIDGET_ANDROID
   auto helper = MakeRefPtr<RemoteCDMProvisionHelper>(std::move(aResolver));
   NS_DispatchToMainThread(NS_NewRunnableFunction(
       __func__, [request = std::move(aRequest), helper = std::move(helper)]() {
         nsresult rv;
-        nsCOMPtr<nsICDMProvisioning> provisioning = do_CreateInstance(
-            "@mozilla.org/dom/media/eme/cdm-provisioning;1", &rv);
+        nsCOMPtr<nsIMediaDrmProvisioning> provisioning = do_CreateInstance(
+            "@mozilla.org/dom/media/eme/mediadrm/provisioning;1", &rv);
         if (!provisioning) {
-          helper->MaybeResolve(
-              MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "Failed to create nsICDMProvisioning object"_ns));
+          helper->MaybeResolve(MediaResult(
+              NS_ERROR_DOM_INVALID_STATE_ERR,
+              "Failed to create nsIMediaDrmProvisioning object"_ns));
           return;
         }
 
@@ -117,8 +122,8 @@ mozilla::ipc::IPCResult RemoteCDMChild::RecvProvision(
             request.request().Length());
 
         RefPtr<dom::Promise> promise;
-        rv = provisioning->ProvisionAMediaDrm(request.serverUrl(), requestData,
-                                              getter_AddRefs(promise));
+        rv = provisioning->Provision(request.serverUrl(), requestData,
+                                     getter_AddRefs(promise));
         if (NS_FAILED(rv)) {
           helper->MaybeResolve(MediaResult(
               NS_ERROR_DOM_INVALID_STATE_ERR,
@@ -128,6 +133,9 @@ mozilla::ipc::IPCResult RemoteCDMChild::RecvProvision(
 
         promise->AppendNativeHandler(helper);
       }));
+#  else
+  aResolver(MediaResult(NS_ERROR_DOM_MEDIA_NOT_SUPPORTED_ERR));
+#  endif
   return IPC_OK();
 }
 

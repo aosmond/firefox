@@ -42,20 +42,6 @@ UNIFIED_SOURCES += [
     "MediaKeySystemAccessPermissionRequest.cpp",
 ]
 
-XPIDL_SOURCES += [
-    "nsICDMProvisioning.idl",
-]
-
-XPIDL_MODULE = "dom_media"
-
-EXTRA_JS_MODULES.media += [
-    "CDMProvisioning.sys.mjs",
-]
-
-XPCOM_MANIFESTS += [
-    "components.conf",
-]
-
 if CONFIG["MOZ_WIDGET_TOOLKIT"] == "android":
     DIRS += ["mediadrm"]
     LOCAL_INCLUDES += ["/dom/media/platforms/android"]

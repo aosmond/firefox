@@ -5,7 +5,7 @@
 #include "nsISupports.idl"
 
 [scriptable, uuid(f905d1cc-9d34-423c-9e88-32247766e527)]
-interface nsICDMProvisioning : nsISupports
+interface nsIMediaDrmProvisioning : nsISupports
 {
-  Promise provisionAMediaDrm(in AString aServerUrl, in AString aRequest);
+  Promise provision(in AString aServerUrl, in AString aRequest);
 };
