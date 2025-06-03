@@ -9,6 +9,7 @@ EXPORTS.mozilla += [
     "MediaDrmCDMProxy.h",
     "MediaDrmProvisioningHelper.h",
     "MediaDrmProxySupport.h",
+    "MediaDrmRemoteCDMParent.h",
 ]
 
 UNIFIED_SOURCES += [
@@ -16,6 +17,7 @@ UNIFIED_SOURCES += [
     "MediaDrmCDMProxy.cpp",
     "MediaDrmProvisioningHelper.cpp",
     "MediaDrmProxySupport.cpp",
+    "MediaDrmRemoteCDMParent.cpp",
 ]
 
 XPIDL_SOURCES += [
