@@ -52,7 +52,7 @@ class FFmpegDataEncoder<LIBAV_VER> : public MediaDataEncoder {
   RefPtr<GenericPromise> SetBitrate(uint32_t aBitRate) override;
 
  protected:
-  Result<AVCodecContext*, MediaResult> AllocateCodecContext();
+  Result<AVCodecContext*, MediaResult> AllocateCodecContext(bool aHardware);
 
   // This method copies data from an AVPacket into a newly created MediaRawData.
   // It should serve as the initial step in implementing ToMediaRawData.

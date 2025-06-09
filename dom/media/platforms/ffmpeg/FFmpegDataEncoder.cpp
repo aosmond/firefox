@@ -328,23 +328,9 @@ void FFmpegDataEncoder<LIBAV_VER>::ShutdownInternal() {
 }
 
 Result<AVCodecContext*, MediaResult>
-FFmpegDataEncoder<LIBAV_VER>::AllocateCodecContext() {
-  const bool tryHardware =
-      mConfig.IsVideo() &&
-      mConfig.mHardwarePreference != HardwarePreference::RequireSoftware;
-  const bool trySoftware =
-      mConfig.IsAudio() ||
-      mConfig.mHardwarePreference != HardwarePreference::RequireHardware;
-
-  AVCodec* codec = nullptr;
-  if (tryHardware) {
-    codec = FindHardwareEncoder(mLib, mCodecID);
-  }
-
-  if (!codec && trySoftware) {
-    codec = FindSoftwareEncoder(mLib, mCodecID);
-  }
-
+FFmpegDataEncoder<LIBAV_VER>::AllocateCodecContext(bool aHardware) {
+  AVCodec* codec = aHardware ? FindHardwareEncoder(mLib, mCodecID)
+                             : FindSoftwareEncoder(mLib, mCodecID);
   if (!codec) {
     return Err(MediaResult(
         NS_ERROR_DOM_MEDIA_FATAL_ERR,
