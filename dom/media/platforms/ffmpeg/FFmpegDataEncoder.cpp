@@ -62,21 +62,36 @@ AVCodec* FFmpegDataEncoder<LIBAV_VER>::FindSoftwareEncoder(
   AVCodec* fallbackCodec = nullptr;
   void* opaque = nullptr;
   while (AVCodec* codec = aLib->av_codec_iterate(&opaque)) {
-    if (codec->id == aCodecId && aLib->av_codec_is_encoder(codec) &&
-        !aLib->avcodec_get_hw_config(codec, 0)) {
-      // Prioritize libx264 for now since it's the only h264 codec we tested.
-      // Once libopenh264 is supported, we can simply use the first one we find.
-      if (aCodecId == AV_CODEC_ID_H264) {
-        if (strcmp(codec->name, "libx264")) {
-          fallbackCodec = codec;
-          continue;
-        }
-        FFMPEGV_LOG("Prefer libx264 for h264 codec");
-      }
-      return codec;
+    if (codec->id != aCodecId || !aLib->av_codec_is_encoder(codec) ||
+        aLib->avcodec_get_hw_config(codec, 0)) {
+      continue;
     }
+
+    // Prioritize libx264 for now since it's the only h264 codec we tested.
+    // Once libopenh264 is supported, we can simply use the first one we find.
+    if (aCodecId == AV_CODEC_ID_H264 && strcmp(codec->name, "libx264") != 0) {
+      if (!fallbackCodec) {
+        fallbackCodec = codec;
+      }
+      continue;
+    }
+
+#if LIBAVCODEC_VERSION_MAJOR >= 57
+    if (codec->capabilities & AV_CODEC_CAP_EXPERIMENTAL) {
+      if (!fallbackCodec) {
+        fallbackCodec = codec;
+      }
+      continue;
+    }
+#endif
+
+    FFMPEGV_LOG("Using preferred software codec %s", codec->name);
+    return codec;
   }
-  FFMPEGV_LOG("Fallback to other h264 library. Fingers crossed");
+
+  if (fallbackCodec) {
+    FFMPEGV_LOG("Using fallback software codec %s", fallbackCodec->name);
+  }
   return fallbackCodec;
 }
 
@@ -85,14 +100,31 @@ AVCodec* FFmpegDataEncoder<LIBAV_VER>::FindHardwareEncoder(
     const FFmpegLibWrapper* aLib, AVCodecID aCodecId) {
   MOZ_ASSERT(aLib);
 
+  AVCodec* fallbackCodec = nullptr;
   void* opaque = nullptr;
   while (AVCodec* codec = aLib->av_codec_iterate(&opaque)) {
-    if (codec->id == aCodecId && aLib->av_codec_is_encoder(codec) &&
-        aLib->avcodec_get_hw_config(codec, 0)) {
-      return codec;
+    if (codec->id != aCodecId || !aLib->av_codec_is_encoder(codec) ||
+        !aLib->avcodec_get_hw_config(codec, 0)) {
+      continue;
     }
+
+#if LIBAVCODEC_VERSION_MAJOR >= 57
+    if (codec->capabilities & AV_CODEC_CAP_EXPERIMENTAL) {
+      if (!fallbackCodec) {
+        fallbackCodec = codec;
+      }
+      continue;
+    }
+#endif
+
+    FFMPEGV_LOG("Using preferred hardware codec %s", codec->name);
+    return codec;
   }
-  return nullptr;
+
+  if (fallbackCodec) {
+    FFMPEGV_LOG("Using fallback hardware codec %s", fallbackCodec->name);
+  }
+  return fallbackCodec;
 }
 
 /* static */
