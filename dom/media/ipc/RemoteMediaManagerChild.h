@@ -109,6 +109,9 @@ class RemoteMediaManagerChild final
       Endpoint<PRemoteMediaManagerChild>&& aVideoManager);
   static void Shutdown();
 
+  // Helper method to handle IPDL promise rejections. This will allow the caller
+  // in the layers above to recover gracefully by recreating the encoder or
+  // decoder.
   void HandleRejectionError(
       const mozilla::ipc::ResponseRejectReason& aReason,
       std::function<void(const MediaResult&)>&& aCallback);

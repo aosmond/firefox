@@ -1092,7 +1092,6 @@ void RemoteMediaManagerChild::HandleRejectionError(
   // be rejected with SendError rather than ActorDestroyed. Both means the same
   // thing and we can consider that the parent has crashed. The child can no
   // longer be used.
-  //
 
   if (mLocation == RemoteMediaIn::GpuProcess) {
     // The GPU process will get automatically restarted by the parent process.
@@ -1101,7 +1100,7 @@ void RemoteMediaManagerChild::HandleRejectionError(
     // We defer reporting an error until we've recreated the RemoteDecoder
     // manager so that it'll be safe for MediaFormatReader to recreate decoders
     RunWhenGPUProcessRecreated(NS_NewRunnableFunction(
-        "RemoteDecoderChild::HandleRejectionError",
+        "RemoteMediaManagerChild::HandleRejectionError",
         [callback = std::move(aCallback)]() {
           MediaResult error(NS_ERROR_DOM_MEDIA_REMOTE_CRASHED_RDD_OR_GPU_ERR,
                             __func__);
@@ -1111,8 +1110,7 @@ void RemoteMediaManagerChild::HandleRejectionError(
   }
 
   nsresult err = NS_ERROR_DOM_MEDIA_REMOTE_CRASHED_UTILITY_ERR;
-  if (mLocation == RemoteMediaIn::GpuProcess ||
-      mLocation == RemoteMediaIn::RddProcess) {
+  if (mLocation == RemoteMediaIn::RddProcess) {
     err = NS_ERROR_DOM_MEDIA_REMOTE_CRASHED_RDD_OR_GPU_ERR;
   } else if (mLocation == RemoteMediaIn::UtilityProcess_MFMediaEngineCDM) {
     err = NS_ERROR_DOM_MEDIA_REMOTE_CRASHED_MF_CDM_ERR;
