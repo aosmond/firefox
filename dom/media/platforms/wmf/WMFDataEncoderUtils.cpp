@@ -42,11 +42,13 @@ EncodeSupportSet CanCreateWMFEncoder(CodecType aCodec) {
     // Try HW encoder.
     auto hwEnc = MakeRefPtr<MFTEncoder>(false /* HW not allowed */);
     if (SUCCEEDED(hwEnc->Create(CodecToSubtype(aCodec)))) {
+      printf_stderr("[AO] [%s] wmf encode %d hw\n", XRE_GetProcessTypeString(), static_cast<int>(aCodec));
       supports += EncodeSupport::HardwareEncode;
     }
     // Try SW encoder.
     auto swEnc = MakeRefPtr<MFTEncoder>(true /* HW not allowed */);
     if (SUCCEEDED(swEnc->Create(CodecToSubtype(aCodec)))) {
+      printf_stderr("[AO] [%s] wmf encode %d sw\n", XRE_GetProcessTypeString(), static_cast<int>(aCodec));
       supports += EncodeSupport::SoftwareEncode;
     }
   });

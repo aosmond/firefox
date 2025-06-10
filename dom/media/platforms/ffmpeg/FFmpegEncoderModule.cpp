@@ -22,6 +22,7 @@ template <int V>
 EncodeSupportSet FFmpegEncoderModule<V>::Supports(
     const EncoderConfig& aConfig) const {
   if (!CanLikelyEncode(aConfig)) {
+    printf_stderr("[AO] [%s] ffmpeg%d -- codec %d, unlikely\n", XRE_GetProcessTypeString(), V, static_cast<int>(aConfig.mCodec));
     return EncodeSupportSet{};
   }
   // We only support L1T2 and L1T3 ScalabilityMode in VPX and AV1 encoders via
@@ -30,10 +31,12 @@ EncodeSupportSet FFmpegEncoderModule<V>::Supports(
     if (aConfig.mCodec == CodecType::AV1) {
       // libaom only supports SVC in CBR mode.
       if (aConfig.mBitrateMode != BitrateMode::Constant) {
+        printf_stderr("[AO] [%s] ffmpeg%d -- codec %d, bad bitrate\n", XRE_GetProcessTypeString(), V, static_cast<int>(aConfig.mCodec));
         return EncodeSupportSet{};
       }
     } else if (aConfig.mCodec != CodecType::VP8 &&
                aConfig.mCodec != CodecType::VP9) {
+      printf_stderr("[AO] [%s] ffmpeg%d -- codec %d, no scalability\n", XRE_GetProcessTypeString(), V, static_cast<int>(aConfig.mCodec));
       return EncodeSupportSet{};
     }
   }
@@ -44,16 +47,22 @@ template <int V>
 EncodeSupportSet FFmpegEncoderModule<V>::SupportsCodec(CodecType aCodec) const {
   AVCodecID id = GetFFmpegEncoderCodecId<V>(aCodec);
   if (id == AV_CODEC_ID_NONE) {
+    printf_stderr("[AO] [%s] ffmpeg%d -- codec %d, no encoder found\n", XRE_GetProcessTypeString(), V, static_cast<int>(aCodec));
     return EncodeSupportSet{};
   }
   EncodeSupportSet supports;
   if (StaticPrefs::media_ffvpx_hw_enabled() &&
       FFmpegDataEncoder<V>::FindHardwareEncoder(mLib, id) &&
       sSupportedHWCodecs.Contains(id)) {
+    printf_stderr("[AO] [%s] ffmpeg%d -- codec %d, hardware\n", XRE_GetProcessTypeString(), V, static_cast<int>(aCodec));
     supports += EncodeSupport::HardwareEncode;
   }
   if (FFmpegDataEncoder<V>::FindSoftwareEncoder(mLib, id)) {
+    printf_stderr("[AO] [%s] ffmpeg%d -- codec %d, software\n", XRE_GetProcessTypeString(), V, static_cast<int>(aCodec));
     supports += EncodeSupport::SoftwareEncode;
+  }
+  if (supports.isEmpty()) {
+    printf_stderr("[AO] [%s] ffmpeg%d -- codec %d, empty?\n", XRE_GetProcessTypeString(), V, static_cast<int>(aCodec));
   }
   return supports;
 }

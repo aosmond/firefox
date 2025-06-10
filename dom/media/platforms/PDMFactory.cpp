@@ -825,6 +825,7 @@ media::MediaCodecsSupported PDMFactory::Supported(bool aForceRefresh) {
   StaticMutexAutoLock lock(sSupportedMutex);
 
   static auto calculate = []() {
+    printf_stderr("[AO] [%s] calculate decode start\n", XRE_GetProcessTypeString());
     auto pdm = MakeRefPtr<PDMFactory>();
     MediaCodecsSupported supported;
     // H264 and AAC depends on external framework that must be dynamically
@@ -842,6 +843,7 @@ media::MediaCodecsSupported PDMFactory::Supported(bool aForceRefresh) {
 #ifdef MOZ_WIDGET_ANDROID
     supported += AndroidDecoderModule::GetSupportedCodecs();
 #endif
+    printf_stderr("[AO] [%s] calculate decode end\n", XRE_GetProcessTypeString());
     return supported;
   };
 

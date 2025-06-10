@@ -332,6 +332,7 @@ MediaResult FFmpegVideoEncoder<LIBAV_VER>::InitEncoderInternal(bool aHardware) {
   // Initialize the common members of the encoder instance
   auto r = AllocateCodecContext(aHardware);
   if (r.isErr()) {
+    printf_stderr("[AO] [%s] ffmpeg%d -- Init (hw=%d) codec %d, alloc failed\n", XRE_GetProcessTypeString(), LIBAV_VER, aHardware, static_cast<int>(mConfig.mCodec));
     return r.inspectErr();
   }
   mCodecContext = r.unwrap();
@@ -454,6 +455,7 @@ MediaResult FFmpegVideoEncoder<LIBAV_VER>::InitEncoderInternal(bool aHardware) {
     if (Maybe<SVCSettings> settings = GetSVCSettings()) {
       if (mCodecName == "libaom-av1") {
         if (mConfig.mBitrateMode != BitrateMode::Constant) {
+          printf_stderr("[AO] [%s] ffmpeg%d -- Init (hw=%d) codec %d, bitrate failed\n", XRE_GetProcessTypeString(), LIBAV_VER, aHardware, static_cast<int>(mConfig.mCodec));
           return MediaResult(NS_ERROR_DOM_MEDIA_NOT_SUPPORTED_ERR,
                              "AV1 with SVC only supports constant bitrate"_ns);
         }
@@ -526,6 +528,7 @@ MediaResult FFmpegVideoEncoder<LIBAV_VER>::InitEncoderInternal(bool aHardware) {
 
   AVDictionary* options = nullptr;
   if (int ret = OpenCodecContext(mCodecContext->codec, &options); ret < 0) {
+    printf_stderr("[AO] [%s] ffmpeg%d -- Init (hw=%d) codec %d, open failed\n", XRE_GetProcessTypeString(), LIBAV_VER, aHardware, static_cast<int>(mConfig.mCodec));
     return MediaResult(
         NS_ERROR_DOM_MEDIA_FATAL_ERR,
         RESULT_DETAIL("failed to open %s avcodec: %s", mCodecName.get(),
@@ -542,6 +545,7 @@ MediaResult FFmpegVideoEncoder<LIBAV_VER>::InitEncoderInternal(bool aHardware) {
       mCodecContext->time_base.num, mCodecContext->time_base.den,
       h264Log.IsEmpty() ? "" : h264Log.get());
 
+  printf_stderr("[AO] [%s] ffmpeg%d -- Init (hw=%d) codec %d, open success\n", XRE_GetProcessTypeString(), LIBAV_VER, aHardware, static_cast<int>(mConfig.mCodec));
   return NS_OK;
 }
 

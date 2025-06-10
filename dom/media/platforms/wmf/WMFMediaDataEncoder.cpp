@@ -112,6 +112,13 @@ RefPtr<InitPromise> WMFMediaDataEncoder::ProcessInit() {
   HRESULT hr;
   mscom::EnsureMTA([&]() { hr = InitMFTEncoder(encoder); });
 
+  if (FAILED(hr) && !mHardwareNotAllowed) {
+    encoder = new MFTEncoder(!mHardwareNotAllowed);
+
+    HRESULT hr;
+    mscom::EnsureMTA([&]() { hr = InitMFTEncoder(encoder); });
+  }
+
   if (FAILED(hr)) {
     _com_error error(hr);
     WMF_ENC_LOGE("init MFTEncoder: error = 0x%lX, %ls", hr,
@@ -131,6 +138,7 @@ RefPtr<InitPromise> WMFMediaDataEncoder::ProcessInit() {
 HRESULT WMFMediaDataEncoder::InitMFTEncoder(RefPtr<MFTEncoder>& aEncoder) {
   HRESULT hr = aEncoder->Create(CodecToSubtype(mConfig.mCodec));
   if (FAILED(hr)) {
+    printf_stderr("[AO] failed to create subtype %d\n", static_cast<int>(mConfig.mCodec));
     _com_error error(hr);
     WMF_ENC_LOGE("MFTEncoder::Create: error = 0x%lX, %ls", hr,
                  error.ErrorMessage());
@@ -139,6 +147,7 @@ HRESULT WMFMediaDataEncoder::InitMFTEncoder(RefPtr<MFTEncoder>& aEncoder) {
 
   hr = aEncoder->SetModes(mConfig);
   if (FAILED(hr)) {
+    printf_stderr("[AO] failed to set modes %d\n", static_cast<int>(mConfig.mCodec));
     _com_error error(hr);
     WMF_ENC_LOGE("MFTEncoder::SetMode: error = 0x%lX, %ls", hr,
                  error.ErrorMessage());
@@ -147,12 +156,14 @@ HRESULT WMFMediaDataEncoder::InitMFTEncoder(RefPtr<MFTEncoder>& aEncoder) {
 
   hr = SetMediaTypes(aEncoder, mConfig);
   if (FAILED(hr)) {
+    printf_stderr("[AO] failed to set types %d\n", static_cast<int>(mConfig.mCodec));
     _com_error error(hr);
     WMF_ENC_LOGE("MFTEncoder::SetMediaType: error = 0x%lX, %ls", hr,
                  error.ErrorMessage());
     return hr;
   }
 
+  printf_stderr("[AO] wmf success %d\n", static_cast<int>(mConfig.mCodec));
   return S_OK;
 }
 

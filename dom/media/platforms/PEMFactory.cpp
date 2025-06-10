@@ -80,6 +80,7 @@ void PEMFactory::InitRddPEMs() {
   if (StaticPrefs::media_use_remote_encoder_video() &&
       StaticPrefs::media_rdd_applemedia_enabled()) {
     RefPtr<PlatformEncoderModule> m(new AppleEncoderModule());
+    printf_stderr("[AO] [%s] %s -- apple\n", XRE_GetProcessTypeString(), __func__);
     mCurrentPEMs.AppendElement(m);
   }
 #endif
@@ -88,6 +89,7 @@ void PEMFactory::InitRddPEMs() {
   if (StaticPrefs::media_use_remote_encoder_video() &&
       StaticPrefs::media_wmf_enabled() &&
       StaticPrefs::media_rdd_wmf_enabled()) {
+    printf_stderr("[AO] [%s] %s -- wmf\n", XRE_GetProcessTypeString(), __func__);
     mCurrentPEMs.AppendElement(new WMFEncoderModule());
   }
 #endif
@@ -107,6 +109,7 @@ void PEMFactory::InitRddPEMs() {
   {
     if (RefPtr<PlatformEncoderModule> pem =
             FFVPXRuntimeLinker::CreateEncoder()) {
+      printf_stderr("[AO] [%s] %s -- ffvpx\n", XRE_GetProcessTypeString(), __func__);
       mCurrentPEMs.AppendElement(pem);
     }
   }
@@ -128,6 +131,7 @@ void PEMFactory::InitRddPEMs() {
     if (StaticPrefs::media_ffmpeg_enabled()) {
       if (RefPtr<PlatformEncoderModule> pem =
               FFmpegRuntimeLinker::CreateEncoder()) {
+        printf_stderr("[AO] [%s] %s -- ffmpeg\n", XRE_GetProcessTypeString(), __func__);
         mCurrentPEMs.AppendElement(pem);
       }
     }
@@ -141,6 +145,7 @@ void PEMFactory::InitUtilityPEMs() {
       StaticPrefs::media_utility_ffvpx_enabled()) {
     if (RefPtr<PlatformEncoderModule> pem =
             FFVPXRuntimeLinker::CreateEncoder()) {
+      printf_stderr("[AO] [%s] %s -- ffvpx\n", XRE_GetProcessTypeString(), __func__);
       mCurrentPEMs.AppendElement(pem);
     }
   }
@@ -151,6 +156,7 @@ void PEMFactory::InitUtilityPEMs() {
       StaticPrefs::media_utility_ffmpeg_enabled()) {
     if (RefPtr<PlatformEncoderModule> pem =
             FFmpegRuntimeLinker::CreateEncoder()) {
+      printf_stderr("[AO] [%s] %s -- ffmpeg\n", XRE_GetProcessTypeString(), __func__);
       mCurrentPEMs.AppendElement(pem);
     }
   }
@@ -191,15 +197,18 @@ void PEMFactory::InitContentPEMs() {
 
   if (!StaticPrefs::media_use_remote_encoder_video()) {
 #ifdef MOZ_APPLEMEDIA
+    printf_stderr("[AO] [%s] %s -- apple\n", XRE_GetProcessTypeString(), __func__);
     RefPtr<PlatformEncoderModule> m(new AppleEncoderModule());
     mCurrentPEMs.AppendElement(m);
 #endif
 
 #ifdef MOZ_WIDGET_ANDROID
+    printf_stderr("[AO] [%s] %s -- android\n", XRE_GetProcessTypeString(), __func__);
     mCurrentPEMs.AppendElement(new AndroidEncoderModule());
 #endif
 
 #ifdef XP_WIN
+    printf_stderr("[AO] [%s] %s -- wmf\n", XRE_GetProcessTypeString(), __func__);
     mCurrentPEMs.AppendElement(new WMFEncoderModule());
 #endif
   }
@@ -215,6 +224,7 @@ void PEMFactory::InitContentPEMs() {
   {
     if (RefPtr<PlatformEncoderModule> pem =
             FFVPXRuntimeLinker::CreateEncoder()) {
+      printf_stderr("[AO] [%s] %s -- ffvpx\n", XRE_GetProcessTypeString(), __func__);
       mCurrentPEMs.AppendElement(pem);
     }
   }
@@ -233,12 +243,14 @@ void PEMFactory::InitContentPEMs() {
   {
     if (RefPtr<PlatformEncoderModule> pem =
             FFmpegRuntimeLinker::CreateEncoder()) {
+      printf_stderr("[AO] [%s] %s -- ffmpeg\n", XRE_GetProcessTypeString(), __func__);
       mCurrentPEMs.AppendElement(pem);
     }
   }
 #endif
 
   if (StaticPrefs::media_gmp_encoder_enabled()) {
+    printf_stderr("[AO] [%s] %s -- gmp\n", XRE_GetProcessTypeString(), __func__);
     auto pem = MakeRefPtr<GMPEncoderModule>();
     if (StaticPrefs::media_gmp_encoder_preferred()) {
       mCurrentPEMs.InsertElementAt(0, std::move(pem));
@@ -250,21 +262,25 @@ void PEMFactory::InitContentPEMs() {
 
 void PEMFactory::InitDefaultPEMs() {
 #ifdef MOZ_APPLEMEDIA
+  printf_stderr("[AO] [%s] %s -- apple\n", XRE_GetProcessTypeString(), __func__);
   RefPtr<PlatformEncoderModule> m(new AppleEncoderModule());
   mCurrentPEMs.AppendElement(m);
 #endif
 
 #ifdef MOZ_WIDGET_ANDROID
+  printf_stderr("[AO] [%s] %s -- android\n", XRE_GetProcessTypeString(), __func__);
   mCurrentPEMs.AppendElement(new AndroidEncoderModule());
 #endif
 
 #ifdef XP_WIN
+  printf_stderr("[AO] [%s] %s -- wmf\n", XRE_GetProcessTypeString(), __func__);
   mCurrentPEMs.AppendElement(new WMFEncoderModule());
 #endif
 
   if (StaticPrefs::media_ffmpeg_encoder_enabled()) {
     if (RefPtr<PlatformEncoderModule> pem =
             FFVPXRuntimeLinker::CreateEncoder()) {
+      printf_stderr("[AO] [%s] %s -- ffvpx\n", XRE_GetProcessTypeString(), __func__);
       mCurrentPEMs.AppendElement(pem);
     }
   }
@@ -274,12 +290,14 @@ void PEMFactory::InitDefaultPEMs() {
       StaticPrefs::media_ffmpeg_encoder_enabled()) {
     if (RefPtr<PlatformEncoderModule> pem =
             FFmpegRuntimeLinker::CreateEncoder()) {
+      printf_stderr("[AO] [%s] %s -- ffmpeg\n", XRE_GetProcessTypeString(), __func__);
       mCurrentPEMs.AppendElement(pem);
     }
   }
 #endif
 
   if (StaticPrefs::media_gmp_encoder_enabled()) {
+    printf_stderr("[AO] [%s] %s -- gmp\n", XRE_GetProcessTypeString(), __func__);
     auto pem = MakeRefPtr<GMPEncoderModule>();
     if (StaticPrefs::media_gmp_encoder_preferred()) {
       mCurrentPEMs.InsertElementAt(0, std::move(pem));
@@ -435,6 +453,7 @@ media::MediaCodecsSupported PEMFactory::Supported(bool aForceRefresh) {
   StaticMutexAutoLock lock(sSupportedMutex);
 
   static auto calculate = []() {
+    printf_stderr("[AO] [%s] calculate encode start\n", XRE_GetProcessTypeString());
     auto pem = MakeRefPtr<PEMFactory>();
     MediaCodecsSupported supported;
     for (const auto& cd : MCSInfo::GetAllCodecDefinitions()) {
@@ -445,6 +464,7 @@ media::MediaCodecsSupported PEMFactory::Supported(bool aForceRefresh) {
       supported += MCSInfo::GetEncodeMediaCodecsSupported(
           cd.codec, pem->SupportsCodec(codecType));
     }
+    printf_stderr("[AO] [%s] calculate encode end\n", XRE_GetProcessTypeString());
     return supported;
   };
 

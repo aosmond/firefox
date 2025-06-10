@@ -100,6 +100,7 @@ RemoteEncoderModule::AsyncCreateEncoder(const EncoderConfig& aEncoderConfig,
 media::EncodeSupportSet RemoteEncoderModule::Supports(
     const EncoderConfig& aConfig) const {
   if (!CanLikelyEncode(aConfig)) {
+    printf_stderr("[AO] RemoteEncoderModule::Supports -- unlikely\n");
     return media::EncodeSupportSet{};
   }
 
@@ -113,6 +114,7 @@ media::EncodeSupportSet RemoteEncoderModule::Supports(
       (aConfig.mScalabilityMode == ScalabilityMode::L1T3 ||
        (aConfig.mScalabilityMode != ScalabilityMode::None &&
         !OSSupportsSVC()))) {
+    printf_stderr("[AO] RemoteEncoderModule::Supports -- apple scale\n");
     return media::EncodeSupportSet{};
   }
 #endif
@@ -127,10 +129,12 @@ media::EncodeSupportSet RemoteEncoderModule::Supports(
         break;
       case CodecType::AV1:
         if (aConfig.mBitrateMode != BitrateMode::Constant) {
+          printf_stderr("[AO] RemoteEncoderModule::Supports -- AV1 unsupported scale + bitrate\n");
           return media::EncodeSupportSet{};
         }
         break;
       default:
+        printf_stderr("[AO] RemoteEncoderModule::Supports -- unsupported scale\n");
         return media::EncodeSupportSet{};
     }
   }
@@ -148,6 +152,11 @@ media::EncodeSupportSet RemoteEncoderModule::SupportsCodec(
            RemoteMediaInToStr(mLocation),
            supports.isEmpty() ? "supports" : "rejects",
            static_cast<int>(aCodecType)));
+  printf_stderr("[AO] RemoteEncoderModule::SupportsCodec -- [%s] sw=%d hw=%d codec=%d\n", 
+           RemoteMediaInToStr(mLocation),
+           supports.contains(media::EncodeSupport::SoftwareEncode),
+           supports.contains(media::EncodeSupport::HardwareEncode),
+           static_cast<int>(aCodecType));
   return supports;
 }
 

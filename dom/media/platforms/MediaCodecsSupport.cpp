@@ -72,9 +72,11 @@ DecodeSupportSet MCSInfo::GetDecodeSupportSet(
   DecodeSupportSet support;
   const auto supportInfo = GetCodecDefinition(aCodec);
   if (aSupported.contains(supportInfo.swDecodeSupport)) {
+    printf_stderr("[AO] [%s] decode %d sw\n", XRE_GetProcessTypeString(), static_cast<int>(aCodec));
     support += DecodeSupport::SoftwareDecode;
   }
   if (aSupported.contains(supportInfo.hwDecodeSupport)) {
+    printf_stderr("[AO] [%s] decode %d hw\n", XRE_GetProcessTypeString(), static_cast<int>(aCodec));
     support += DecodeSupport::HardwareDecode;
   }
   return support;
@@ -85,9 +87,11 @@ EncodeSupportSet MCSInfo::GetEncodeSupportSet(
   EncodeSupportSet support;
   const auto supportInfo = GetCodecDefinition(aCodec);
   if (aSupported.contains(supportInfo.swEncodeSupport)) {
+    printf_stderr("[AO] [%s] encode %d sw\n", XRE_GetProcessTypeString(), static_cast<int>(aCodec));
     support += EncodeSupport::SoftwareEncode;
   }
   if (aSupported.contains(supportInfo.hwEncodeSupport)) {
+    printf_stderr("[AO] [%s] encode %d hw\n", XRE_GetProcessTypeString(), static_cast<int>(aCodec));
     support += EncodeSupport::HardwareEncode;
   }
   return support;
@@ -98,12 +102,15 @@ MediaCodecsSupported MCSInfo::GetDecodeMediaCodecsSupported(
   MediaCodecsSupported support;
   const auto supportInfo = GetCodecDefinition(aCodec);
   if (aSupportSet.contains(DecodeSupport::SoftwareDecode)) {
+    printf_stderr("[AO] [%s] decode %d sw\n", XRE_GetProcessTypeString(), static_cast<int>(aCodec));
     support += supportInfo.swDecodeSupport;
   }
   if (aSupportSet.contains(DecodeSupport::HardwareDecode)) {
+    printf_stderr("[AO] [%s] decode %d hw\n", XRE_GetProcessTypeString(), static_cast<int>(aCodec));
     support += supportInfo.hwDecodeSupport;
   }
   if (aSupportSet.contains(DecodeSupport::UnsureDueToLackOfExtension)) {
+    printf_stderr("[AO] [%s] decode %d lack ext\n", XRE_GetProcessTypeString(), static_cast<int>(aCodec));
     support += supportInfo.lackOfHWExtenstion;
   }
   return support;
@@ -114,12 +121,15 @@ MediaCodecsSupported MCSInfo::GetEncodeMediaCodecsSupported(
   MediaCodecsSupported support;
   const auto supportInfo = GetCodecDefinition(aCodec);
   if (aSupportSet.contains(EncodeSupport::SoftwareEncode)) {
+    printf_stderr("[AO] [%s] encode %d sw\n", XRE_GetProcessTypeString(), static_cast<int>(aCodec));
     support += supportInfo.swEncodeSupport;
   }
   if (aSupportSet.contains(EncodeSupport::HardwareEncode)) {
+    printf_stderr("[AO] [%s] encode %d hw\n", XRE_GetProcessTypeString(), static_cast<int>(aCodec));
     support += supportInfo.hwEncodeSupport;
   }
   if (aSupportSet.contains(EncodeSupport::UnsureDueToLackOfExtension)) {
+    printf_stderr("[AO] [%s] encode %d lack\n", XRE_GetProcessTypeString(), static_cast<int>(aCodec));
     support += supportInfo.lackOfHWExtenstion;
   }
   return support;
