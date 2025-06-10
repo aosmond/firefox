@@ -828,16 +828,16 @@ RemoteMediaManagerChild::LaunchUtilityProcessIfNeeded(RemoteMediaIn aLocation) {
 /* static */
 TrackSupportSet RemoteMediaManagerChild::GetTrackSupport(
     RemoteMediaIn aLocation) {
-  TrackSupportSet s{};
+  TrackSupportSet s{TrackSupport::None};
   switch (aLocation) {
     case RemoteMediaIn::GpuProcess:
-      s += TrackSupport::DecodeVideo;
+      s = TrackSupport::DecodeVideo;
       if (StaticPrefs::media_use_remote_encoder_video()) {
         s += TrackSupport::EncodeVideo;
       }
       break;
     case RemoteMediaIn::RddProcess:
-      s += TrackSupport::DecodeVideo;
+      s = TrackSupport::DecodeVideo;
       if (StaticPrefs::media_use_remote_encoder_video()) {
         s += TrackSupport::EncodeVideo;
       }
@@ -853,12 +853,10 @@ TrackSupportSet RemoteMediaManagerChild::GetTrackSupport(
     case RemoteMediaIn::UtilityProcess_AppleMedia:
     case RemoteMediaIn::UtilityProcess_WMF:
       if (StaticPrefs::media_utility_process_enabled()) {
-        s += TrackSupport::DecodeAudio;
+        s = TrackSupport::DecodeAudio;
         if (StaticPrefs::media_use_remote_encoder_audio()) {
           s += TrackSupport::EncodeAudio;
         }
-      } else {
-        s += TrackSupport::None;
       }
       break;
     case RemoteMediaIn::UtilityProcess_MFMediaEngineCDM:
@@ -866,17 +864,14 @@ TrackSupportSet RemoteMediaManagerChild::GetTrackSupport(
       // When we enable the media engine, it would need both tracks to
       // synchronize the a/v playback.
       if (StaticPrefs::media_wmf_media_engine_enabled()) {
-        s += TrackSupportSet{TrackSupport::DecodeAudio,
-                             TrackSupport::DecodeVideo};
-      } else
-#endif
-      {
-        s += TrackSupport::None;
+        s = TrackSupportSet{TrackSupport::DecodeAudio,
+                            TrackSupport::DecodeVideo};
       }
+#endif
       break;
     default:
       MOZ_ASSERT_UNREACHABLE("Undefined location!");
-      s += TrackSupport::None;
+      break;
   }
   return s;
 }
