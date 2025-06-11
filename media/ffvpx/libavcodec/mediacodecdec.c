@@ -36,9 +36,13 @@
 #include "avcodec.h"
 #include "codec_internal.h"
 #include "decode.h"
+#if CONFIG_H264_MEDIACODEC_DECODER_EXTRADATA
 #include "h264_parse.h"
 #include "h264_ps.h"
+#endif
+#if CONFIG_HEVC_MEDIACODEC_DECODER_EXTRADATA
 #include "hevc/parse.h"
+#endif
 #include "hwconfig.h"
 #include "internal.h"
 #include "fffjni.h"
@@ -127,7 +131,7 @@ done:
 }
 #endif
 
-#if CONFIG_H264_MEDIACODEC_DECODER
+#if CONFIG_H264_MEDIACODEC_DECODER_EXTRADATA
 static int h264_set_extradata(AVCodecContext *avctx, FFAMediaFormat *format)
 {
     int i;
@@ -193,7 +197,7 @@ done:
 }
 #endif
 
-#if CONFIG_HEVC_MEDIACODEC_DECODER
+#if CONFIG_HEVC_MEDIACODEC_DECODER_EXTRADATA
 static int hevc_set_extradata(AVCodecContext *avctx, FFAMediaFormat *format)
 {
     int i;
@@ -297,7 +301,9 @@ done:
     CONFIG_AAC_MEDIACODEC_DECODER   || \
     CONFIG_AMRNB_MEDIACODEC_DECODER || \
     CONFIG_AMRWB_MEDIACODEC_DECODER || \
-    CONFIG_MP3_MEDIACODEC_DECODER
+    CONFIG_MP3_MEDIACODEC_DECODER || \
+    !CONFIG_H264_MEDIACODEC_DECODER_EXTRADATA || \
+    !CONFIG_HEVC_MEDIACODEC_DECODER_EXTRADATA
 static int common_set_extradata(AVCodecContext *avctx, FFAMediaFormat *format)
 {
     int ret = 0;
@@ -344,7 +350,11 @@ static av_cold int mediacodec_decode_init(AVCodecContext *avctx)
     case AV_CODEC_ID_H264:
         codec_mime = "video/avc";
 
+#if CONFIG_H264_MEDIACODEC_DECODER_EXTRADATA
         ret = h264_set_extradata(avctx, format);
+#else
+        ret = common_set_extradata(avctx, format);
+#endif
         if (ret < 0)
             goto done;
         break;
@@ -353,7 +363,11 @@ static av_cold int mediacodec_decode_init(AVCodecContext *avctx)
     case AV_CODEC_ID_HEVC:
         codec_mime = "video/hevc";
 
+#if CONFIG_H264_MEDIACODEC_DECODER_EXTRADATA
         ret = hevc_set_extradata(avctx, format);
+#else
+        ret = common_set_extradata(avctx, format);
+#endif
         if (ret < 0)
             goto done;
         break;
