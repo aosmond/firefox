@@ -61,7 +61,7 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
       }
     }
 #  elif defined(MOZ_WIDGET_ANDROID) && !defined(MOZ_FFVPX_AUDIOONLY)
-    if (!XRE_IsGPUProcess()) {
+    if (!XRE_IsRDDProcess()) {
       return;
     }
     static nsTArray<AVCodecID> kCodecIDs({
