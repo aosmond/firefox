@@ -43,6 +43,7 @@ class RemoteGTests:
         env["MOZ_CRASHREPORTER_NO_REPORT"] = "1"
         env["MOZ_CRASHREPORTER"] = "1"
         env["MOZ_RUN_GTEST"] = "1"
+        env["MOZ_LOG"] = "HTMLMediaElement:4,HTMLMediaElementEvents:4,cubeb:5,PlatformDecoderModule:5,AudioSink:5,AudioSinkWrapper:5,MediaDecoderStateMachine:4,MediaDecoder:4,MediaFormatReader:5,GMP:5,EME:5,MediaSource:5,MediaSourceSamples:5,Autoplay:5,MFMediaEngine:5,FFmpegVideo:5,FFmpegAudio:5"
         # custom output parser is mandatory on Android
         env["MOZ_TBPL_PARSER"] = "1"
         env["MOZ_GTEST_LOG_PATH"] = self.remote_log
@@ -93,6 +94,9 @@ class RemoteGTests:
         self.remote_log = posixpath.join(root, "gtest.log")
         self.remote_libdir = posixpath.join(root, "gtest")
 
+        libmozavcodec_path = libxul_path.replace("gtest/libxul.so", "libmozavcodec.so")
+        libmozavutil_path = libxul_path.replace("gtest/libxul.so", "libmozavutil.so")
+
         self.package = package
         self.cleanup()
         self.device.mkdir(self.remote_profile)
@@ -107,7 +111,10 @@ class RemoteGTests:
         # appropriate library is specified and pushes it to the arch-agnostic remote
         # directory.
         # TODO -- consider packaging the gtest libxul.so in an apk
-        self.device.push(libxul_path, self.remote_libdir)
+        log.info("Uploading libmozavcodec to " + root)
+        self.device.push(libmozavcodec_path, root)
+        log.info("Uploading libmozavutil")
+        self.device.push(libmozavutil_path, root)
 
         for buildid in ["correct", "broken", "missing"]:
             libxul_buildid_name = f"libxul_{buildid}_buildid.so"
@@ -115,13 +122,17 @@ class RemoteGTests:
                 os.path.dirname(libxul_path), libxul_buildid_name
             )
             if os.path.isfile(libxul_buildid_path):
+                log.info("Uploading to remote_libdir " + libxul_buildid_path)
                 self.device.push(libxul_buildid_path, self.remote_libdir)
 
         # Push support files to device. Avoid gtest_bin so that libxul.so
         # is not included.
         for f in glob.glob(os.path.join(test_dir, "**"), recursive=True):
             if not "gtest_bin" in os.path.abspath(f):
+                log.info("Uploading to remote_profile " + os.path.abspath(f))
                 self.device.push(f, self.remote_profile)
+        log.info("Uploading libxul")
+        self.device.push(libxul_path, self.remote_libdir)
 
         if test_filter is not None:
             test_filter = six.ensure_text(test_filter)

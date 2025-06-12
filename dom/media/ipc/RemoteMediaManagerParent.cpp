@@ -334,9 +334,11 @@ RemoteDecoderManagerParent::RecvOnSetCurrent(const SurfaceDescriptorGPUVideo& aS
   const SurfaceDescriptorRemoteDecoder& sd = aSD;
   RefPtr<Image> image = mImageMap[sd.handle()];
   if (!image) {
+    LOG("RemoteDecoderManagerParent::RecvOnSetCurrent -- no image %lx", sd.handle());
     return IPC_OK();
   }
 
+  LOG("RemoteDecoderManagerParent::RecvOnSetCurrent -- image %lx -> %p (surftex %d)", sd.handle(), image.get(), !!image->AsSurfaceTextureImage());
   image->OnSetCurrent();
   return IPC_OK();
 }
