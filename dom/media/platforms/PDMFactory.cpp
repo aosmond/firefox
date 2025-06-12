@@ -94,9 +94,9 @@ class PDMInitializer final {
       FFVPXRuntimeLinker::Init();
     }
 #elif defined(MOZ_WIDGET_ANDROID)
-    if (StaticPrefs::media_ffvpx_hw_enabled()) {
-      FFVPXRuntimeLinker::Init();
-    }
+    //if (StaticPrefs::media_ffvpx_hw_enabled()) {
+    //  FFVPXRuntimeLinker::Init();
+    //}
 #endif
   }
 

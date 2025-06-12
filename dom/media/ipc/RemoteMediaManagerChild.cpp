@@ -1092,14 +1092,19 @@ void RemoteMediaManagerChild::DeallocateSurfaceDescriptor(
 }
 
 void RemoteDecoderManagerChild::OnSetCurrent(const SurfaceDescriptorGPUVideo& aSD) {
+  const SurfaceDescriptorRemoteDecoder& sdrd = aSD;
   nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
   if (!managerThread) {
+    LOG("RemoteDecoderManagerChild::OnSetCurrent -- no manager %lx", sdrd.handle());
     return;
   }
+  LOG("RemoteDecoderManagerChild::OnSetCurrent -- dispatch %lx", sdrd.handle());
   MOZ_ALWAYS_SUCCEEDS(managerThread->Dispatch(NS_NewRunnableFunction(
       "RemoteDecoderManagerChild::OnSetCurrent",
       [ref = RefPtr{this}, sd = aSD]() {
         if (ref->CanSend()) {
+          const SurfaceDescriptorRemoteDecoder& sdrd = sd;
+          LOG("RemoteDecoderManagerChild::OnSetCurrent -- send %lx", sdrd.handle());
           ref->SendOnSetCurrent(sd);
         }
       })));

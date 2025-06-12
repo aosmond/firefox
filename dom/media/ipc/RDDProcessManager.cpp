@@ -22,6 +22,9 @@
 #include "nsAppRunner.h"
 #include "nsContentUtils.h"
 
+extern mozilla::LazyLogModule sPDMLog;
+#define LOGPDM(...) MOZ_LOG(sPDMLog, mozilla::LogLevel::Debug, (__VA_ARGS__))
+
 namespace mozilla {
 
 using namespace gfx;
@@ -118,28 +121,35 @@ void RDDProcessManager::OnPreferenceChange(const char16_t* aData) {
 RefPtr<GenericNonExclusivePromise> RDDProcessManager::LaunchRDDProcess() {
   MOZ_ASSERT(NS_IsMainThread());
 
+  LOGPDM("RDDProcessManager::LaunchRDDProcess -- enter");
+
   if (IsShutdown()) {
     return GenericNonExclusivePromise::CreateAndReject(NS_ERROR_NOT_AVAILABLE,
                                                        __func__);
+    LOGPDM("RDDProcessManager::LaunchRDDProcess -- shutdown");
   }
 
   if (mNumProcessAttempts && !StaticPrefs::media_rdd_retryonfailure_enabled()) {
     // We failed to start the RDD process earlier, abort now.
     return GenericNonExclusivePromise::CreateAndReject(NS_ERROR_NOT_AVAILABLE,
                                                        __func__);
+    LOGPDM("RDDProcessManager::LaunchRDDProcess -- previous error");
   }
 
   if (mLaunchRDDPromise && mProcess) {
+    LOGPDM("RDDProcessManager::LaunchRDDProcess -- already launched");
     return mLaunchRDDPromise;
   }
 
   geckoargs::ChildProcessArgs extraArgs;
   ipc::ProcessChild::AddPlatformBuildID(extraArgs);
+  LOGPDM("RDDProcessManager::LaunchRDDProcess -- launching");
 
   // The subprocess is launched asynchronously, so we
   // wait for the promise to be resolved to acquire the IPDL actor.
   mProcess = new RDDProcessHost(this);
   if (!mProcess->Launch(std::move(extraArgs))) {
+    LOGPDM("RDDProcessManager::LaunchRDDProcess -- launch failed");
     mNumProcessAttempts++;
     DestroyProcess();
     return GenericNonExclusivePromise::CreateAndReject(NS_ERROR_NOT_AVAILABLE,
@@ -150,11 +160,13 @@ RefPtr<GenericNonExclusivePromise> RDDProcessManager::LaunchRDDProcess() {
       GetMainThreadSerialEventTarget(), __func__,
       [this](bool) {
         if (IsShutdown()) {
+          LOGPDM("RDDProcessManager::LaunchRDDProcess -- promise shutdown");
           return GenericNonExclusivePromise::CreateAndReject(
               NS_ERROR_NOT_AVAILABLE, __func__);
         }
 
         if (IsRDDProcessDestroyed()) {
+          LOGPDM("RDDProcessManager::LaunchRDDProcess -- promise destroyed");
           return GenericNonExclusivePromise::CreateAndReject(
               NS_ERROR_NOT_AVAILABLE, __func__);
         }
@@ -174,14 +186,17 @@ RefPtr<GenericNonExclusivePromise> RDDProcessManager::LaunchRDDProcess() {
             CrashReporter::Annotation::RDDProcessStatus, "Running");
 
         if (!CreateVideoBridge()) {
+          LOGPDM("RDDProcessManager::LaunchRDDProcess -- promise no video bridge");
           mNumProcessAttempts++;
           DestroyProcess();
           return GenericNonExclusivePromise::CreateAndReject(
               NS_ERROR_NOT_AVAILABLE, __func__);
         }
+        LOGPDM("RDDProcessManager::LaunchRDDProcess -- promise success");
         return GenericNonExclusivePromise::CreateAndResolve(true, __func__);
       },
       [this](nsresult aError) {
+        LOGPDM("RDDProcessManager::LaunchRDDProcess -- promise failed");
         if (Get()) {
           mNumProcessAttempts++;
           DestroyProcess();
@@ -419,3 +434,5 @@ RDDProcessManager::TestTriggerMetrics() {
 }
 
 }  // namespace mozilla
+
+#undef LOGPDM
