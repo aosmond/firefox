@@ -329,16 +329,16 @@ RemoteMediaManagerParent::RecvDeallocateSurfaceDescriptorGPUVideo(
 }
 
 mozilla::ipc::IPCResult
-RemoteDecoderManagerParent::RecvOnSetCurrent(const SurfaceDescriptorGPUVideo& aSD) {
+RemoteMediaManagerParent::RecvOnSetCurrent(const SurfaceDescriptorGPUVideo& aSD) {
   MOZ_ASSERT(OnManagerThread());
   const SurfaceDescriptorRemoteDecoder& sd = aSD;
   RefPtr<Image> image = mImageMap[sd.handle()];
   if (!image) {
-    LOG("RemoteDecoderManagerParent::RecvOnSetCurrent -- no image %lx", sd.handle());
+    LOG("RemoteMediaManagerParent::RecvOnSetCurrent -- no image %lx", sd.handle());
     return IPC_OK();
   }
 
-  LOG("RemoteDecoderManagerParent::RecvOnSetCurrent -- image %lx -> %p (surftex %d)", sd.handle(), image.get(), !!image->AsSurfaceTextureImage());
+  LOG("RemoteMediaManagerParent::RecvOnSetCurrent -- image %lx -> %p (surftex %d)", sd.handle(), image.get(), !!image->AsSurfaceTextureImage());
   image->OnSetCurrent();
   return IPC_OK();
 }
@@ -357,7 +357,7 @@ already_AddRefed<Image> RemoteMediaManagerParent::TransferToImage(
   return do_AddRef(i->second);
 }
 
-void RemoteDecoderManagerParent::DeallocateSurfaceDescriptor(
+void RemoteMediaManagerParent::DeallocateSurfaceDescriptor(
     const SurfaceDescriptorGPUVideo& aSD) {
   if (!OnManagerThread()) {
     MOZ_ALWAYS_SUCCEEDS(

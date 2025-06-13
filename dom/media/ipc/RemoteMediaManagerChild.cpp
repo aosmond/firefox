@@ -1091,20 +1091,23 @@ void RemoteMediaManagerChild::DeallocateSurfaceDescriptor(
       })));
 }
 
-void RemoteDecoderManagerChild::OnSetCurrent(const SurfaceDescriptorGPUVideo& aSD) {
+void RemoteMediaManagerChild::OnSetCurrent(
+    const SurfaceDescriptorGPUVideo& aSD) {
   const SurfaceDescriptorRemoteDecoder& sdrd = aSD;
   nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
   if (!managerThread) {
-    LOG("RemoteDecoderManagerChild::OnSetCurrent -- no manager %lx", sdrd.handle());
+    LOG("RemoteMediaManagerChild::OnSetCurrent -- no manager %lx",
+        sdrd.handle());
     return;
   }
-  LOG("RemoteDecoderManagerChild::OnSetCurrent -- dispatch %lx", sdrd.handle());
+  LOG("RemoteMediaManagerChild::OnSetCurrent -- dispatch %lx", sdrd.handle());
   MOZ_ALWAYS_SUCCEEDS(managerThread->Dispatch(NS_NewRunnableFunction(
-      "RemoteDecoderManagerChild::OnSetCurrent",
+      "RemoteMediaManagerChild::OnSetCurrent",
       [ref = RefPtr{this}, sd = aSD]() {
         if (ref->CanSend()) {
           const SurfaceDescriptorRemoteDecoder& sdrd = sd;
-          LOG("RemoteDecoderManagerChild::OnSetCurrent -- send %lx", sdrd.handle());
+          LOG("RemoteMediaManagerChild::OnSetCurrent -- send %lx",
+              sdrd.handle());
           ref->SendOnSetCurrent(sd);
         }
       })));
@@ -1149,7 +1152,7 @@ void RemoteDecoderManagerChild::OnSetCurrent(const SurfaceDescriptorGPUVideo& aS
   aCallback(MediaResult(err, __func__));
 }
 
-void RemoteDecoderManagerChild::HandleFatalError(const char* aMsg) {
+void RemoteMediaManagerChild::HandleFatalError(const char* aMsg) {
   dom::ContentChild::FatalErrorIfNotUsingGPUProcess(aMsg, OtherChildID());
 }
 
