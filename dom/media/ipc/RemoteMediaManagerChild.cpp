@@ -1096,17 +1096,17 @@ void RemoteMediaManagerChild::OnSetCurrent(
   const SurfaceDescriptorRemoteDecoder& sdrd = aSD;
   nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
   if (!managerThread) {
-    LOG("RemoteMediaManagerChild::OnSetCurrent -- no manager %lx",
+    LOG("RemoteMediaManagerChild::OnSetCurrent -- no manager " PRIu64,
         sdrd.handle());
     return;
   }
-  LOG("RemoteMediaManagerChild::OnSetCurrent -- dispatch %lx", sdrd.handle());
+  LOG("RemoteMediaManagerChild::OnSetCurrent -- dispatch " PRIu64, sdrd.handle());
   MOZ_ALWAYS_SUCCEEDS(managerThread->Dispatch(NS_NewRunnableFunction(
       "RemoteMediaManagerChild::OnSetCurrent",
       [ref = RefPtr{this}, sd = aSD]() {
         if (ref->CanSend()) {
           const SurfaceDescriptorRemoteDecoder& sdrd = sd;
-          LOG("RemoteMediaManagerChild::OnSetCurrent -- send %lx",
+          LOG("RemoteMediaManagerChild::OnSetCurrent -- send " PRIu64,
               sdrd.handle());
           ref->SendOnSetCurrent(sd);
         }

@@ -334,11 +334,11 @@ RemoteMediaManagerParent::RecvOnSetCurrent(const SurfaceDescriptorGPUVideo& aSD)
   const SurfaceDescriptorRemoteDecoder& sd = aSD;
   RefPtr<Image> image = mImageMap[sd.handle()];
   if (!image) {
-    LOG("RemoteMediaManagerParent::RecvOnSetCurrent -- no image %lx", sd.handle());
+    LOG("RemoteMediaManagerParent::RecvOnSetCurrent -- no image " PRIu64, sd.handle());
     return IPC_OK();
   }
 
-  LOG("RemoteMediaManagerParent::RecvOnSetCurrent -- image %lx -> %p (surftex %d)", sd.handle(), image.get(), !!image->AsSurfaceTextureImage());
+  LOG("RemoteMediaManagerParent::RecvOnSetCurrent -- image " PRIu64  "-> %p (format %d)", sd.handle(), image.get(), static_cast<int>(image->GetFormat()));
   image->OnSetCurrent();
   return IPC_OK();
 }
