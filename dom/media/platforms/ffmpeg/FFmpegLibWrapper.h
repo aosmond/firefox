@@ -60,6 +60,8 @@ struct MOZ_ONLY_USED_TO_AVOID_STATIC_CONSTRUCTORS FFmpegLibWrapper {
   bool IsVAAPIAvailable();
 #endif
 
+  static void Log(void* aPtr, int aLevel, const char* aFmt, va_list aArgs);
+
   // indicate the version of libavcodec linked to.
   // 0 indicates that the function wasn't initialized with Link().
   int mVersion;
@@ -121,6 +123,7 @@ struct MOZ_ONLY_USED_TO_AVOID_STATIC_CONSTRUCTORS FFmpegLibWrapper {
   int (*avcodec_receive_frame)(AVCodecContext* avctx, AVFrame* frame);
 
   // libavutil
+  void (*av_log_set_callback)(void (*callback)(void*, int, const char*, va_list));
   void (*av_log_set_level)(int level);
   void* (*av_malloc)(size_t size);
   void (*av_freep)(void* ptr);

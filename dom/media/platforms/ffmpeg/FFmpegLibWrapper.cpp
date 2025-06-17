@@ -195,6 +195,7 @@ FFmpegLibWrapper::LinkResult FFmpegLibWrapper::Link() {
   AV_FUNC(av_packet_free,
           (AV_FUNC_57 | AV_FUNC_58 | AV_FUNC_59 | AV_FUNC_60 | AV_FUNC_61))
   AV_FUNC(avcodec_descriptor_get, AV_FUNC_AVCODEC_ALL)
+  AV_FUNC(av_log_set_callback, AV_FUNC_AVUTIL_ALL)
   AV_FUNC(av_log_set_level, AV_FUNC_AVUTIL_ALL)
   AV_FUNC(av_malloc, AV_FUNC_AVUTIL_ALL)
   AV_FUNC(av_freep, AV_FUNC_AVUTIL_ALL)
@@ -322,6 +323,7 @@ FFmpegLibWrapper::LinkResult FFmpegLibWrapper::Link() {
     logLevel = AV_LOG_INFO;
   }
   av_log_set_level(logLevel);
+  av_log_set_callback(Log);
   return LinkResult::Success;
 }
 
@@ -344,6 +346,12 @@ void FFmpegLibWrapper::Unlink() {
   }
 #endif
   PodZero(this);
+}
+
+/* static */ void FFmpegLibWrapper::Log(void* aPtr, int aLevel, const char* aFmt, va_list aArgs) {
+  nsAutoCString msg;
+  msg.AppendVprintf(aFmt, aArgs);
+  MOZ_LOG(sFFmpegVideoLog, mozilla::LogLevel::Debug, ("av_log [%p] %s", aPtr, msg.get()));
 }
 
 #ifdef MOZ_WIDGET_GTK

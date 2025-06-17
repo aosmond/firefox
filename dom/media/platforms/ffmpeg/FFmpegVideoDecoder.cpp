@@ -1902,7 +1902,8 @@ bool FFmpegVideoDecoder<LIBAV_VER>::IsHardwareAccelerated(
 #elif defined(MOZ_ENABLE_D3D11VA)
   return !!mD3D11VADeviceContext;
 #elif defined(MOZ_WIDGET_ANDROID)
-  return !mHardwareDecodingDisabled && mMediaCodecDeviceContext;
+  return true;
+  //return !mHardwareDecodingDisabled && mMediaCodecDeviceContext;
 #else
   return false;
 #endif

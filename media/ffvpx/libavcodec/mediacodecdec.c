@@ -326,6 +326,7 @@ static av_cold int mediacodec_decode_init(AVCodecContext *avctx)
     FFAMediaFormat *format = NULL;
     MediaCodecH264DecContext *s = avctx->priv_data;
 
+    s->use_ndk_codec = 1;
     if (s->use_ndk_codec < 0)
         s->use_ndk_codec = !av_jni_get_java_vm(avctx);
 
@@ -353,7 +354,8 @@ static av_cold int mediacodec_decode_init(AVCodecContext *avctx)
 #if CONFIG_H264_MEDIACODEC_DECODER_EXTRADATA
         ret = h264_set_extradata(avctx, format);
 #else
-        ret = common_set_extradata(avctx, format);
+	//ret = common_set_extradata(avctx, format);
+	ret = 0;
 #endif
         if (ret < 0)
             goto done;
@@ -363,10 +365,11 @@ static av_cold int mediacodec_decode_init(AVCodecContext *avctx)
     case AV_CODEC_ID_HEVC:
         codec_mime = "video/hevc";
 
-#if CONFIG_H264_MEDIACODEC_DECODER_EXTRADATA
+#if CONFIG_HEVC_MEDIACODEC_DECODER_EXTRADATA
         ret = hevc_set_extradata(avctx, format);
 #else
-        ret = common_set_extradata(avctx, format);
+	//ret = common_set_extradata(avctx, format);
+	ret = 0;
 #endif
         if (ret < 0)
             goto done;
