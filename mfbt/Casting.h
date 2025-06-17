@@ -101,7 +101,8 @@ T2S(int32_t);
 T2S(int64_t);
 T2S(char16_t);
 T2S(char32_t);
-#if defined(XP_DARWIN) || defined(XP_WIN) || defined(__wasm__)
+#if defined(XP_DARWIN) || defined(XP_WIN) || defined(ANDROID) || \
+    defined(__wasm__)
 T2S(long);
 T2S(unsigned long);
 #endif
