@@ -939,9 +939,7 @@ def join_ensure_dir(dir1, dir2):
     group="Android",
     help="Remote directory to use as test root (eg. /data/local/tmp/test_root).",
 )
-@CommandArgument(
-    "--libxul", dest="libxul_path", group="Android", help="Path to gtest libxul.so."
-)
+@CommandArgument("--bin", dest="bin_path", group="Android", help="Path to dist/bin.")
 @CommandArgument(
     "--no-install",
     action="store_true",
@@ -988,7 +986,7 @@ def gtest(
     adb_path,
     device_serial,
     remote_test_root,
-    libxul_path,
+    bin_path,
     no_install,
     debug,
     debugger,
@@ -1043,7 +1041,7 @@ def gtest(
             adb_path,
             device_serial,
             remote_test_root,
-            libxul_path,
+            bin_path,
             InstallIntent.NO if no_install else InstallIntent.YES,
         )
 
@@ -1052,7 +1050,7 @@ def gtest(
         or adb_path
         or device_serial
         or remote_test_root
-        or libxul_path
+        or bin_path
         or no_install
     ):
         print("One or more Android-only options will be ignored")
@@ -1178,7 +1176,7 @@ def android_gtest(
     adb_path,
     device_serial,
     remote_test_root,
-    libxul_path,
+    bin_path,
     install,
 ):
     # setup logging for mozrunner
@@ -1197,10 +1195,8 @@ def android_gtest(
 
     if not adb_path:
         adb_path = get_adb_path(command_context)
-    if not libxul_path:
-        libxul_path = os.path.join(
-            command_context.topobjdir, "dist", "bin", "gtest", "libxul.so"
-        )
+    if not bin_path:
+        bin_path = os.path.join(command_context.topobjdir, "dist", "bin")
 
     # run gtest via remotegtests.py
     exit_code = 0
@@ -1219,7 +1215,7 @@ def android_gtest(
         adb_path,
         device_serial,
         remote_test_root,
-        libxul_path,
+        bin_path,
         None,
     ):
         exit_code = 1

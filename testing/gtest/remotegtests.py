@@ -71,7 +71,7 @@ class RemoteGTests:
         adb_path,
         device_serial,
         remote_test_root,
-        libxul_path,
+        bin_path,
         symbols_path,
     ):
         """
@@ -88,6 +88,10 @@ class RemoteGTests:
             run_as_package=package,
         )
         root = self.device.test_root
+        libmozavcodec_path = os.path.join(bin_path, "libmozavcodec.so")
+        libmozavutil_path = os.path.join(bin_path, "libmozavutil.so")
+        libxul_path = os.path.join(bin_path, "gtest", "libxul.so")
+
         self.remote_profile = posixpath.join(root, "gtest-profile")
         self.remote_minidumps = posixpath.join(root, "gtest-minidumps")
         self.remote_log = posixpath.join(root, "gtest.log")
@@ -107,6 +111,8 @@ class RemoteGTests:
         # appropriate library is specified and pushes it to the arch-agnostic remote
         # directory.
         # TODO -- consider packaging the gtest libxul.so in an apk
+        self.device.push(libmozavcodec_path, root)
+        self.device.push(libmozavutil_path, root)
         self.device.push(libxul_path, self.remote_libdir)
 
         for buildid in ["correct", "broken", "missing"]:
@@ -400,12 +406,12 @@ class remoteGtestOptions(argparse.ArgumentParser):
             "(eg. /data/local/tmp/test_root).",
         )
         self.add_argument(
-            "--libxul",
+            "--bin",
             action="store",
             type=str,
-            dest="libxul_path",
+            dest="bin_path",
             default=None,
-            help="Path to gtest libxul.so.",
+            help="Path to dist/bin.",
         )
         self.add_argument(
             "--symbols-path",
@@ -446,8 +452,8 @@ def main():
     parser = remoteGtestOptions()
     options = parser.parse_args()
     args = options.args
-    if not options.libxul_path:
-        parser.error("--libxul is required")
+    if not options.bin_path:
+        parser.error("--bin is required")
         sys.exit(1)
     if len(args) > 1:
         parser.error("only one test_filter is allowed")
@@ -465,7 +471,7 @@ def main():
             options.adb_path,
             options.device_serial,
             options.remote_test_root,
-            options.libxul_path,
+            options.bin_path,
             options.symbols_path,
         )
     except KeyboardInterrupt:

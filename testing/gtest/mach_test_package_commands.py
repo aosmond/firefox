@@ -62,11 +62,11 @@ def run_gtest_android(context, args):
             "abs_work_dir": context.mozharness_workdir
         }
     cwd = os.path.join(context.package_root, "gtest")
-    libxul_path = os.path.join(cwd, "gtest_bin", "gtest", "libxul.so")
+    bin_path = os.path.join(cwd, "gtest_bin")
 
     logger.info(
-        "mach calling android run_gtest with package=%s cwd=%s libxul=%s"
-        % (args.package, cwd, libxul_path)
+        "mach calling android run_gtest with package=%s cwd=%s bin=%s"
+        % (args.package, cwd, bin_path)
     )
     # The remote gtest option parser ignores some options normally passed to the mozharness
     # command, so some hacking is required, for now:
@@ -85,7 +85,7 @@ def run_gtest_android(context, args):
         args.adb_path,
         args.device_serial,
         args.remote_test_root,
-        libxul_path,
+        bin_path,
         args.symbols_path,
     )
 
