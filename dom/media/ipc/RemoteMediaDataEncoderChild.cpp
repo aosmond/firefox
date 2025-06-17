@@ -439,4 +439,9 @@ nsCString RemoteMediaDataEncoderChild::GetDescriptionName() const {
   return mDescription;
 }
 
+#undef LOGE
+#undef LOGW
+#undef LOGD
+#undef LOGV
+
 }  // namespace mozilla
