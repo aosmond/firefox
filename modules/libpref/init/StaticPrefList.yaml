@@ -11283,7 +11283,9 @@
   value: true
 #elif defined(XP_MACOSX)
   value: true
-#elif defined(XP_LINUX) && !defined(ANDROID)
+#elif defined(ANDROID)
+  value: true
+#elif defined(XP_LINUX)
   value: true
 #elif defined(XP_FREEBSD)
   value: true
@@ -11327,7 +11329,9 @@
   value: true
 #elif defined(XP_MACOSX)
   value: true
-#elif defined(XP_LINUX) && !defined(ANDROID)
+#elif defined(ANDROID)
+  value: true
+#elif defined(XP_LINUX)
   value: true
 #elif defined(XP_FREEBSD)
   value: true
@@ -11360,7 +11364,9 @@
   value: true
 #elif defined(XP_MACOSX)
   value: true
-#elif defined(XP_LINUX) && !defined(ANDROID)
+#elif defined(ANDROID)
+  value: true
+#elif defined(XP_LINUX)
   value: true
 #elif defined(XP_FREEBSD)
   value: true
@@ -11379,7 +11385,9 @@
   value: true
 #elif defined(XP_MACOSX)
   value: true
-#elif defined(XP_LINUX) && !defined(ANDROID)
+#elif defined(ANDROID)
+  value: true
+#elif defined(XP_LINUX)
   value: true
 #elif defined(XP_FREEBSD)
   value: true
@@ -11398,7 +11406,9 @@
   value: true
 #elif defined(XP_MACOSX)
   value: true
-#elif defined(XP_LINUX) && !defined(ANDROID)
+#elif defined(ANDROID)
+  value: true
+#elif defined(XP_LINUX)
   value: true
 #elif defined(XP_FREEBSD)
   value: true
@@ -11417,7 +11427,9 @@
   value: true
 #elif defined(XP_MACOSX)
   value: true
-#elif defined(XP_LINUX) && !defined(ANDROID)
+#elif defined(ANDROID)
+  value: true
+#elif defined(XP_LINUX)
   value: true
 #elif defined(XP_FREEBSD)
   value: true
