@@ -133,7 +133,7 @@ const gLoggingPresets = {
   },
   webcodecs: {
     modules:
-      "WebCodecs:5,PlatformDecoderModule:5,PlatformEncoderModule:5,MediaDecoder:5,FFmpegVideo:5,FFmpegAudio:5,GMP:5,ImageUtils:5",
+      "WebCodecs:5,PlatformDecoderModule:5,PlatformEncoderModule:5,MediaDecoder:5,FFmpegVideo:5,FFmpegAudio:5,FFmpegLib:4,GMP:5,ImageUtils:5",
     l10nIds: {
       label: "about-logging-preset-webcodecs-label",
       description: "about-logging-preset-webcodecs-description",
