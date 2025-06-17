@@ -127,3 +127,5 @@ GFXINFO_FEATURE(H264_HW_ENCODE, "H264_HW_ENCODE", "h264.hw-encode")
 GFXINFO_FEATURE(AV1_HW_ENCODE, "AV1_HW_ENCODE", "av1.hw-encode")
 /* Whether hardware HEVC encoding is supported, starting in 140. */
 GFXINFO_FEATURE(HEVC_HW_ENCODE, "HEVC_HW_ENCODE", "hevc.hw-encode")
+/* Whether hardware accelerated video encoding is supported, starting in 141. */
+GFXINFO_FEATURE(HARDWARE_VIDEO_ENCODING, "HARDWARE_VIDEO_ENCODING", "hardwarevideoencoding")
