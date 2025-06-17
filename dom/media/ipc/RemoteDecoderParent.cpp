@@ -10,6 +10,21 @@
 
 namespace mozilla {
 
+extern LazyLogModule sPDMLog;
+
+#define LOGE(fmt, ...)                           \
+  MOZ_LOG_FMT(sPDMLog, mozilla::LogLevel::Error, \
+              "[RemoteDecoderParent] {}: " fmt, __func__, __VA_ARGS__)
+#define LOGW(fmt, ...)                             \
+  MOZ_LOG_FMT(sPDMLog, mozilla::LogLevel::Warning, \
+              "[RemoteDecoderParent] {}: " fmt, __func__, __VA_ARGS__)
+#define LOGD(fmt, ...)                           \
+  MOZ_LOG_FMT(sPDMLog, mozilla::LogLevel::Debug, \
+              "[RemoteDecoderParent] {}: " fmt, __func__, __VA_ARGS__)
+#define LOGV(fmt, ...)                             \
+  MOZ_LOG_FMT(sPDMLog, mozilla::LogLevel::Verbose, \
+              "[RemoteDecoderParent] {}: " fmt, __func__, __VA_ARGS__)
+
 RemoteDecoderParent::RemoteDecoderParent(
     RemoteMediaManagerParent* aParent,
     const CreateDecoderParams::OptionSet& aOptions,
@@ -29,20 +44,24 @@ RemoteDecoderParent::RemoteDecoderParent(
   // tasks, but no new ones should be added after we're
   // destroyed.
   mIPDLSelfRef = this;
+  LOGV("[{}]", fmt::ptr(this));
 }
 
 RemoteDecoderParent::~RemoteDecoderParent() {
   MOZ_COUNT_DTOR(RemoteDecoderParent);
+  LOGV("[{}]", fmt::ptr(this));
 }
 
 void RemoteDecoderParent::Destroy() {
   MOZ_ASSERT(OnManagerThread());
   mIPDLSelfRef = nullptr;
+  LOGV("[{}]", fmt::ptr(this));
 }
 
 mozilla::ipc::IPCResult RemoteDecoderParent::RecvInit(
     InitResolver&& aResolver) {
   MOZ_ASSERT(OnManagerThread());
+  LOGV("[{}]", fmt::ptr(this));
   RefPtr<RemoteDecoderParent> self = this;
   mDecoder->Init()->Then(
       mManagerThread, __func__,
@@ -130,6 +149,7 @@ void RemoteDecoderParent::DecodeNextSample(
 mozilla::ipc::IPCResult RemoteDecoderParent::RecvDecode(
     ArrayOfRemoteMediaRawData* aData, DecodeResolver&& aResolver) {
   MOZ_ASSERT(OnManagerThread());
+  LOGV("[{}]", fmt::ptr(this));
   // If we are here, we know all previously returned DecodedOutputIPDL got
   // used by the child. We can mark all previously sent ShmemBuffer as
   // available again.
@@ -143,6 +163,7 @@ mozilla::ipc::IPCResult RemoteDecoderParent::RecvDecode(
 mozilla::ipc::IPCResult RemoteDecoderParent::RecvFlush(
     FlushResolver&& aResolver) {
   MOZ_ASSERT(OnManagerThread());
+  LOGV("[{}]", fmt::ptr(this));
   RefPtr<RemoteDecoderParent> self = this;
   mDecoder->Flush()->Then(
       mManagerThread, __func__,
@@ -162,6 +183,7 @@ mozilla::ipc::IPCResult RemoteDecoderParent::RecvFlush(
 mozilla::ipc::IPCResult RemoteDecoderParent::RecvDrain(
     DrainResolver&& aResolver) {
   MOZ_ASSERT(OnManagerThread());
+  LOGV("[{}]", fmt::ptr(this));
   RefPtr<RemoteDecoderParent> self = this;
   mDecoder->Drain()->Then(
       mManagerThread, __func__,
@@ -191,6 +213,7 @@ mozilla::ipc::IPCResult RemoteDecoderParent::RecvDrain(
 mozilla::ipc::IPCResult RemoteDecoderParent::RecvShutdown(
     ShutdownResolver&& aResolver) {
   MOZ_ASSERT(OnManagerThread());
+  LOGV("[{}]", fmt::ptr(this));
   if (mDecoder) {
     RefPtr<RemoteDecoderParent> self = this;
     mDecoder->Shutdown()->Then(
@@ -209,6 +232,7 @@ mozilla::ipc::IPCResult RemoteDecoderParent::RecvShutdown(
 mozilla::ipc::IPCResult RemoteDecoderParent::RecvSetSeekThreshold(
     const TimeUnit& aTime) {
   MOZ_ASSERT(OnManagerThread());
+  LOGV("[{}]", fmt::ptr(this));
   mDecoder->SetSeekThreshold(aTime);
   return IPC_OK();
 }
@@ -225,5 +249,10 @@ void RemoteDecoderParent::ActorDestroy(ActorDestroyReason aWhy) {
 bool RemoteDecoderParent::OnManagerThread() {
   return mParent->OnManagerThread();
 }
+
+#undef LOGE
+#undef LOGW
+#undef LOGD
+#undef LOGV
 
 }  // namespace mozilla
