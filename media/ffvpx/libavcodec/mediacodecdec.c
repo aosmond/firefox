@@ -654,11 +654,11 @@ const FFCodec ff_ ## short_name ## _mediacodec_decoder = {                      
 };                                                                                             \
 
 #if CONFIG_H264_MEDIACODEC_DECODER
-DECLARE_MEDIACODEC_VDEC(h264, "H.264", AV_CODEC_ID_H264, "h264_mp4toannexb")
+DECLARE_MEDIACODEC_VDEC(h264, "H.264", AV_CODEC_ID_H264, NULL)
 #endif
 
 #if CONFIG_HEVC_MEDIACODEC_DECODER
-DECLARE_MEDIACODEC_VDEC(hevc, "H.265", AV_CODEC_ID_HEVC, "hevc_mp4toannexb")
+DECLARE_MEDIACODEC_VDEC(hevc, "H.265", AV_CODEC_ID_HEVC, NULL)
 #endif
 
 #if CONFIG_MPEG2_MEDIACODEC_DECODER
