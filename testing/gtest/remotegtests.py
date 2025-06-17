@@ -43,6 +43,7 @@ class RemoteGTests:
         env["MOZ_CRASHREPORTER_NO_REPORT"] = "1"
         env["MOZ_CRASHREPORTER"] = "1"
         env["MOZ_RUN_GTEST"] = "1"
+        env["MOZ_LOG"] = "HTMLMediaElement:4,HTMLMediaElementEvents:4,cubeb:5,PlatformDecoderModule:5,AudioSink:5,AudioSinkWrapper:5,MediaDecoderStateMachine:4,MediaDecoder:4,MediaFormatReader:5,GMP:5,EME:5,MediaSource:5,MediaSourceSamples:5,Autoplay:5,MFMediaEngine:5,FFmpegVideo:5,FFmpegAudio:5,FFmpegLib:5"
         # custom output parser is mandatory on Android
         env["MOZ_TBPL_PARSER"] = "1"
         env["MOZ_GTEST_LOG_PATH"] = self.remote_log
