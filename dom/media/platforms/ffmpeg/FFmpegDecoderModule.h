@@ -31,96 +31,77 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 #endif
   }
   static void Init(FFmpegLibWrapper* aLib) {
-#if defined(MOZ_USE_HWDECODE)
-#  if defined(XP_WIN) && !defined(MOZ_FFVPX_AUDIOONLY)
+#if (defined(XP_WIN) || defined(MOZ_WIDGET_GTK) || \
+     defined(MOZ_WIDGET_ANDROID)) &&               \
+    defined(MOZ_USE_HWDECODE) && !defined(MOZ_FFVPX_AUDIOONLY)
+#  ifdef XP_WIN
     if (!XRE_IsGPUProcess()) {
       return;
     }
-    static nsTArray<AVCodecID> kCodecIDs({
-        AV_CODEC_ID_AV1,
-        AV_CODEC_ID_VP9,
-    });
-    for (const auto& codecId : kCodecIDs) {
-      const auto* codec =
-          FFmpegDataDecoder<V>::FindHardwareAVCodec(aLib, codecId);
-      if (!codec) {
+#  else
+    if (!XRE_IsRDDProcess()) {
+      return;
+    }
+#  endif
+
+    struct CodecEntry {
+      AVCodecID mId;
+      bool mHwAllowed;
+    };
+
+    const CodecEntry kCodecIDs[] = {
+    // The following open video codecs can be decoded via hardware by using the
+    // system ffmpeg or ffvpx.
+#  if LIBAVCODEC_VERSION_MAJOR >= 59
+        {AV_CODEC_ID_AV1, gfx::gfxVars::UseAV1HwDecode()},
+#  endif
+#  if LIBAVCODEC_VERSION_MAJOR >= 55
+        {AV_CODEC_ID_VP9, gfx::gfxVars::UseVP9HwDecode()},
+#  endif
+#  if (defined(MOZ_WIDGET_GTK) || defined(MOZ_WIDGET_ANDROID)) && \
+      LIBAVCODEC_VERSION_MAJOR >= 54
+        {AV_CODEC_ID_VP8, gfx::gfxVars::UseVP8HwDecode()},
+#  endif
+
+    // These proprietary video codecs can only be decoded via hardware by using
+    // the system ffmpeg, not supported by ffvpx.
+#  if (defined(MOZ_WIDGET_GTK) && !defined(FFVPX_VERSION)) || \
+      defined(MOZ_WIDGET_ANDROID)
+#    if LIBAVCODEC_VERSION_MAJOR >= 55
+        {AV_CODEC_ID_HEVC, gfx::gfxVars::UseHEVCHwDecode()},
+#    endif
+        {AV_CODEC_ID_H264, gfx::gfxVars::UseH264HwDecode()},
+#  endif
+    };
+
+    for (const auto& entry : kCodecIDs) {
+      if (!entry.mHwAllowed) {
         MOZ_LOG(sPDMLog, LogLevel::Debug,
-                ("No codec or decoder for %s on d3d11va",
-                 AVCodecToString(codecId)));
+                ("Codec disabled for %s", AVCodecToString(entry.mId)));
         continue;
       }
+
+      const auto* codec =
+          FFmpegDataDecoder<V>::FindHardwareAVCodec(aLib, entry.mId);
+      if (!codec) {
+        MOZ_LOG(sPDMLog, LogLevel::Debug,
+                ("No codec or decoder for %s", AVCodecToString(entry.mId)));
+        continue;
+      }
+
       for (int i = 0; const AVCodecHWConfig* config =
                           aLib->avcodec_get_hw_config(codec, i);
            ++i) {
         if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) {
-          sSupportedHWCodecs.AppendElement(codecId);
+          sSupportedHWCodecs.AppendElement(entry.mId);
           MOZ_LOG(sPDMLog, LogLevel::Debug,
-                  ("Support %s on d3d11va", AVCodecToString(codecId)));
+                  ("Support %s", AVCodecToString(entry.mId)));
           break;
         }
       }
     }
-#  elif defined(MOZ_WIDGET_ANDROID) && !defined(MOZ_FFVPX_AUDIOONLY)
-    if (!XRE_IsRDDProcess()) {
-      return;
-    }
-    static nsTArray<AVCodecID> kCodecIDs({
-        AV_CODEC_ID_AV1,
-        AV_CODEC_ID_H264,
-        AV_CODEC_ID_HEVC,
-        AV_CODEC_ID_VP9,
-    });
-    for (const auto& codecId : kCodecIDs) {
-      const auto* codec = FFmpegDataDecoder<V>::FindAVCodec(aLib, codecId);
-      if (!codec) {
-        MOZ_LOG(sPDMLog, LogLevel::Debug,
-                ("No codec or decoder for %s on mediacodec",
-                 AVCodecToString(codecId)));
-        continue;
-      }
-      sSupportedHWCodecs.AppendElement(codecId);
-      MOZ_LOG(sPDMLog, LogLevel::Debug,
-              ("Support %s on mediacodec", AVCodecToString(codecId)));
-    }
-#  elif MOZ_WIDGET_GTK
-    // Hardware decoding on Linux should only happen on the RDD process for now.
-    if (!XRE_IsRDDProcess()) {
-      return;
-    }
-
-// UseXXXHWDecode are already set in gfxPlatform at the startup.
-#    define ADD_HW_CODEC(codec)                                \
-      if (gfx::gfxVars::Use##codec##HwDecode()) {              \
-        sSupportedHWCodecs.AppendElement(AV_CODEC_ID_##codec); \
-      }
-
-// These proprietary video codecs can only be decoded via hardware by using the
-// system ffmpeg, not supported by ffvpx.
-#    ifndef FFVPX_VERSION
-    ADD_HW_CODEC(H264);
-#      if LIBAVCODEC_VERSION_MAJOR >= 55
-    ADD_HW_CODEC(HEVC);
-#      endif
-#    endif  // !FFVPX_VERSION
-
-// The following open video codecs can be decoded via hardware using ffvpx.
-#    if LIBAVCODEC_VERSION_MAJOR >= 54
-    ADD_HW_CODEC(VP8);
-#    endif
-#    if LIBAVCODEC_VERSION_MAJOR >= 55
-    ADD_HW_CODEC(VP9);
-#    endif
-#    if LIBAVCODEC_VERSION_MAJOR >= 59
-    ADD_HW_CODEC(AV1);
-#    endif
-
-    for (const auto& codec : sSupportedHWCodecs) {
-      MOZ_LOG(sPDMLog, LogLevel::Debug,
-              ("Support %s for hw decoding", AVCodecToString(codec)));
-    }
-#    undef ADD_HW_CODEC
-#  endif  // XP_WIN, MOZ_WIDGET_GTK
-#endif    // MOZ_USE_HWDECODE
+#endif  // (XP_WIN || MOZ_WIDGET_GTK || MOZ_WIDGET_ANDROID) && MOZ_USE_HWDECODE
+        // && !MOZ_FFVPX_AUDIOONLY
   }
 
   static already_AddRefed<PlatformDecoderModule> Create(
