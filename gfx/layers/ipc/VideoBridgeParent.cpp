@@ -178,28 +178,6 @@ already_AddRefed<TextureHost> VideoBridgeParent::LookupTexture(
   return do_AddRef(TextureHost::AsTextureHost(actor));
 }
 
-#ifdef MOZ_WIDGET_ANDROID
-void VideoBridgeParent::BindImageToTextureHost(uint64_t aSerial,
-                                               Image* aImage) {
-  MonitorAutoLock lock(mMonitor);
-
-  // We raced shutting down the actor.
-  if (NS_WARN_IF(!mCompositorThreadHolder)) {
-    return;
-  }
-
-  auto* actor = mTextureMap[aSerial];
-  if (!actor) {
-    mImageMap[aSerial] = aImage;
-    return;
-  }
-
-  if (auto* texture = TextureHost::AsTextureHost(actor)) {
-    texture->BindImage(aImage);
-  }
-}
-#endif
-
 void VideoBridgeParent::ActorDestroy(ActorDestroyReason aWhy) {
   bool shutdown = sVideoBridgeParentShutDown;
 
@@ -281,17 +259,6 @@ PTextureParent* VideoBridgeParent::AllocPTextureParent(
   }
 
   MonitorAutoLock lock(mMonitor);
-
-#ifdef MOZ_WIDGET_ANDROID
-  auto i = mImageMap.find(aSerial);
-  if (i != mImageMap.end()) {
-    if (auto* texture = TextureHost::AsTextureHost(parent)) {
-      texture->BindImage(i->second);
-    }
-    mImageMap.erase(i);
-  }
-#endif
-
   mTextureMap[aSerial] = parent;
   return parent;
 }

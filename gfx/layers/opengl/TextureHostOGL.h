@@ -435,10 +435,6 @@ class SurfaceTextureHost : public TextureHost {
   // SurfaceTexture uses android fence internally,
   bool NeedsDeferredDeletion() const override { return false; }
 
-  void PrepareForUse() override;
-
-  void BindImage(Image* aImage) override;
-
  protected:
   mozilla::java::GeckoSurfaceTexture::GlobalRef mSurfTex;
   const gfx::IntSize mSize;
@@ -448,7 +444,6 @@ class SurfaceTextureHost : public TextureHost {
   const Maybe<gfx::Matrix4x4> mTransformOverride;
   RefPtr<CompositorOGL> mCompositor;
   RefPtr<SurfaceTextureSource> mTextureSource;
-  RefPtr<SurfaceTextureImage> mImage;
 };
 
 class AndroidHardwareBufferTextureSource : public TextureSource,

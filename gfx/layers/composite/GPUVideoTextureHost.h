@@ -65,8 +65,6 @@ class GPUVideoTextureHost final : public TextureHost {
 
   void UnbindTextureSource() override;
 
-  void PrepareForUse() override;
-
   void NotifyNotUsed() override;
 
   BufferTextureHost* AsBufferTextureHost() override;

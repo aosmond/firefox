@@ -36,10 +36,6 @@ class VideoBridgeParent final : public PVideoBridgeParent,
   already_AddRefed<TextureHost> LookupTexture(
       const dom::ContentParentId& aContentId, uint64_t aSerial);
 
-#ifdef MOZ_WIDGET_ANDROID
-  void BindImageToTextureHost(uint64_t aSerial, Image* aImage);
-#endif
-
   // PVideoBridgeParent
   void ActorDestroy(ActorDestroyReason aWhy) override;
   PTextureParent* AllocPTextureParent(const SurfaceDescriptor& aSharedData,
@@ -81,10 +77,6 @@ class VideoBridgeParent final : public PVideoBridgeParent,
   Monitor mMonitor;
   RefPtr<CompositorThreadHolder> mCompositorThreadHolder
       MOZ_GUARDED_BY(mMonitor);
-#ifdef MOZ_WIDGET_ANDROID
-  std::map<uint64_t, RefPtr<mozilla::layers::Image>> mImageMap
-      MOZ_GUARDED_BY(mMonitor);
-#endif
   std::map<uint64_t, PTextureParent*> mTextureMap MOZ_GUARDED_BY(mMonitor);
   bool mClosed;
 };

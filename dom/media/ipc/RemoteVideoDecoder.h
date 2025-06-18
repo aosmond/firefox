@@ -11,20 +11,16 @@
 
 namespace mozilla::layers {
 class BufferRecycleBin;
-class Image;
 }  // namespace mozilla::layers
 
 namespace mozilla {
 
-class KnowsCompositorVideo final : public layers::KnowsCompositor {
+class KnowsCompositorVideo : public layers::KnowsCompositor {
  public:
   NS_INLINE_DECL_THREADSAFE_REFCOUNTING(KnowsCompositorVideo, override)
 
   layers::TextureForwarder* GetTextureForwarder() override;
   layers::LayersIPCActor* GetLayersIPCActor() override;
-#ifdef MOZ_WIDGET_ANDROID
-  void BindImageToTextureHost(uint64_t aSerial, layers::Image* aImage);
-#endif
 
   static already_AddRefed<KnowsCompositorVideo> TryCreateForIdentifier(
       const layers::TextureFactoryIdentifier& aIdentifier);

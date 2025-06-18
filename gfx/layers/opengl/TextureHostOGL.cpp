@@ -635,20 +635,6 @@ bool SurfaceTextureHost::SupportsExternalCompositing(
   return aBackend == WebRenderBackend::SOFTWARE;
 }
 
-void SurfaceTextureHost::PrepareForUse() {
-  if (mImage) {
-    mImage->OnSetCurrent();
-  }
-}
-
-void SurfaceTextureHost::BindImage(Image* aImage) {
-  if (auto* surfaceTextureImage = aImage->AsSurfaceTextureImage()) {
-    mImage = surfaceTextureImage;
-  } else {
-    MOZ_ASSERT_UNREACHABLE("Binding image other than SurfaceTextureImage!");
-  }
-}
-
 ////////////////////////////////////////////////////////////////////////
 // AndroidHardwareBufferTextureSource
 
