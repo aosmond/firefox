@@ -101,21 +101,33 @@ AVCodec* FFmpegDataEncoder<LIBAV_VER>::FindHardwareEncoder(
   MOZ_ASSERT(aLib);
 
   AVCodec* fallbackCodec = nullptr;
+#if LIBAVCODEC_VERSION_MAJOR >= 58
   void* opaque = nullptr;
   while (AVCodec* codec = aLib->av_codec_iterate(&opaque)) {
-    if (codec->id != aCodecId || !aLib->av_codec_is_encoder(codec) ||
-        !aLib->avcodec_get_hw_config(codec, 0)) {
+    if (codec->id != aCodecId || !aLib->av_codec_is_encoder(codec)) {
       continue;
     }
 
-#if LIBAVCODEC_VERSION_MAJOR >= 57
+    bool hasHwConfig = false;
+    for (int i = 0;
+         const AVCodecHWConfig* config = aLib->avcodec_get_hw_config(codec, i);
+         ++i) {
+      if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) {
+        hasHwConfig = true;
+        break;
+      }
+    }
+
+    if (!hasHwConfig) {
+      continue;
+    }
+
     if (codec->capabilities & AV_CODEC_CAP_EXPERIMENTAL) {
       if (!fallbackCodec) {
         fallbackCodec = codec;
       }
       continue;
     }
-#endif
 
     FFMPEGV_LOG("Using preferred hardware codec %s", codec->name);
     return codec;
@@ -124,6 +136,7 @@ AVCodec* FFmpegDataEncoder<LIBAV_VER>::FindHardwareEncoder(
   if (fallbackCodec) {
     FFMPEGV_LOG("Using fallback hardware codec %s", fallbackCodec->name);
   }
+#endif
   return fallbackCodec;
 }
 

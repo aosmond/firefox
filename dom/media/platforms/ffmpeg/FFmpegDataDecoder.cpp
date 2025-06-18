@@ -321,13 +321,22 @@ AVFrame* FFmpegDataDecoder<LIBAV_VER>::PrepareFrame() {
 
 /* static */ AVCodec* FFmpegDataDecoder<LIBAV_VER>::FindHardwareAVCodec(
     FFmpegLibWrapper* aLib, AVCodecID aCodec) {
+#if LIBAVCODEC_VERSION_MAJOR >= 58
   void* opaque = nullptr;
   while (AVCodec* codec = aLib->av_codec_iterate(&opaque)) {
-    if (codec->id == aCodec && aLib->av_codec_is_decoder(codec) &&
-        aLib->avcodec_get_hw_config(codec, 0)) {
-      return codec;
+    if (codec->id != aCodec || !aLib->av_codec_is_decoder(codec)) {
+      continue;
+    }
+
+    for (int i = 0;
+         const AVCodecHWConfig* config = aLib->avcodec_get_hw_config(codec, i);
+         ++i) {
+      if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) {
+        return codec;
+      }
     }
   }
+#endif
   return nullptr;
 }
 

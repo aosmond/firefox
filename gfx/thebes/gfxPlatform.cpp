@@ -3026,6 +3026,7 @@ void gfxPlatform::InitHardwareVideoConfig() {
   }                                                                          \
   gfxVars::SetUse##name##HwEncode(featureEnc##name.IsEnabled());
 
+  CODEC_HW_FEATURE_SETUP(AV1)
   CODEC_HW_FEATURE_SETUP(VP8)
   CODEC_HW_FEATURE_SETUP(VP9)
 
@@ -3033,7 +3034,6 @@ void gfxPlatform::InitHardwareVideoConfig() {
 #ifdef MOZ_WIDGET_GTK
   CODEC_HW_FEATURE_SETUP(H264)
   CODEC_HW_FEATURE_SETUP(HEVC)
-  CODEC_HW_FEATURE_SETUP(AV1)
 #endif
 
 #undef CODEC_HW_FEATURE_SETUP
