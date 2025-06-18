@@ -2399,20 +2399,20 @@ gfxImageFormat gfxPlatform::OptimalFormatForContent(gfxContentType aContent) {
  * and remember the values.  Changing these preferences during the run will
  * not have any effect until we restart.
  */
-static mozilla::Atomic<bool> sLayersSupportsHardwareVideoDecoding(false);
-static bool sLayersHardwareVideoDecodingFailed = false;
-
 static mozilla::Atomic<bool> sLayersAccelerationPrefsInitialized(false);
 
 static void VideoDecodingFailedChangedCallback(const char* aPref, void*) {
-  sLayersHardwareVideoDecodingFailed = Preferences::GetBool(aPref, false);
-  gfxPlatform::GetPlatform()->UpdateCanUseHardwareVideoDecoding();
-}
+  MOZ_ASSERT(XRE_IsParentProcess());
 
-void gfxPlatform::UpdateCanUseHardwareVideoDecoding() {
-  if (XRE_IsParentProcess()) {
-    gfxVars::SetCanUseHardwareVideoDecoding(CanUseHardwareVideoDecoding());
+  FeatureState& feature =
+      gfxConfig::GetFeature(Feature::HARDWARE_VIDEO_DECODING);
+  if (Preferences::GetBool(aPref, false)) {
+    feature.ForceDisable(FeatureStatus::Unavailable,
+                         "Force disabled by failed sanity test",
+                         "FEATURE_FAILURE_SANITY_TEST_FAILED"_ns);
   }
+
+  gfxVars::SetCanUseHardwareVideoDecoding(feature.IsEnabled());
 }
 
 void gfxPlatform::UpdateForceSubpixelAAWherePossible() {
@@ -2462,41 +2462,9 @@ void gfxPlatform::InitAcceleration() {
 #endif
   }
 
-  if (StaticPrefs::media_hardware_video_decoding_enabled_AtStartup()) {
-#ifdef MOZ_WIDGET_GTK
-    sLayersSupportsHardwareVideoDecoding =
-        gfxPlatformGtk::GetPlatform()->InitVAAPIConfig(
-            StaticPrefs::
-                media_hardware_video_decoding_force_enabled_AtStartup());
-#else
-    if (
-#  ifdef XP_WIN
-        Preferences::GetBool("media.wmf.dxva.enabled", true) &&
-#  endif
-        NS_SUCCEEDED(gfxInfo->GetFeatureStatus(
-            nsIGfxInfo::FEATURE_HARDWARE_VIDEO_DECODING, discardFailureId,
-            &status))) {
-      if (status == nsIGfxInfo::FEATURE_STATUS_OK ||
-          StaticPrefs::
-              media_hardware_video_decoding_force_enabled_AtStartup()) {
-        sLayersSupportsHardwareVideoDecoding = true;
-      }
-    }
-#endif
-  } else if (XRE_IsParentProcess()) {
-    FeatureState& feature =
-        gfxConfig::GetFeature(Feature::HARDWARE_VIDEO_DECODING);
-    feature.EnableByDefault();
-    feature.UserDisable("User disabled via pref",
-                        "FEATURE_HARDWARE_VIDEO_DECODING_PREF_DISABLED"_ns);
-  }
-
   sLayersAccelerationPrefsInitialized = true;
 
   if (XRE_IsParentProcess()) {
-    Preferences::RegisterCallbackAndCall(
-        VideoDecodingFailedChangedCallback,
-        "media.hardware-video-decoding.failed");
     InitGPUProcessPrefs();
 
     FeatureState& feature = gfxConfig::GetFeature(Feature::REMOTE_CANVAS);
@@ -2996,15 +2964,59 @@ void gfxPlatform::InitHardwareVideoConfig() {
     return;
   }
 
-#ifdef MOZ_WIDGET_GTK
+  FeatureState& feature =
+      gfxConfig::GetFeature(Feature::HARDWARE_VIDEO_DECODING);
+  feature.EnableByDefault();
+
+  bool userPref =
+      StaticPrefs::media_hardware_video_decoding_enabled_AtStartup();
+#ifdef XP_WIN
+  userPref = userPref && Preferences::GetBool("media.wmf.dxva.enabled", true);
+#endif
+  if (!userPref) {
+    feature.UserDisable("User disabled via pref",
+                        "FEATURE_HARDWARE_VIDEO_DECODING_PREF_DISABLED"_ns);
+  } else if (StaticPrefs::
+                 media_hardware_video_decoding_force_enabled_AtStartup()) {
+    feature.UserForceEnable("Force enabled by pref");
+  }
+
+  int32_t status = nsIGfxInfo::FEATURE_STATUS_UNKNOWN;
+  nsCOMPtr<nsIGfxInfo> gfxInfo = components::GfxInfo::Service();
+  nsCString failureId;
+  if (NS_FAILED(gfxInfo->GetFeatureStatus(
+          nsIGfxInfo::FEATURE_HARDWARE_VIDEO_DECODING, failureId, &status))) {
+    feature.Disable(FeatureStatus::BlockedNoGfxInfo, "gfxInfo is broken",
+                    "FEATURE_FAILURE_NO_GFX_INFO"_ns);
+  } else if (status != nsIGfxInfo::FEATURE_STATUS_OK) {
+    feature.Disable(FeatureStatus::Blocklisted, "Blocklisted by gfxInfo",
+                    failureId);
+  }
+
+  if (status == nsIGfxInfo::FEATURE_BLOCKED_PLATFORM_TEST) {
+    feature.ForceDisable(FeatureStatus::Unavailable,
+                         "Force disabled by gfxInfo", failureId);
+  } else if (Preferences::GetBool("media.hardware-video-decoding.failed",
+                                  false)) {
+    feature.ForceDisable(FeatureStatus::Unavailable,
+                         "Force disabled by failed sanity test",
+                         "FEATURE_FAILURE_SANITY_TEST_FAILED"_ns);
+  }
+
+  InitPlatformHardwareVideoDecoding();
+
   // We don't want to expose codec info if whole HW decoding is disabled.
-  if (!sLayersSupportsHardwareVideoDecoding) {
+  if (!feature.IsEnabled()) {
     return;
   }
-#endif
+
+  gfxVars::SetCanUseHardwareVideoDecoding(true);
+
+  // Monitor for sanity test changes if we are enabled.
+  Preferences::RegisterCallbackAndCall(VideoDecodingFailedChangedCallback,
+                                       "media.hardware-video-decoding.failed");
 
   nsCString message;
-  nsCString failureId;
 
 #define CODEC_HW_FEATURE_SETUP(name)                                         \
   FeatureState& featureDec##name =                                           \
@@ -3030,7 +3042,7 @@ void gfxPlatform::InitHardwareVideoConfig() {
   CODEC_HW_FEATURE_SETUP(VP8)
   CODEC_HW_FEATURE_SETUP(VP9)
 
-  // H264/AV1/HEVC_HW_DECODE/ENCODE are used on Linux only right now.
+  // H264/HEVC_HW_DECODE/ENCODE are used on Linux only right now.
 #ifdef MOZ_WIDGET_GTK
   CODEC_HW_FEATURE_SETUP(H264)
   CODEC_HW_FEATURE_SETUP(HEVC)
@@ -3374,14 +3386,6 @@ void gfxPlatform::InitAcceleratedCanvas2DConfig() {
       AcceleratedCanvas2DPrefChangeCallback,
       nsDependentCString(
           StaticPrefs::GetPrefName_gfx_canvas_accelerated_force_enabled()));
-}
-
-bool gfxPlatform::CanUseHardwareVideoDecoding() {
-  // this function is called from the compositor thread, so it is not
-  // safe to init the prefs etc. from here.
-  MOZ_ASSERT(sLayersAccelerationPrefsInitialized);
-  return sLayersSupportsHardwareVideoDecoding &&
-         !sLayersHardwareVideoDecodingFailed;
 }
 
 bool gfxPlatform::AccelerateLayersByDefault() {
