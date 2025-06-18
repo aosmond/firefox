@@ -1093,7 +1093,6 @@ void RemoteMediaManagerChild::DeallocateSurfaceDescriptor(
 
 void RemoteMediaManagerChild::OnSetCurrent(
     const SurfaceDescriptorGPUVideo& aSD) {
-  const SurfaceDescriptorRemoteDecoder& sdrd = aSD;
   nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
   if (!managerThread) {
     return;
