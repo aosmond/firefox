@@ -129,3 +129,5 @@ GFXINFO_FEATURE(AV1_HW_ENCODE, "AV1_HW_ENCODE", "av1.hw-encode")
 GFXINFO_FEATURE(HEVC_HW_ENCODE, "HEVC_HW_ENCODE", "hevc.hw-encode")
 /* Whether Windows Media Fundation hardware DRM is supported, starting in 141. */
 GFXINFO_FEATURE(WMF_HW_DRM, "WMF_HW_DRM", "wmf.hw-drm")
+/* Whether hardware accelerated video encoding is supported, starting in 141. */
+GFXINFO_FEATURE(HARDWARE_VIDEO_ENCODING, "HARDWARE_VIDEO_ENCODING", "hardwarevideoencoding")
