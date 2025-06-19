@@ -169,6 +169,8 @@ class FFmpegVideoDecoder<LIBAV_VER>
   };
   void InitHWCodecContext(ContextType aType);
 
+  bool ShouldDisableHWDecoding(bool aDisableHardwareDecoding) const;
+
   // True if hardware decoding is disabled explicitly.
   const bool mHardwareDecodingDisabled;
 #endif
@@ -199,7 +201,6 @@ class FFmpegVideoDecoder<LIBAV_VER>
 #endif
 
 #if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
-  bool ShouldEnableLinuxHWDecoding() const;
   bool UploadSWDecodeToDMABuf() const;
   bool IsLinuxHDR() const;
   MediaResult InitVAAPIDecoder();

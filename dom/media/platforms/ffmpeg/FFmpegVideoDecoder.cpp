@@ -557,8 +557,10 @@ void FFmpegVideoDecoder<LIBAV_VER>::PtsCorrectionContext::Reset() {
 }
 #endif
 
-#if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
-bool FFmpegVideoDecoder<LIBAV_VER>::ShouldEnableLinuxHWDecoding() const {
+#if defined(MOZ_USE_HWDECODE)
+bool FFmpegVideoDecoder<LIBAV_VER>::ShouldDisableHWDecoding(
+    bool aDisableHardwareDecoding) const {
+#  ifdef MOZ_WIDGET_GTK
   bool supported = false;
   switch (mCodecID) {
     case AV_CODEC_ID_H264:
@@ -581,7 +583,7 @@ bool FFmpegVideoDecoder<LIBAV_VER>::ShouldEnableLinuxHWDecoding() const {
   }
   if (!supported) {
     FFMPEG_LOG("Codec %s is not accelerated", mLib->avcodec_get_name(mCodecID));
-    return false;
+    return true;
   }
 
   bool isHardwareWebRenderUsed = mImageAllocator &&
@@ -590,13 +592,19 @@ bool FFmpegVideoDecoder<LIBAV_VER>::ShouldEnableLinuxHWDecoding() const {
                                  !mImageAllocator->UsingSoftwareWebRender();
   if (!isHardwareWebRenderUsed) {
     FFMPEG_LOG("Hardware WebRender is off, VAAPI is disabled");
-    return false;
+    return true;
   }
   if (!XRE_IsRDDProcess()) {
     FFMPEG_LOG("VA-API works in RDD process only");
+    return true;
+  }
+#  elif defined(MOZ_WIDGET_ANDROID)
+  // We only support decoding these with hardware on Android.
+  if (mCodecID == AV_CODEC_ID_H264 || mCodecID == AV_CODEC_ID_HEVC) {
     return false;
   }
-  return true;
+#  endif
+  return aDisableHardwareDecoding;
 }
 #endif
 
@@ -619,12 +627,8 @@ FFmpegVideoDecoder<LIBAV_VER>::FFmpegVideoDecoder(
     : FFmpegDataDecoder(aLib, GetCodecId(aConfig.mMimeType)),
       mImageAllocator(aAllocator),
 #ifdef MOZ_USE_HWDECODE
-#  ifdef MOZ_WIDGET_GTK
-      mHardwareDecodingDisabled(aDisableHardwareDecoding ||
-                                !ShouldEnableLinuxHWDecoding()),
-#  else
-      mHardwareDecodingDisabled(aDisableHardwareDecoding),
-#  endif  // MOZ_WIDGET_GTK
+      mHardwareDecodingDisabled(
+          ShouldDisableHWDecoding(aDisableHardwareDecoding)),
 #endif    // MOZ_USE_HWDECODE
       mImageContainer(aImageContainer),
       mInfo(aConfig),
@@ -1903,8 +1907,7 @@ bool FFmpegVideoDecoder<LIBAV_VER>::IsHardwareAccelerated(
 #elif defined(MOZ_ENABLE_D3D11VA)
   return !!mD3D11VADeviceContext;
 #elif defined(MOZ_WIDGET_ANDROID)
-  return true;
-  //return !mHardwareDecodingDisabled && mMediaCodecDeviceContext;
+  return !!mMediaCodecDeviceContext;
 #else
   return false;
 #endif
