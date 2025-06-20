@@ -391,7 +391,7 @@ void MFCDMParent::Unregister() {
 }
 
 MFCDMParent::MFCDMParent(const nsAString& aKeySystem,
-                         RemoteMediaManagerParent* aManager,
+                         RemoteDecoderManagerParent* aManager,
                          nsISerialEventTarget* aManagerThread)
     : mKeySystem(aKeySystem),
       mManager(aManager),

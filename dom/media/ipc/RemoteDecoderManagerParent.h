@@ -3,11 +3,11 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-#ifndef include_dom_media_ipc_RemoteMediaManagerParent_h
-#define include_dom_media_ipc_RemoteMediaManagerParent_h
+#ifndef include_dom_media_ipc_RemoteDecoderManagerParent_h
+#define include_dom_media_ipc_RemoteDecoderManagerParent_h
 
 #include "GPUVideoImage.h"
-#include "mozilla/PRemoteMediaManagerParent.h"
+#include "mozilla/PRemoteDecoderManagerParent.h"
 #include "mozilla/dom/ipc/IdType.h"
 #include "mozilla/layers/VideoBridgeChild.h"
 
@@ -17,15 +17,17 @@ class PDMFactory;
 class PMFCDMParent;
 class PMFMediaEngineParent;
 
-class RemoteMediaManagerParent final : public PRemoteMediaManagerParent,
-                                       public layers::IGPUVideoSurfaceManager {
-  friend class PRemoteMediaManagerParent;
+class RemoteDecoderManagerParent final
+    : public PRemoteDecoderManagerParent,
+      public layers::IGPUVideoSurfaceManager {
+  friend class PRemoteDecoderManagerParent;
 
  public:
-  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(RemoteMediaManagerParent, override)
+  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(RemoteDecoderManagerParent, override)
 
-  static bool CreateForContent(Endpoint<PRemoteMediaManagerParent>&& aEndpoint,
-                               dom::ContentParentId aContentId);
+  static bool CreateForContent(
+      Endpoint<PRemoteDecoderManagerParent>&& aEndpoint,
+      dom::ContentParentId aContentId);
 
   static bool CreateVideoBridgeToOtherProcess(
       Endpoint<layers::PVideoBridgeChild>&& aEndpoint);
@@ -80,11 +82,11 @@ class RemoteMediaManagerParent final : public PRemoteMediaManagerParent,
   void ActorDestroy(mozilla::ipc::IProtocol::ActorDestroyReason) override;
 
  private:
-  RemoteMediaManagerParent(nsISerialEventTarget* aThread,
-                           dom::ContentParentId aContentId);
-  ~RemoteMediaManagerParent();
+  RemoteDecoderManagerParent(nsISerialEventTarget* aThread,
+                             dom::ContentParentId aContentId);
+  ~RemoteDecoderManagerParent();
 
-  void Open(Endpoint<PRemoteMediaManagerParent>&& aEndpoint);
+  void Open(Endpoint<PRemoteDecoderManagerParent>&& aEndpoint);
 
   std::map<uint64_t, RefPtr<layers::Image>> mImageMap;
   std::map<uint64_t, RefPtr<layers::TextureClient>> mTextureMap;
@@ -96,4 +98,4 @@ class RemoteMediaManagerParent final : public PRemoteMediaManagerParent,
 
 }  // namespace mozilla
 
-#endif  // include_dom_media_ipc_RemoteMediaManagerParent_h
+#endif  // include_dom_media_ipc_RemoteDecoderManagerParent_h

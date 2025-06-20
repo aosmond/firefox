@@ -3,7 +3,7 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-#include "RemoteMediaManagerChild.h"
+#include "RemoteDecoderManagerChild.h"
 
 #include "ErrorList.h"
 #include "MP4Decoder.h"
@@ -50,29 +50,29 @@ using namespace gfx;
 // Used so that we only ever attempt to check if the RDD/GPU/Utility processes
 // should be launched serially. Protects sLaunchPromise
 StaticMutex sLaunchMutex;
-static EnumeratedArray<RemoteMediaIn, StaticRefPtr<GenericNonExclusivePromise>,
-                       size_t(RemoteMediaIn::SENTINEL)>
+static EnumeratedArray<RemoteDecodeIn, StaticRefPtr<GenericNonExclusivePromise>,
+                       size_t(RemoteDecodeIn::SENTINEL)>
     sLaunchPromises MOZ_GUARDED_BY(sLaunchMutex);
 
 // Only modified on the main-thread, read on any thread. While it could be read
 // on the main thread directly, for clarity we force access via the DataMutex
 // wrapper.
 MOZ_RUNINIT static StaticDataMutex<StaticRefPtr<nsIThread>>
-    sRemoteMediaManagerChildThread("sRemoteMediaManagerChildThread");
+    sRemoteDecoderManagerChildThread("sRemoteDecoderManagerChildThread");
 
-// Only accessed from sRemoteMediaManagerChildThread
-static EnumeratedArray<RemoteMediaIn, StaticRefPtr<RemoteMediaManagerChild>,
-                       size_t(RemoteMediaIn::SENTINEL)>
-    sRemoteMediaManagerChildForProcesses;
+// Only accessed from sRemoteDecoderManagerChildThread
+static EnumeratedArray<RemoteDecodeIn, StaticRefPtr<RemoteDecoderManagerChild>,
+                       size_t(RemoteDecodeIn::SENTINEL)>
+    sRemoteDecoderManagerChildForProcesses;
 
 static StaticAutoPtr<nsTArray<RefPtr<Runnable>>> sRecreateTasks;
 
 // Used for protecting codec support information collected from different remote
 // processes.
 StaticMutex sProcessSupportedMutex;
-MOZ_GLOBINIT static EnumeratedArray<RemoteMediaIn,
+MOZ_GLOBINIT static EnumeratedArray<RemoteDecodeIn,
                                     Maybe<media::MediaCodecsSupported>,
-                                    size_t(RemoteMediaIn::SENTINEL)>
+                                    size_t(RemoteDecodeIn::SENTINEL)>
     sProcessSupported MOZ_GUARDED_BY(sProcessSupportedMutex);
 
 class ShutdownObserver final : public nsIObserver {
@@ -89,19 +89,19 @@ NS_IMETHODIMP
 ShutdownObserver::Observe(nsISupports* aSubject, const char* aTopic,
                           const char16_t* aData) {
   MOZ_ASSERT(!strcmp(aTopic, NS_XPCOM_SHUTDOWN_OBSERVER_ID));
-  RemoteMediaManagerChild::Shutdown();
+  RemoteDecoderManagerChild::Shutdown();
   return NS_OK;
 }
 
 StaticRefPtr<ShutdownObserver> sObserver;
 
 /* static */
-void RemoteMediaManagerChild::Init() {
-  LOG("RemoteMediaManagerChild Init");
+void RemoteDecoderManagerChild::Init() {
+  LOG("RemoteDecoderManagerChild Init");
 
-  auto remoteDecoderManagerThread = sRemoteMediaManagerChildThread.Lock();
+  auto remoteDecoderManagerThread = sRemoteDecoderManagerChildThread.Lock();
   if (!*remoteDecoderManagerThread) {
-    LOG("RemoteMediaManagerChild's thread is created");
+    LOG("RemoteDecoderManagerChild's thread is created");
     // We can't use a MediaThreadType::SUPERVISOR as the RemoteDecoderModule
     // runs on it and dispatch synchronous tasks to the manager thread, should
     // more than 4 concurrent videos being instantiated at the same time, we
@@ -110,7 +110,7 @@ void RemoteMediaManagerChild::Init() {
     nsresult rv = NS_NewNamedThread(
         "RemVidChild", getter_AddRefs(childThread),
         NS_NewRunnableFunction(
-            "RemoteMediaManagerChild::InitPBackground", []() {
+            "RemoteDecoderManagerChild::InitPBackground", []() {
               ipc::PBackgroundChild* bgActor =
                   ipc::BackgroundChild::GetOrCreateForCurrentThread();
               NS_WARNING_ASSERTION(bgActor,
@@ -127,24 +127,25 @@ void RemoteMediaManagerChild::Init() {
 }
 
 /* static */
-void RemoteMediaManagerChild::InitForGPUProcess(
-    Endpoint<PRemoteMediaManagerChild>&& aVideoManager) {
+void RemoteDecoderManagerChild::InitForGPUProcess(
+    Endpoint<PRemoteDecoderManagerChild>&& aVideoManager) {
   MOZ_ASSERT(NS_IsMainThread());
 
   Init();
 
-  auto remoteDecoderManagerThread = sRemoteMediaManagerChildThread.Lock();
+  auto remoteDecoderManagerThread = sRemoteDecoderManagerChildThread.Lock();
   MOZ_ALWAYS_SUCCEEDS(
       (*remoteDecoderManagerThread)
           ->Dispatch(NewRunnableFunction(
-              "InitForContentRunnable", &OpenRemoteMediaManagerChildForProcess,
-              std::move(aVideoManager), RemoteMediaIn::GpuProcess)));
+              "InitForContentRunnable",
+              &OpenRemoteDecoderManagerChildForProcess,
+              std::move(aVideoManager), RemoteDecodeIn::GpuProcess)));
 }
 
 /* static */
-void RemoteMediaManagerChild::Shutdown() {
+void RemoteDecoderManagerChild::Shutdown() {
   MOZ_ASSERT(NS_IsMainThread());
-  LOG("RemoteMediaManagerChild Shutdown");
+  LOG("RemoteDecoderManagerChild Shutdown");
 
   if (sObserver) {
     nsContentUtils::UnregisterShutdownObserver(sObserver);
@@ -153,14 +154,14 @@ void RemoteMediaManagerChild::Shutdown() {
 
   nsCOMPtr<nsIThread> childThread;
   {
-    auto remoteDecoderManagerThread = sRemoteMediaManagerChildThread.Lock();
+    auto remoteDecoderManagerThread = sRemoteDecoderManagerChildThread.Lock();
     childThread = remoteDecoderManagerThread->forget();
-    LOG("RemoteMediaManagerChild's thread is released");
+    LOG("RemoteDecoderManagerChild's thread is released");
   }
   if (childThread) {
-    MOZ_ALWAYS_SUCCEEDS(childThread->Dispatch(
-        NS_NewRunnableFunction("dom::RemoteMediaManagerChild::Shutdown", []() {
-          for (auto& p : sRemoteMediaManagerChildForProcesses) {
+    MOZ_ALWAYS_SUCCEEDS(childThread->Dispatch(NS_NewRunnableFunction(
+        "dom::RemoteDecoderManagerChild::Shutdown", []() {
+          for (auto& p : sRemoteDecoderManagerChildForProcesses) {
             if (p && p->CanSend()) {
               p->Close();
             }
@@ -179,7 +180,7 @@ void RemoteMediaManagerChild::Shutdown() {
   }
 }
 
-void RemoteMediaManagerChild::RunWhenGPUProcessRecreated(
+void RemoteDecoderManagerChild::RunWhenGPUProcessRecreated(
     already_AddRefed<Runnable> aTask) {
   nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
   if (!managerThread) {
@@ -189,7 +190,7 @@ void RemoteMediaManagerChild::RunWhenGPUProcessRecreated(
   MOZ_ASSERT(managerThread->IsOnCurrentThread());
 
   // If we've already been recreated, then run the task immediately.
-  auto* manager = GetSingleton(RemoteMediaIn::GpuProcess);
+  auto* manager = GetSingleton(RemoteDecodeIn::GpuProcess);
   if (manager && manager != this && manager->CanSend()) {
     RefPtr<Runnable> task = aTask;
     task->Run();
@@ -199,8 +200,8 @@ void RemoteMediaManagerChild::RunWhenGPUProcessRecreated(
 }
 
 /* static */
-RemoteMediaManagerChild* RemoteMediaManagerChild::GetSingleton(
-    RemoteMediaIn aLocation) {
+RemoteDecoderManagerChild* RemoteDecoderManagerChild::GetSingleton(
+    RemoteDecodeIn aLocation) {
   nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
   if (!managerThread) {
     // We've been shutdown, bail.
@@ -208,37 +209,37 @@ RemoteMediaManagerChild* RemoteMediaManagerChild::GetSingleton(
   }
   MOZ_ASSERT(managerThread->IsOnCurrentThread());
   switch (aLocation) {
-    case RemoteMediaIn::GpuProcess:
-    case RemoteMediaIn::RddProcess:
-    case RemoteMediaIn::UtilityProcess_Generic:
-    case RemoteMediaIn::UtilityProcess_AppleMedia:
-    case RemoteMediaIn::UtilityProcess_WMF:
-    case RemoteMediaIn::UtilityProcess_MFMediaEngineCDM:
-      return sRemoteMediaManagerChildForProcesses[aLocation];
+    case RemoteDecodeIn::GpuProcess:
+    case RemoteDecodeIn::RddProcess:
+    case RemoteDecodeIn::UtilityProcess_Generic:
+    case RemoteDecodeIn::UtilityProcess_AppleMedia:
+    case RemoteDecodeIn::UtilityProcess_WMF:
+    case RemoteDecodeIn::UtilityProcess_MFMediaEngineCDM:
+      return sRemoteDecoderManagerChildForProcesses[aLocation];
     default:
-      MOZ_CRASH("Unexpected RemoteMediaIn variant");
+      MOZ_CRASH("Unexpected RemoteDecode variant");
       return nullptr;
   }
 }
 
 /* static */
-nsISerialEventTarget* RemoteMediaManagerChild::GetManagerThread() {
-  auto remoteDecoderManagerThread = sRemoteMediaManagerChildThread.Lock();
+nsISerialEventTarget* RemoteDecoderManagerChild::GetManagerThread() {
+  auto remoteDecoderManagerThread = sRemoteDecoderManagerChildThread.Lock();
   return *remoteDecoderManagerThread;
 }
 
 /* static */
-bool RemoteMediaManagerChild::Supports(RemoteMediaIn aLocation,
-                                       const SupportDecoderParams& aParams,
-                                       DecoderDoctorDiagnostics* aDiagnostics) {
+bool RemoteDecoderManagerChild::Supports(
+    RemoteDecodeIn aLocation, const SupportDecoderParams& aParams,
+    DecoderDoctorDiagnostics* aDiagnostics) {
   Maybe<media::MediaCodecsSupported> supported;
   switch (aLocation) {
-    case RemoteMediaIn::GpuProcess:
-    case RemoteMediaIn::RddProcess:
-    case RemoteMediaIn::UtilityProcess_AppleMedia:
-    case RemoteMediaIn::UtilityProcess_Generic:
-    case RemoteMediaIn::UtilityProcess_WMF:
-    case RemoteMediaIn::UtilityProcess_MFMediaEngineCDM: {
+    case RemoteDecodeIn::GpuProcess:
+    case RemoteDecodeIn::RddProcess:
+    case RemoteDecodeIn::UtilityProcess_AppleMedia:
+    case RemoteDecodeIn::UtilityProcess_Generic:
+    case RemoteDecodeIn::UtilityProcess_WMF:
+    case RemoteDecodeIn::UtilityProcess_MFMediaEngineCDM: {
       StaticMutexAutoLock lock(sProcessSupportedMutex);
       supported = sProcessSupported[aLocation];
       break;
@@ -249,13 +250,13 @@ bool RemoteMediaManagerChild::Supports(RemoteMediaIn aLocation,
   if (!supported) {
     // We haven't received the correct information yet from either the GPU or
     // the RDD process nor the Utility process.
-    if (aLocation == RemoteMediaIn::UtilityProcess_Generic ||
-        aLocation == RemoteMediaIn::UtilityProcess_AppleMedia ||
-        aLocation == RemoteMediaIn::UtilityProcess_WMF ||
-        aLocation == RemoteMediaIn::UtilityProcess_MFMediaEngineCDM) {
+    if (aLocation == RemoteDecodeIn::UtilityProcess_Generic ||
+        aLocation == RemoteDecodeIn::UtilityProcess_AppleMedia ||
+        aLocation == RemoteDecodeIn::UtilityProcess_WMF ||
+        aLocation == RemoteDecodeIn::UtilityProcess_MFMediaEngineCDM) {
       LaunchUtilityProcessIfNeeded(aLocation);
     }
-    if (aLocation == RemoteMediaIn::RddProcess) {
+    if (aLocation == RemoteDecodeIn::RddProcess) {
       // Ensure the RDD process got started.
       // TODO: This can be removed once bug 1684991 is fixed.
       LaunchRDDProcessIfNeeded();
@@ -275,8 +276,8 @@ bool RemoteMediaManagerChild::Supports(RemoteMediaIn aLocation,
           return false;
         }
 #if defined(XP_WIN)
-        return aLocation == RemoteMediaIn::UtilityProcess_MFMediaEngineCDM ||
-               aLocation == RemoteMediaIn::GpuProcess;
+        return aLocation == RemoteDecodeIn::UtilityProcess_MFMediaEngineCDM ||
+               aLocation == RemoteDecodeIn::GpuProcess;
 #else
         return trackSupport.contains(TrackSupport::Video);
 #endif
@@ -299,8 +300,8 @@ bool RemoteMediaManagerChild::Supports(RemoteMediaIn aLocation,
 
 /* static */
 RefPtr<PlatformDecoderModule::CreateDecoderPromise>
-RemoteMediaManagerChild::CreateAudioDecoder(const CreateDecoderParams& aParams,
-                                            RemoteMediaIn aLocation) {
+RemoteDecoderManagerChild::CreateAudioDecoder(
+    const CreateDecoderParams& aParams, RemoteDecodeIn aLocation) {
   nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
   if (!managerThread) {
     // We got shutdown.
@@ -312,28 +313,28 @@ RemoteMediaManagerChild::CreateAudioDecoder(const CreateDecoderParams& aParams,
     return PlatformDecoderModule::CreateDecoderPromise::CreateAndReject(
         MediaResult(NS_ERROR_DOM_MEDIA_CANCELED,
                     nsPrintfCString("%s doesn't support audio decoding",
-                                    RemoteMediaInToStr(aLocation))
+                                    RemoteDecodeInToStr(aLocation))
                         .get()),
         __func__);
   }
 
   if (!aParams.mMediaEngineId &&
-      aLocation == RemoteMediaIn::UtilityProcess_MFMediaEngineCDM) {
+      aLocation == RemoteDecodeIn::UtilityProcess_MFMediaEngineCDM) {
     return PlatformDecoderModule::CreateDecoderPromise::CreateAndReject(
         MediaResult(NS_ERROR_DOM_MEDIA_NOT_SUPPORTED_ERR,
                     nsPrintfCString("%s only support for media engine playback",
-                                    RemoteMediaInToStr(aLocation))
+                                    RemoteDecodeInToStr(aLocation))
                         .get()),
         __func__);
   }
 
   RefPtr<GenericNonExclusivePromise> launchPromise;
   if (StaticPrefs::media_utility_process_enabled() &&
-      (aLocation == RemoteMediaIn::UtilityProcess_Generic ||
-       aLocation == RemoteMediaIn::UtilityProcess_AppleMedia ||
-       aLocation == RemoteMediaIn::UtilityProcess_WMF)) {
+      (aLocation == RemoteDecodeIn::UtilityProcess_Generic ||
+       aLocation == RemoteDecodeIn::UtilityProcess_AppleMedia ||
+       aLocation == RemoteDecodeIn::UtilityProcess_WMF)) {
     launchPromise = LaunchUtilityProcessIfNeeded(aLocation);
-  } else if (aLocation == RemoteMediaIn::UtilityProcess_MFMediaEngineCDM) {
+  } else if (aLocation == RemoteDecodeIn::UtilityProcess_MFMediaEngineCDM) {
     launchPromise = LaunchUtilityProcessIfNeeded(aLocation);
   } else {
     if (StaticPrefs::media_allow_audio_non_utility()) {
@@ -343,12 +344,12 @@ RemoteMediaManagerChild::CreateAudioDecoder(const CreateDecoderParams& aParams,
           MediaResult(
               NS_ERROR_DOM_MEDIA_DENIED_IN_NON_UTILITY,
               nsPrintfCString("%s is not allowed to perform audio decoding",
-                              RemoteMediaInToStr(aLocation))
+                              RemoteDecodeInToStr(aLocation))
                   .get()),
           __func__);
     }
   }
-  LOG("Create audio decoder in %s", RemoteMediaInToStr(aLocation));
+  LOG("Create audio decoder in %s", RemoteDecodeInToStr(aLocation));
 
   return launchPromise->Then(
       managerThread, __func__,
@@ -365,9 +366,9 @@ RemoteMediaManagerChild::CreateAudioDecoder(const CreateDecoderParams& aParams,
       [aLocation](nsresult aResult) {
         return PlatformDecoderModule::CreateDecoderPromise::CreateAndReject(
             MediaResult(aResult,
-                        aLocation == RemoteMediaIn::GpuProcess
+                        aLocation == RemoteDecodeIn::GpuProcess
                             ? "Couldn't start GPU process"
-                            : (aLocation == RemoteMediaIn::RddProcess
+                            : (aLocation == RemoteDecodeIn::RddProcess
                                    ? "Couldn't start RDD process"
                                    : "Couldn't start Utility process")),
             __func__);
@@ -376,8 +377,8 @@ RemoteMediaManagerChild::CreateAudioDecoder(const CreateDecoderParams& aParams,
 
 /* static */
 RefPtr<PlatformDecoderModule::CreateDecoderPromise>
-RemoteMediaManagerChild::CreateVideoDecoder(const CreateDecoderParams& aParams,
-                                            RemoteMediaIn aLocation) {
+RemoteDecoderManagerChild::CreateVideoDecoder(
+    const CreateDecoderParams& aParams, RemoteDecodeIn aLocation) {
   nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
   if (!managerThread) {
     // We got shutdown.
@@ -385,7 +386,7 @@ RemoteMediaManagerChild::CreateVideoDecoder(const CreateDecoderParams& aParams,
         NS_ERROR_DOM_MEDIA_CANCELED, __func__);
   }
 
-  if (!aParams.mKnowsCompositor && aLocation == RemoteMediaIn::GpuProcess) {
+  if (!aParams.mKnowsCompositor && aLocation == RemoteDecodeIn::GpuProcess) {
     // We don't have an image bridge; don't attempt to decode in the GPU
     // process.
     return PlatformDecoderModule::CreateDecoderPromise::CreateAndReject(
@@ -396,32 +397,32 @@ RemoteMediaManagerChild::CreateVideoDecoder(const CreateDecoderParams& aParams,
     return PlatformDecoderModule::CreateDecoderPromise::CreateAndReject(
         MediaResult(NS_ERROR_DOM_MEDIA_CANCELED,
                     nsPrintfCString("%s doesn't support video decoding",
-                                    RemoteMediaInToStr(aLocation))
+                                    RemoteDecodeInToStr(aLocation))
                         .get()),
         __func__);
   }
 
   if (!aParams.mMediaEngineId &&
-      aLocation == RemoteMediaIn::UtilityProcess_MFMediaEngineCDM) {
+      aLocation == RemoteDecodeIn::UtilityProcess_MFMediaEngineCDM) {
     return PlatformDecoderModule::CreateDecoderPromise::CreateAndReject(
         MediaResult(NS_ERROR_DOM_MEDIA_NOT_SUPPORTED_ERR,
                     nsPrintfCString("%s only support for media engine playback",
-                                    RemoteMediaInToStr(aLocation))
+                                    RemoteDecodeInToStr(aLocation))
                         .get()),
         __func__);
   }
 
-  MOZ_ASSERT(aLocation != RemoteMediaIn::Unspecified);
+  MOZ_ASSERT(aLocation != RemoteDecodeIn::Unspecified);
 
   RefPtr<GenericNonExclusivePromise> p;
-  if (aLocation == RemoteMediaIn::GpuProcess) {
+  if (aLocation == RemoteDecodeIn::GpuProcess) {
     p = GenericNonExclusivePromise::CreateAndResolve(true, __func__);
-  } else if (aLocation == RemoteMediaIn::UtilityProcess_MFMediaEngineCDM) {
+  } else if (aLocation == RemoteDecodeIn::UtilityProcess_MFMediaEngineCDM) {
     p = LaunchUtilityProcessIfNeeded(aLocation);
   } else {
     p = LaunchRDDProcessIfNeeded();
   }
-  LOG("Create video decoder in %s", RemoteMediaInToStr(aLocation));
+  LOG("Create video decoder in %s", RemoteDecodeInToStr(aLocation));
 
   return p->Then(
       managerThread, __func__,
@@ -447,8 +448,8 @@ RemoteMediaManagerChild::CreateVideoDecoder(const CreateDecoderParams& aParams,
 
 /* static */
 RefPtr<PlatformDecoderModule::CreateDecoderPromise>
-RemoteMediaManagerChild::Construct(RefPtr<RemoteDecoderChild>&& aChild,
-                                   RemoteMediaIn aLocation) {
+RemoteDecoderManagerChild::Construct(RefPtr<RemoteDecoderChild>&& aChild,
+                                     RemoteDecodeIn aLocation) {
   nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
   if (!managerThread) {
     // We got shutdown.
@@ -475,11 +476,11 @@ RemoteMediaManagerChild::Construct(RefPtr<RemoteDecoderChild>&& aChild,
             // The parent has died.
             nsresult err =
                 NS_ERROR_DOM_MEDIA_REMOTE_DECODER_CRASHED_UTILITY_ERR;
-            if (aLocation == RemoteMediaIn::GpuProcess ||
-                aLocation == RemoteMediaIn::RddProcess) {
+            if (aLocation == RemoteDecodeIn::GpuProcess ||
+                aLocation == RemoteDecodeIn::RddProcess) {
               err = NS_ERROR_DOM_MEDIA_REMOTE_DECODER_CRASHED_RDD_OR_GPU_ERR;
             } else if (aLocation ==
-                       RemoteMediaIn::UtilityProcess_MFMediaEngineCDM) {
+                       RemoteDecodeIn::UtilityProcess_MFMediaEngineCDM) {
               err = NS_ERROR_DOM_MEDIA_REMOTE_DECODER_CRASHED_MF_CDM_ERR;
             }
             return PlatformDecoderModule::CreateDecoderPromise::CreateAndReject(
@@ -490,7 +491,7 @@ RemoteMediaManagerChild::Construct(RefPtr<RemoteDecoderChild>&& aChild,
 
 /* static */
 RefPtr<GenericNonExclusivePromise>
-RemoteMediaManagerChild::LaunchRDDProcessIfNeeded() {
+RemoteDecoderManagerChild::LaunchRDDProcessIfNeeded() {
   MOZ_DIAGNOSTIC_ASSERT(XRE_IsContentProcess(),
                         "Only supported from a content process.");
 
@@ -502,7 +503,7 @@ RemoteMediaManagerChild::LaunchRDDProcessIfNeeded() {
   }
 
   StaticMutexAutoLock lock(sLaunchMutex);
-  auto& rddLaunchPromise = sLaunchPromises[RemoteMediaIn::RddProcess];
+  auto& rddLaunchPromise = sLaunchPromises[RemoteDecodeIn::RddProcess];
   if (rddLaunchPromise) {
     return rddLaunchPromise;
   }
@@ -515,7 +516,7 @@ RemoteMediaManagerChild::LaunchRDDProcessIfNeeded() {
   //    process has not setup (or has lost) its IPC connection.
   // In the code below, we assume we need to launch the RDD process and
   // setup the IPC connections.  However, if the manager thread for
-  // RemoteMediaManagerChild is available we do a quick check to see
+  // RemoteDecoderManagerChild is available we do a quick check to see
   // if we can send (meaning the IPC channel is open).  If we can send,
   // then no work is necessary.  If we can't send, then we call
   // LaunchRDDProcess which will launch RDD if necessary, and setup the
@@ -523,7 +524,7 @@ RemoteMediaManagerChild::LaunchRDDProcessIfNeeded() {
 
   RefPtr<GenericNonExclusivePromise> p = InvokeAsync(
       managerThread, __func__, []() -> RefPtr<GenericNonExclusivePromise> {
-        auto* rps = GetSingleton(RemoteMediaIn::RddProcess);
+        auto* rps = GetSingleton(RemoteDecodeIn::RddProcess);
         if (rps && rps->CanSend()) {
           return GenericNonExclusivePromise::CreateAndResolve(true, __func__);
         }
@@ -550,9 +551,9 @@ RemoteMediaManagerChild::LaunchRDDProcessIfNeeded() {
                 return GenericNonExclusivePromise::CreateAndReject(rv,
                                                                    __func__);
               }
-              OpenRemoteMediaManagerChildForProcess(
+              OpenRemoteDecoderManagerChildForProcess(
                   std::get<1>(std::move(aResult.ResolveValue())),
-                  RemoteMediaIn::RddProcess);
+                  RemoteDecodeIn::RddProcess);
               return GenericNonExclusivePromise::CreateAndResolve(true,
                                                                   __func__);
             });
@@ -563,7 +564,7 @@ RemoteMediaManagerChild::LaunchRDDProcessIfNeeded() {
       managerThread, __func__,
       [](const GenericNonExclusivePromise::ResolveOrRejectValue& aResult) {
         StaticMutexAutoLock lock(sLaunchMutex);
-        sLaunchPromises[RemoteMediaIn::RddProcess] = nullptr;
+        sLaunchPromises[RemoteDecodeIn::RddProcess] = nullptr;
         return GenericNonExclusivePromise::CreateAndResolveOrReject(aResult,
                                                                     __func__);
       });
@@ -574,7 +575,8 @@ RemoteMediaManagerChild::LaunchRDDProcessIfNeeded() {
 
 /* static */
 RefPtr<GenericNonExclusivePromise>
-RemoteMediaManagerChild::LaunchUtilityProcessIfNeeded(RemoteMediaIn aLocation) {
+RemoteDecoderManagerChild::LaunchUtilityProcessIfNeeded(
+    RemoteDecodeIn aLocation) {
   MOZ_DIAGNOSTIC_ASSERT(XRE_IsContentProcess(),
                         "Only supported from a content process.");
 
@@ -585,10 +587,10 @@ RemoteMediaManagerChild::LaunchUtilityProcessIfNeeded(RemoteMediaIn aLocation) {
                                                        __func__);
   }
 
-  MOZ_ASSERT(aLocation == RemoteMediaIn::UtilityProcess_Generic ||
-             aLocation == RemoteMediaIn::UtilityProcess_AppleMedia ||
-             aLocation == RemoteMediaIn::UtilityProcess_WMF ||
-             aLocation == RemoteMediaIn::UtilityProcess_MFMediaEngineCDM);
+  MOZ_ASSERT(aLocation == RemoteDecodeIn::UtilityProcess_Generic ||
+             aLocation == RemoteDecodeIn::UtilityProcess_AppleMedia ||
+             aLocation == RemoteDecodeIn::UtilityProcess_WMF ||
+             aLocation == RemoteDecodeIn::UtilityProcess_MFMediaEngineCDM);
   StaticMutexAutoLock lock(sLaunchMutex);
   auto& utilityLaunchPromise = sLaunchPromises[aLocation];
 
@@ -604,7 +606,7 @@ RemoteMediaManagerChild::LaunchUtilityProcessIfNeeded(RemoteMediaIn aLocation) {
   //    process has not setup (or has lost) its IPC connection.
   // In the code below, we assume we need to launch the Utility process and
   // setup the IPC connections.  However, if the manager thread for
-  // RemoteMediaManagerChild is available we do a quick check to see
+  // RemoteDecoderManagerChild is available we do a quick check to see
   // if we can send (meaning the IPC channel is open).  If we can send,
   // then no work is necessary.  If we can't send, then we call
   // LaunchUtilityProcess which will launch Utility if necessary, and setup the
@@ -643,7 +645,7 @@ RemoteMediaManagerChild::LaunchUtilityProcessIfNeeded(RemoteMediaIn aLocation) {
                        return GenericNonExclusivePromise::CreateAndReject(
                            rv, __func__);
                      }
-                     OpenRemoteMediaManagerChildForProcess(
+                     OpenRemoteDecoderManagerChildForProcess(
                          std::get<1>(std::move(aResult.ResolveValue())),
                          aLocation);
                      return GenericNonExclusivePromise::CreateAndResolve(
@@ -676,13 +678,13 @@ RemoteMediaManagerChild::LaunchUtilityProcessIfNeeded(RemoteMediaIn aLocation) {
 }
 
 /* static */
-TrackSupportSet RemoteMediaManagerChild::GetTrackSupport(
-    RemoteMediaIn aLocation) {
+TrackSupportSet RemoteDecoderManagerChild::GetTrackSupport(
+    RemoteDecodeIn aLocation) {
   switch (aLocation) {
-    case RemoteMediaIn::GpuProcess: {
+    case RemoteDecodeIn::GpuProcess: {
       return TrackSupportSet{TrackSupport::Video};
     }
-    case RemoteMediaIn::RddProcess: {
+    case RemoteDecodeIn::RddProcess: {
       TrackSupportSet s{TrackSupport::Video};
       // Only use RDD for audio decoding if we don't have the utility process.
       if (!StaticPrefs::media_utility_process_enabled()) {
@@ -690,13 +692,13 @@ TrackSupportSet RemoteMediaManagerChild::GetTrackSupport(
       }
       return s;
     }
-    case RemoteMediaIn::UtilityProcess_Generic:
-    case RemoteMediaIn::UtilityProcess_AppleMedia:
-    case RemoteMediaIn::UtilityProcess_WMF:
+    case RemoteDecodeIn::UtilityProcess_Generic:
+    case RemoteDecodeIn::UtilityProcess_AppleMedia:
+    case RemoteDecodeIn::UtilityProcess_WMF:
       return StaticPrefs::media_utility_process_enabled()
                  ? TrackSupportSet{TrackSupport::Audio}
                  : TrackSupportSet{TrackSupport::None};
-    case RemoteMediaIn::UtilityProcess_MFMediaEngineCDM: {
+    case RemoteDecodeIn::UtilityProcess_MFMediaEngineCDM: {
       TrackSupportSet s{TrackSupport::None};
 #ifdef MOZ_WMF_MEDIA_ENGINE
       // When we enable the media engine, it would need both tracks to
@@ -713,7 +715,7 @@ TrackSupportSet RemoteMediaManagerChild::GetTrackSupport(
   return TrackSupportSet{TrackSupport::None};
 }
 
-PRemoteDecoderChild* RemoteMediaManagerChild::AllocPRemoteDecoderChild(
+PRemoteDecoderChild* RemoteDecoderManagerChild::AllocPRemoteDecoderChild(
     const RemoteDecoderInfoIPDL& /* not used */,
     const CreateDecoderParams::OptionSet& aOptions,
     const Maybe<layers::TextureFactoryIdentifier>& aIdentifier,
@@ -722,25 +724,25 @@ PRemoteDecoderChild* RemoteMediaManagerChild::AllocPRemoteDecoderChild(
   // RemoteDecoderModule is responsible for creating RemoteDecoderChild
   // classes.
   MOZ_ASSERT(false,
-             "RemoteMediaManagerChild cannot create "
+             "RemoteDecoderManagerChild cannot create "
              "RemoteDecoderChild classes");
   return nullptr;
 }
 
-bool RemoteMediaManagerChild::DeallocPRemoteDecoderChild(
+bool RemoteDecoderManagerChild::DeallocPRemoteDecoderChild(
     PRemoteDecoderChild* actor) {
   RemoteDecoderChild* child = static_cast<RemoteDecoderChild*>(actor);
   child->IPDLActorDestroyed();
   return true;
 }
 
-PMFMediaEngineChild* RemoteMediaManagerChild::AllocPMFMediaEngineChild() {
+PMFMediaEngineChild* RemoteDecoderManagerChild::AllocPMFMediaEngineChild() {
   MOZ_ASSERT_UNREACHABLE(
-      "RemoteMediaManagerChild cannot create MFMediaEngineChild classes");
+      "RemoteDecoderManagerChild cannot create MFMediaEngineChild classes");
   return nullptr;
 }
 
-bool RemoteMediaManagerChild::DeallocPMFMediaEngineChild(
+bool RemoteDecoderManagerChild::DeallocPMFMediaEngineChild(
     PMFMediaEngineChild* actor) {
 #ifdef MOZ_WMF_MEDIA_ENGINE
   MFMediaEngineChild* child = static_cast<MFMediaEngineChild*>(actor);
@@ -749,33 +751,34 @@ bool RemoteMediaManagerChild::DeallocPMFMediaEngineChild(
   return true;
 }
 
-PMFCDMChild* RemoteMediaManagerChild::AllocPMFCDMChild(const nsAString&) {
+PMFCDMChild* RemoteDecoderManagerChild::AllocPMFCDMChild(const nsAString&) {
   MOZ_ASSERT_UNREACHABLE(
-      "RemoteMediaManagerChild cannot create PMFContentDecryptionModuleChild "
+      "RemoteDecoderManagerChild cannot create PMFContentDecryptionModuleChild "
       "classes");
   return nullptr;
 }
 
-bool RemoteMediaManagerChild::DeallocPMFCDMChild(PMFCDMChild* actor) {
+bool RemoteDecoderManagerChild::DeallocPMFCDMChild(PMFCDMChild* actor) {
 #ifdef MOZ_WMF_CDM
   static_cast<MFCDMChild*>(actor)->IPDLActorDestroyed();
 #endif
   return true;
 }
 
-RemoteMediaManagerChild::RemoteMediaManagerChild(RemoteMediaIn aLocation)
+RemoteDecoderManagerChild::RemoteDecoderManagerChild(RemoteDecodeIn aLocation)
     : mLocation(aLocation) {
-  MOZ_ASSERT(mLocation == RemoteMediaIn::GpuProcess ||
-             mLocation == RemoteMediaIn::RddProcess ||
-             mLocation == RemoteMediaIn::UtilityProcess_Generic ||
-             mLocation == RemoteMediaIn::UtilityProcess_AppleMedia ||
-             mLocation == RemoteMediaIn::UtilityProcess_WMF ||
-             mLocation == RemoteMediaIn::UtilityProcess_MFMediaEngineCDM);
+  MOZ_ASSERT(mLocation == RemoteDecodeIn::GpuProcess ||
+             mLocation == RemoteDecodeIn::RddProcess ||
+             mLocation == RemoteDecodeIn::UtilityProcess_Generic ||
+             mLocation == RemoteDecodeIn::UtilityProcess_AppleMedia ||
+             mLocation == RemoteDecodeIn::UtilityProcess_WMF ||
+             mLocation == RemoteDecodeIn::UtilityProcess_MFMediaEngineCDM);
 }
 
 /* static */
-void RemoteMediaManagerChild::OpenRemoteMediaManagerChildForProcess(
-    Endpoint<PRemoteMediaManagerChild>&& aEndpoint, RemoteMediaIn aLocation) {
+void RemoteDecoderManagerChild::OpenRemoteDecoderManagerChildForProcess(
+    Endpoint<PRemoteDecoderManagerChild>&& aEndpoint,
+    RemoteDecodeIn aLocation) {
   nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
   if (!managerThread) {
     // We've been shutdown, bail.
@@ -787,7 +790,7 @@ void RemoteMediaManagerChild::OpenRemoteMediaManagerChildForProcess(
   // even if we fail since this is as close to being recreated as we will ever
   // be.
   auto runRecreateTasksIfNeeded = MakeScopeExit([aLocation]() {
-    if (aLocation == RemoteMediaIn::GpuProcess) {
+    if (aLocation == RemoteDecodeIn::GpuProcess) {
       for (Runnable* task : *sRecreateTasks) {
         task->Run();
       }
@@ -795,55 +798,55 @@ void RemoteMediaManagerChild::OpenRemoteMediaManagerChildForProcess(
     }
   });
 
-  // Only create RemoteMediaManagerChild, bind new endpoint and init
+  // Only create RemoteDecoderManagerChild, bind new endpoint and init
   // ipdl if:
-  // 1) haven't init'd sRemoteMediaManagerChildForProcesses[aLocation]
+  // 1) haven't init'd sRemoteDecoderManagerChildForProcesses[aLocation]
   // or
   // 2) if ActorDestroy was called meaning the other end of the ipc channel was
   //    torn down
   // But for GPU process, we always recreate a new manager child.
-  MOZ_ASSERT(aLocation != RemoteMediaIn::SENTINEL);
+  MOZ_ASSERT(aLocation != RemoteDecodeIn::SENTINEL);
   auto& remoteDecoderManagerChild =
-      sRemoteMediaManagerChildForProcesses[aLocation];
-  if (aLocation != RemoteMediaIn::GpuProcess && remoteDecoderManagerChild &&
+      sRemoteDecoderManagerChildForProcesses[aLocation];
+  if (aLocation != RemoteDecodeIn::GpuProcess && remoteDecoderManagerChild &&
       remoteDecoderManagerChild->CanSend()) {
     return;
   }
   remoteDecoderManagerChild = nullptr;
   if (aEndpoint.IsValid()) {
-    RefPtr<RemoteMediaManagerChild> manager =
-        new RemoteMediaManagerChild(aLocation);
+    RefPtr<RemoteDecoderManagerChild> manager =
+        new RemoteDecoderManagerChild(aLocation);
     if (aEndpoint.Bind(manager)) {
       remoteDecoderManagerChild = manager;
     }
   }
 }
 
-bool RemoteMediaManagerChild::DeallocShmem(mozilla::ipc::Shmem& aShmem) {
+bool RemoteDecoderManagerChild::DeallocShmem(mozilla::ipc::Shmem& aShmem) {
   nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
   if (!managerThread) {
     return false;
   }
   if (!managerThread->IsOnCurrentThread()) {
     MOZ_ALWAYS_SUCCEEDS(managerThread->Dispatch(NS_NewRunnableFunction(
-        "RemoteMediaManagerChild::DeallocShmem",
+        "RemoteDecoderManagerChild::DeallocShmem",
         [self = RefPtr{this}, shmem = aShmem]() mutable {
           if (self->CanSend()) {
-            self->PRemoteMediaManagerChild::DeallocShmem(shmem);
+            self->PRemoteDecoderManagerChild::DeallocShmem(shmem);
           }
         })));
     return true;
   }
-  return PRemoteMediaManagerChild::DeallocShmem(aShmem);
+  return PRemoteDecoderManagerChild::DeallocShmem(aShmem);
 }
 
 struct SurfaceDescriptorUserData {
-  SurfaceDescriptorUserData(RemoteMediaManagerChild* aAllocator,
+  SurfaceDescriptorUserData(RemoteDecoderManagerChild* aAllocator,
                             SurfaceDescriptor& aSD)
       : mAllocator(aAllocator), mSD(aSD) {}
   ~SurfaceDescriptorUserData() { DestroySurfaceDescriptor(mAllocator, &mSD); }
 
-  RefPtr<RemoteMediaManagerChild> mAllocator;
+  RefPtr<RemoteDecoderManagerChild> mAllocator;
   SurfaceDescriptor mSD;
 };
 
@@ -853,7 +856,7 @@ void DeleteSurfaceDescriptorUserData(void* aClosure) {
   delete sd;
 }
 
-already_AddRefed<SourceSurface> RemoteMediaManagerChild::Readback(
+already_AddRefed<SourceSurface> RemoteDecoderManagerChild::Readback(
     const SurfaceDescriptorGPUVideo& aSD) {
   // We can't use NS_DispatchAndSpinEventLoopUntilComplete here since that will
   // spin the event loop while it waits. This function can be called from JS and
@@ -865,7 +868,7 @@ already_AddRefed<SourceSurface> RemoteMediaManagerChild::Readback(
 
   SurfaceDescriptor sd;
   RefPtr<Runnable> task =
-      NS_NewRunnableFunction("RemoteMediaManagerChild::Readback", [&]() {
+      NS_NewRunnableFunction("RemoteDecoderManagerChild::Readback", [&]() {
         if (CanSend()) {
           SendReadback(aSD, &sd);
         }
@@ -891,14 +894,14 @@ already_AddRefed<SourceSurface> RemoteMediaManagerChild::Readback(
   return source.forget();
 }
 
-void RemoteMediaManagerChild::DeallocateSurfaceDescriptor(
+void RemoteDecoderManagerChild::DeallocateSurfaceDescriptor(
     const SurfaceDescriptorGPUVideo& aSD) {
   nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
   if (!managerThread) {
     return;
   }
   MOZ_ALWAYS_SUCCEEDS(managerThread->Dispatch(NS_NewRunnableFunction(
-      "RemoteMediaManagerChild::DeallocateSurfaceDescriptor",
+      "RemoteDecoderManagerChild::DeallocateSurfaceDescriptor",
       [ref = RefPtr{this}, sd = aSD]() {
         if (ref->CanSend()) {
           ref->SendDeallocateSurfaceDescriptorGPUVideo(sd);
@@ -906,19 +909,19 @@ void RemoteMediaManagerChild::DeallocateSurfaceDescriptor(
       })));
 }
 
-void RemoteMediaManagerChild::HandleFatalError(const char* aMsg) {
+void RemoteDecoderManagerChild::HandleFatalError(const char* aMsg) {
   dom::ContentChild::FatalErrorIfNotUsingGPUProcess(aMsg, OtherChildID());
 }
 
-void RemoteMediaManagerChild::SetSupported(
-    RemoteMediaIn aLocation, const media::MediaCodecsSupported& aSupported) {
+void RemoteDecoderManagerChild::SetSupported(
+    RemoteDecodeIn aLocation, const media::MediaCodecsSupported& aSupported) {
   switch (aLocation) {
-    case RemoteMediaIn::GpuProcess:
-    case RemoteMediaIn::RddProcess:
-    case RemoteMediaIn::UtilityProcess_AppleMedia:
-    case RemoteMediaIn::UtilityProcess_Generic:
-    case RemoteMediaIn::UtilityProcess_WMF:
-    case RemoteMediaIn::UtilityProcess_MFMediaEngineCDM: {
+    case RemoteDecodeIn::GpuProcess:
+    case RemoteDecodeIn::RddProcess:
+    case RemoteDecodeIn::UtilityProcess_AppleMedia:
+    case RemoteDecodeIn::UtilityProcess_Generic:
+    case RemoteDecodeIn::UtilityProcess_WMF:
+    case RemoteDecodeIn::UtilityProcess_MFMediaEngineCDM: {
       StaticMutexAutoLock lock(sProcessSupportedMutex);
       sProcessSupported[aLocation] = Some(aSupported);
       break;
