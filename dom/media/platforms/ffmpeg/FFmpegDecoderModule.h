@@ -43,7 +43,7 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
       return;
     }
 #  else
-    if (!XRE_IsRDDProcess()) {
+    if (!XRE_IsRDDProcess() && !XRE_IsParentProcess()) {
       return;
     }
 #  endif
