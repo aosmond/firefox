@@ -234,7 +234,6 @@ class ArrayOfRemoteMediaRawData {
     bool mEOS;
     // This will be zero for audio.
     int32_t mHeight;
-    Maybe<uint8_t> mTemporalLayerId;
     Maybe<media::TimeInterval> mOriginalPresentationWindow;
     Maybe<CryptoInfo> mCryptoConfig;
   };
