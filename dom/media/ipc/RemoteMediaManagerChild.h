@@ -35,10 +35,8 @@ enum class RemoteMediaIn {
 
 enum class TrackSupport {
   None,
-  DecodeAudio,
-  DecodeVideo,
-  EncodeAudio,
-  EncodeVideo,
+  Audio,
+  Video,
 };
 using TrackSupportSet = EnumSet<TrackSupport, uint8_t>;
 

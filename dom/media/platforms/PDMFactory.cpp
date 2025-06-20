@@ -860,7 +860,7 @@ DecodeSupportSet PDMFactory::SupportsMimeType(
   const TrackSupportSet supports =
       RemoteMediaManagerChild::GetTrackSupport(aLocation);
 
-  if (supports.contains(TrackSupport::DecodeVideo)) {
+  if (supports.contains(TrackSupport::Video)) {
     if (MP4Decoder::IsH264(aMimeType)) {
       return MCSInfo::GetDecodeSupportSet(MediaCodec::H264, aSupported);
     }
@@ -880,7 +880,7 @@ DecodeSupportSet PDMFactory::SupportsMimeType(
     }
   }
 
-  if (supports.contains(TrackSupport::DecodeAudio)) {
+  if (supports.contains(TrackSupport::Audio)) {
     if (MP4Decoder::IsAAC(aMimeType)) {
       return MCSInfo::GetDecodeSupportSet(MediaCodec::AAC, aSupported);
     }
