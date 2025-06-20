@@ -10,7 +10,6 @@
 
 #include "GPUVideoImage.h"
 #include "PDMFactory.h"
-#include "PlatformEncoderModule.h"
 #include "ipc/EnumSerializer.h"
 #include "mozilla/EnumTypeTraits.h"
 #include "mozilla/PRemoteMediaManagerChild.h"
@@ -22,7 +21,6 @@ namespace mozilla {
 class PMFCDMChild;
 class PMFMediaEngineChild;
 class RemoteDecoderChild;
-class RemoteMediaDataEncoderChild;
 
 enum class RemoteMediaIn {
   Unspecified,
@@ -68,10 +66,6 @@ class RemoteMediaManagerChild final
       const CreateDecoderParams& aParams, RemoteMediaIn aLocation);
   static RefPtr<PlatformDecoderModule::CreateDecoderPromise> CreateVideoDecoder(
       const CreateDecoderParams& aParams, RemoteMediaIn aLocation);
-
-  static RefPtr<PlatformEncoderModule::CreateEncoderPromise> InitializeEncoder(
-      RefPtr<RemoteMediaDataEncoderChild>&& aEncoder,
-      const EncoderConfig& aConfig);
 
   // Can be called from any thread.
   static nsISerialEventTarget* GetManagerThread();

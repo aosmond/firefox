@@ -12,7 +12,6 @@
 #include "ImageContainer.h"
 #include "PDMFactory.h"
 #include "RemoteAudioDecoder.h"
-#include "RemoteMediaDataEncoderParent.h"
 #include "RemoteVideoDecoder.h"
 #include "VideoUtils.h"  // for MediaThreadType
 #include "mozilla/RDDParent.h"
@@ -237,12 +236,6 @@ bool RemoteMediaManagerParent::DeallocPRemoteDecoderParent(
   RemoteDecoderParent* parent = static_cast<RemoteDecoderParent*>(actor);
   parent->Destroy();
   return true;
-}
-
-already_AddRefed<PRemoteEncoderParent>
-RemoteMediaManagerParent::AllocPRemoteEncoderParent(
-    const EncoderConfig& aConfig) {
-  return MakeAndAddRef<RemoteMediaDataEncoderParent>(aConfig);
 }
 
 PMFMediaEngineParent* RemoteMediaManagerParent::AllocPMFMediaEngineParent() {
