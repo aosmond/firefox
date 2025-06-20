@@ -161,19 +161,11 @@ void MCSInfo::GetMediaCodecsSupportedString(
     aSupportString.Append(supportInfo.commonName);
     bool foundSupport = false;
     if (aSupportedCodecs.contains(it.swDecodeSupport)) {
-      aSupportString.Append(" SWDEC"_ns);
+      aSupportString.Append(" SW"_ns);
       foundSupport = true;
     }
     if (aSupportedCodecs.contains(it.hwDecodeSupport)) {
-      aSupportString.Append(" HWDEC"_ns);
-      foundSupport = true;
-    }
-    if (aSupportedCodecs.contains(it.swEncodeSupport)) {
-      aSupportString.Append(" SWENC"_ns);
-      foundSupport = true;
-    }
-    if (aSupportedCodecs.contains(it.hwEncodeSupport)) {
-      aSupportString.Append(" HWENC"_ns);
+      aSupportString.Append(" HW"_ns);
       foundSupport = true;
     }
     if (aSupportedCodecs.contains(it.lackOfHWExtenstion)) {
