@@ -12,7 +12,6 @@
 #include "FFmpegLog.h"
 #include "libavutil/error.h"
 #include "mozilla/StaticMutex.h"
-#include "mozilla/StaticPrefs_media.h"
 
 #include "FFmpegUtils.h"
 
@@ -21,34 +20,28 @@ namespace mozilla {
 template <>
 AVCodecID GetFFmpegEncoderCodecId<LIBAV_VER>(CodecType aCodec) {
 #if LIBAVCODEC_VERSION_MAJOR >= 58
-  if (XRE_IsParentProcess() || XRE_IsContentProcess() ||
-      StaticPrefs::media_use_remote_encoder_video()) {
-    if (aCodec == CodecType::VP8) {
-      return AV_CODEC_ID_VP8;
-    }
-
-    if (aCodec == CodecType::VP9) {
-      return AV_CODEC_ID_VP9;
-    }
-
-    if (aCodec == CodecType::H264) {
-      return AV_CODEC_ID_H264;
-    }
-
-    if (aCodec == CodecType::AV1) {
-      return AV_CODEC_ID_AV1;
-    }
+  if (aCodec == CodecType::VP8) {
+    return AV_CODEC_ID_VP8;
   }
 
-  if (XRE_IsParentProcess() || XRE_IsContentProcess() ||
-      StaticPrefs::media_use_remote_encoder_audio()) {
-    if (aCodec == CodecType::Opus) {
-      return AV_CODEC_ID_OPUS;
-    }
+  if (aCodec == CodecType::VP9) {
+    return AV_CODEC_ID_VP9;
+  }
 
-    if (aCodec == CodecType::Vorbis) {
-      return AV_CODEC_ID_VORBIS;
-    }
+  if (aCodec == CodecType::H264) {
+    return AV_CODEC_ID_H264;
+  }
+
+  if (aCodec == CodecType::AV1) {
+    return AV_CODEC_ID_AV1;
+  }
+
+  if (aCodec == CodecType::Opus) {
+    return AV_CODEC_ID_OPUS;
+  }
+
+  if (aCodec == CodecType::Vorbis) {
+    return AV_CODEC_ID_VORBIS;
   }
 #endif
   return AV_CODEC_ID_NONE;
