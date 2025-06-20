@@ -42,7 +42,6 @@ class PEMFactory final {
       RemoteMediaIn aLocation);
 
  private:
-  void InitGpuPEMs();
   void InitRddPEMs();
   void InitUtilityPEMs();
   void InitContentPEMs();
