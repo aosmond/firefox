@@ -697,7 +697,7 @@ class offscreencanvas_webcodecs_main_webgl_vp9(PageloaderTest):
     tpchrome = False
     timeout = 600
     gecko_profile_interval = 2
-    gecko_profile_extra_threads = "CanvasRenderer,MediaSupervisor"
+    gecko_profile_extra_threads = "CanvasRenderer,MediaSupervisor,MediaPDecoder,MediaPEncoder,MediaDecoderStateMachine,GMPThread"
     win_counters = linux_counters = mac_counters = None
     filters = filter.ignore_first.prepare(1) + filter.median.prepare()
     unit = "ms"
@@ -763,7 +763,7 @@ class offscreencanvas_webcodecs_worker_webgl_vp9(PageloaderTest):
     tpchrome = False
     timeout = 600
     gecko_profile_interval = 2
-    gecko_profile_extra_threads = "DOM Worker,CanvasRenderer,MediaSupervisor"
+    gecko_profile_extra_threads = "DOM Worker,CanvasRenderer,MediaSupervisor,MediaPDecoder,MediaPEncoder,MediaDecoderStateMachine,GMPThread"
     win_counters = linux_counters = mac_counters = None
     filters = filter.ignore_first.prepare(1) + filter.median.prepare()
     unit = "ms"
@@ -833,7 +833,7 @@ class offscreencanvas_webcodecs_main_2d_vp9(PageloaderTest):
     tpchrome = False
     timeout = 600
     gecko_profile_interval = 2
-    gecko_profile_extra_threads = "CanvasRenderer,CanvasWorker,MediaSupervisor"
+    gecko_profile_extra_threads = "CanvasRenderer,CanvasWorker,MediaSupervisor,MediaPDecoder,MediaPEncoder,MediaDecoderStateMachine,GMPThread"
     win_counters = linux_counters = mac_counters = None
     filters = filter.ignore_first.prepare(1) + filter.median.prepare()
     unit = "ms"
@@ -904,7 +904,7 @@ class offscreencanvas_webcodecs_worker_2d_vp9(PageloaderTest):
     timeout = 600
     gecko_profile_interval = 2
     gecko_profile_extra_threads = (
-        "DOM Worker,CanvasRenderer,CanvasWorker,MediaSupervisor"
+        "DOM Worker,CanvasRenderer,CanvasWorker,MediaSupervisor,MediaPDecoder,MediaPEncoder,MediaDecoderStateMachine,GMPThread"
     )
     win_counters = linux_counters = mac_counters = None
     filters = filter.ignore_first.prepare(1) + filter.median.prepare()
