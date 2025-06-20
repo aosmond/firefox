@@ -11563,11 +11563,7 @@
 # Allow using ffmpeg encoder
 -   name: media.ffmpeg.encoder.enabled
     type: RelaxedAtomicBool
-#if !defined(MOZ_WIDGET_ANDROID)
     value: true
-#else
-    value: false
-#endif
     mirror: always
 
 # A high quantizer value allows the encoder to use higher compression, but
