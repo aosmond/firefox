@@ -4121,3 +4121,15 @@ pref("privacy.query_stripping.strip_on_share.canDisable", true);
 // Captcha Detection
 pref("captchadetection.loglevel", "Warn");
 pref("captchadetection.actor.enabled", true);
+
+pref("logging.FFmpegVideo", 5);
+pref("logging.FFmpegAudio", 5);
+pref("logging.FFmpegLib", 5);
+pref("logging.AndroidDecoderModule", 5);
+pref("logging.PlatformDecoderModule", 5);
+pref("logging.PlatformEncoderModule", 5);
+pref("logging.MediaDecoder", 5);
+pref("logging.MediaEncoder", 5);
+pref("logging.RemoteDecode", 5);
+pref("logging.MediaFormatReader", 5);
+pref("logging.WebCodecs", 5);
