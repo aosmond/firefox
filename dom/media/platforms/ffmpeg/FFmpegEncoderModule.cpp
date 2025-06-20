@@ -30,7 +30,7 @@ template <int V>
 #  ifdef XP_WIN
   if (!XRE_IsGPUProcess())
 #  else
-  if (!XRE_IsRDDProcess())
+  if (!XRE_IsRDDProcess() && !XRE_IsParentProcess())
 #  endif
   {
     MOZ_LOG(sPEMLog, LogLevel::Debug,
