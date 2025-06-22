@@ -521,7 +521,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::InitV4L2Decoder() {
 }
 #endif
 
-#if LIBAVCODEC_VERSION_MAJOR < 58
+#ifdef MOZ_FFMPEG_USE_DURATION_MAP
 FFmpegVideoDecoder<LIBAV_VER>::PtsCorrectionContext::PtsCorrectionContext()
     : mNumFaultyPts(0),
       mNumFaultyDts(0),
@@ -1223,7 +1223,8 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
   if (IsHardwareAccelerated())
 #  endif
   {
-    InsertDuration(aSample->mTimecode.ToMicroseconds(),
+    FFMPEG_LOG("InsertDuration time=%" PRId64 " timecode=%" PRId64 " duration=%" PRId64, aSample->mTime.ToMicroseconds(), aSample->mTimecode.ToMicroseconds(), aSample->mDuration.ToMicroseconds());
+    InsertDuration(aSample->mTime.ToMicroseconds(),
                    aSample->mDuration.ToMicroseconds());
   }
 #endif
@@ -1314,8 +1315,11 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
 #    elif defined(MOZ_WIDGET_ANDROID)
       rv = CreateImageMediaCodec(
           mFrame->pkt_pos, GetFramePts(mFrame),
-          TakeDuration(mFrame->pkt_dts, aSample->mDuration.ToMicroseconds()),
+          TakeDuration(GetFramePts(mFrame), aSample->mDuration.ToMicroseconds()),
           aResults);
+      int64_t pts =
+          mPtsContext.GuessCorrectPts(GetFramePts(mFrame), mFrame->pkt_dts);
+      FFMPEG_LOG("TakeDuration (2) pkt_pts=%" PRId64 " guess_pts=%" PRId64 " pkt_dts=%" PRId64 " default=%" PRId64, GetFramePts(mFrame), pts, mFrame->pkt_dts, aSample->mDuration.ToMicroseconds());
 #    else
       return MediaResult(NS_ERROR_DOM_MEDIA_DECODE_ERR,
                          RESULT_DETAIL("No HW decoding implementation!"));
@@ -1415,6 +1419,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
       mPtsContext.GuessCorrectPts(GetFramePts(mFrame), mFrame->pkt_dts);
   int64_t duration =
       TakeDuration(mFrame->pkt_dts, aSample->mDuration.ToMicroseconds());
+  FFMPEG_LOG("TakeDuration pkt_pts=%" PRId64 " guess_pts=%" PRId64 " pkt_dts=%" PRId64 " default=%" PRId64, GetFramePts(mFrame), pts, mFrame->pkt_dts, aSample->mDuration.ToMicroseconds());
 
   MediaResult rv = CreateImage(aSample->mOffset, pts, duration, aResults);
   if (NS_FAILED(rv)) {
@@ -1826,10 +1831,8 @@ RefPtr<MediaDataDecoder::FlushPromise>
 FFmpegVideoDecoder<LIBAV_VER>::ProcessFlush() {
   FFMPEG_LOG("ProcessFlush()");
   MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
-#if LIBAVCODEC_VERSION_MAJOR < 58
-  mPtsContext.Reset();
-#endif
 #ifdef MOZ_FFMPEG_USE_DURATION_MAP
+  mPtsContext.Reset();
   mDurationMap.Clear();
 #endif
 #if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
@@ -2427,7 +2430,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::CreateImageMediaCodec(
   RefPtr<VideoData> v = VideoData::CreateFromImage(
       mInfo.mDisplay, aOffset, TimeUnit::FromMicroseconds(aPts),
       TimeUnit::FromMicroseconds(aDuration), img.forget(),
-      mFrame->flags & AV_FRAME_FLAG_KEY, TimeUnit::FromMicroseconds(-1));
+      mFrame->flags & AV_FRAME_FLAG_KEY, TimeUnit::FromMicroseconds(aPts));
 
   aResults.AppendElement(std::move(v));
   return NS_OK;
