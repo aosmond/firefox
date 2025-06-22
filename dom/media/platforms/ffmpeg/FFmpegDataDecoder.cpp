@@ -274,9 +274,9 @@ FFmpegDataDecoder<LIBAV_VER>::ProcessDrain() {
       } else if (mSeekTarget) {
         FFMPEG_LOG("FFmpegDataDecoder: seek target reset");
         mSeekTarget.reset();
-      } else if (results.Length() > 4) {
-        FFMPEG_LOG("FFmpegDataDecoder: drop sample due to excess frames");
-        results.RemoveElementAt(0);
+      //} else if (results.Length() > 4) {
+      //  FFMPEG_LOG("FFmpegDataDecoder: drop sample due to excess frames");
+      //  results.RemoveElementAt(0);
       } else {
         FFMPEG_LOG("FFmpegDataDecoder: keep sample");
       }
