@@ -261,7 +261,7 @@ class FFmpegVideoDecoder<LIBAV_VER>
   DecodeStats mDecodeStats;
 #endif
 
-#if LIBAVCODEC_VERSION_MAJOR < 58
+#ifdef MOZ_FFMPEG_USE_DURATION_MAP
   class PtsCorrectionContext {
    public:
     PtsCorrectionContext();
@@ -277,9 +277,6 @@ class FFmpegVideoDecoder<LIBAV_VER>
   };
 
   PtsCorrectionContext mPtsContext;
-#endif
-
-#ifdef MOZ_FFMPEG_USE_DURATION_MAP
   DurationMap mDurationMap;
 
   void InsertDuration(int64_t aDts, int64_t aDuration) {
