@@ -1232,7 +1232,9 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
 #if LIBAVCODEC_VERSION_MAJOR >= 58
   packet->duration = aSample->mDuration.ToMicroseconds();
   int res = mLib->avcodec_send_packet(mCodecContext, packet);
-  if (res < 0) {
+  if (res == int(AVERROR_EOF) && !aData) {
+    FFMPEG_LOG("avcodec_send_packet eof while draining, ignore");
+  } else if (res < 0) {
     // In theory, avcodec_send_packet could sent -EAGAIN should its internal
     // buffers be full. In practice this can't happen as we only feed one frame
     // at a time, and we immediately call avcodec_receive_frame right after.
@@ -1379,10 +1381,6 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
     });
     if (aGotFrame) {
       *aGotFrame = true;
-      while (aResults.Length() > 4) {
-        FFMPEG_LOG("DoDecode: drop sample due to excess frames");
-        aResults.RemoveElementAt(0);
-      }
     }
   } while (true);
 #else
