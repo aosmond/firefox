@@ -2395,6 +2395,8 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::CreateImageMediaCodec(
    public:
     explicit CompositeListener(FFmpegLibWrapper* aLib) : mLib(aLib) {}
 
+    ~CompositeListener() override { MaybeRelease(/* aRender */ false); }
+
     bool Init(AVFrame* aFrame) {
       if (NS_WARN_IF(!aFrame) || NS_WARN_IF(!aFrame->buf[0])) {
         return false;
@@ -2406,17 +2408,26 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::CreateImageMediaCodec(
       return true;
     }
 
-    void operator()(void) override {
+    void operator()(void) override { MaybeRelease(/* aRender */ true); }
+
+    void MaybeRelease(bool aRender) {
+      if (mReleased) {
+        return;
+      }
       for (int i = 0; i < AV_NUM_DATA_POINTERS; ++i) {
         if (mFrame->data[i]) {
-          mLib->av_mediacodec_release_buffer((AVMediaCodecBuffer*)mFrame->data[i], 1);
+          mLib->av_mediacodec_release_buffer(
+              (AVMediaCodecBuffer*)mFrame->data[i], aRender ? 1 : 0);
         }
       }
       mLib->av_frame_free(&mFrame);
+      mReleased = true;
     }
+
     FFmpegLibWrapper* mLib;
     AVFrame* mFrame = nullptr;
     const bool mVideoCodec = true;
+    bool mReleased = false;
   };
 
   auto listener = MakeUnique<CompositeListener>(mLib);
