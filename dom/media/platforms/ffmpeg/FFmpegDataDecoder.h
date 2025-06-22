@@ -83,6 +83,7 @@ class FFmpegDataDecoder<LIBAV_VER>
   virtual int ParserFlags() const { return PARSER_FLAG_COMPLETE_FRAMES; }
 
   MozPromiseHolder<DecodePromise> mPromise;
+  MozPromiseHolder<DecodePromise> mDrainPromise;
   media::TimeUnit mLastInputDts;  // used on Taskqueue
 };
 

@@ -169,6 +169,12 @@ FFmpegDataDecoder<LIBAV_VER>::ProcessDecode(MediaRawData* aSample) {
   DecodedData results;
   MediaResult rv = DoDecode(aSample, &gotFrame, results);
   if (NS_FAILED(rv)) {
+    if (!mDrainPromise.IsEmpty()) {
+      if (rv.Code() == NS_ERROR_DOM_MEDIA_END_OF_STREAM) {
+        mDrainPromise.Resolve(std::move(results), __func__);
+      }
+      mDrainPromise.Reject(rv, __func__);
+    }
     return DecodePromise::CreateAndReject(rv, __func__);
   }
   return DecodePromise::CreateAndResolve(std::move(results), __func__);
@@ -241,16 +247,21 @@ FFmpegDataDecoder<LIBAV_VER>::ProcessDrain() {
   // as pending data in the pipeline being corrupt or invalid, non-EOS errors
   // like NS_ERROR_DOM_MEDIA_DECODE_ERR will be returned and must be handled
   // accordingly.
-  do {
+  RefPtr<DecodePromise> p = mDrainPromise.Ensure(__func__);
+  while (true) {
+    FFMPEG_LOG("FFmpegDataDecoder: draining buffers (1)");
     MediaResult r = DoDecode(empty, &gotFrame, results);
     if (NS_FAILED(r)) {
       if (r.Code() == NS_ERROR_DOM_MEDIA_END_OF_STREAM) {
-        break;
+        mDrainPromise.Resolve(std::move(results), __func__);
+      } else {
+        mDrainPromise.Reject(r, __func__);
       }
-      return DecodePromise::CreateAndReject(r, __func__);
+      return p;
     }
-  } while (gotFrame);
-  return DecodePromise::CreateAndResolve(std::move(results), __func__);
+  }
+  mDrainPromise.Resolve(std::move(results), __func__);
+  return p;
 }
 
 RefPtr<MediaDataDecoder::FlushPromise>
