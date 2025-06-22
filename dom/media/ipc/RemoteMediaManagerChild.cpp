@@ -1097,6 +1097,7 @@ void RemoteMediaManagerChild::OnSetCurrent(
   if (!managerThread) {
     return;
   }
+  LOG("RemoteMediaManagerChild::OnSetCurrent");
   MOZ_ALWAYS_SUCCEEDS(managerThread->Dispatch(NS_NewRunnableFunction(
       "RemoteMediaManagerChild::OnSetCurrent",
       [ref = RefPtr{this}, sd = aSD]() {

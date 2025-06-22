@@ -1379,6 +1379,10 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
     });
     if (aGotFrame) {
       *aGotFrame = true;
+      while (aResults.Length() > 4) {
+        FFMPEG_LOG("DoDecode: drop sample due to excess frames");
+        aResults.RemoveElementAt(0);
+      }
     }
   } while (true);
 #else
@@ -2405,6 +2409,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::CreateImageMediaCodec(
       if (NS_WARN_IF(!mFrame)) {
         return false;
       }
+      FFMPEG_LOG("[AO] [%p] CompositeListener::Init -- frame %p\n", this, mFrame);
       return true;
     }
 
@@ -2414,6 +2419,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::CreateImageMediaCodec(
       if (mReleased) {
         return;
       }
+      FFMPEG_LOG("[AO] [%p] CompositeListener::MaybeRelease -- frame %p\n", this, mFrame);
       for (int i = 0; i < AV_NUM_DATA_POINTERS; ++i) {
         if (mFrame->data[i]) {
           mLib->av_mediacodec_release_buffer(

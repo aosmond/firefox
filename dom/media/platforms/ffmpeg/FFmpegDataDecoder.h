@@ -39,6 +39,7 @@ class FFmpegDataDecoder<LIBAV_VER>
   RefPtr<DecodePromise> Drain() override;
   RefPtr<FlushPromise> Flush() override;
   RefPtr<ShutdownPromise> Shutdown() override;
+  void SetSeekThreshold(const media::TimeUnit& aTime) override;
 
   static AVCodec* FindSoftwareAVCodec(FFmpegLibWrapper* aLib, AVCodecID aCodec);
 #ifdef MOZ_USE_HWDECODE
@@ -84,6 +85,7 @@ class FFmpegDataDecoder<LIBAV_VER>
 
   MozPromiseHolder<DecodePromise> mPromise;
   media::TimeUnit mLastInputDts;  // used on Taskqueue
+  Maybe<media::TimeUnit> mSeekTarget;  // used on Taskqueue
 };
 
 }  // namespace mozilla

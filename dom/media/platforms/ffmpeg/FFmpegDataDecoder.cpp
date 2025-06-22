@@ -188,6 +188,7 @@ MediaResult FFmpegDataDecoder<LIBAV_VER>::DoDecode(
     if (aGotFrame) {
       *aGotFrame = false;
     }
+    FFMPEG_LOG("FFmpegDataDecoder: internal decode loop");
     while (inputSize) {
       uint8_t* data = inputData;
       int size = inputSize;
@@ -196,12 +197,15 @@ MediaResult FFmpegDataDecoder<LIBAV_VER>::DoDecode(
           aSample->mTime.ToMicroseconds(), aSample->mTimecode.ToMicroseconds(),
           aSample->mOffset);
       if (size_t(len) > inputSize) {
+        FFMPEG_LOG("FFmpegDataDecoder: internal decode loop, too big");
         return NS_ERROR_DOM_MEDIA_DECODE_ERR;
       }
       if (size) {
         bool gotFrame = false;
+        FFMPEG_LOG("FFmpegDataDecoder: internal looped DoDecode");
         MediaResult rv = DoDecode(aSample, data, size, &gotFrame, aResults);
         if (NS_FAILED(rv)) {
+          FFMPEG_LOG("FFmpegDataDecoder: internal decode loop, error");
           return rv;
         }
         if (gotFrame && aGotFrame) {
@@ -211,9 +215,12 @@ MediaResult FFmpegDataDecoder<LIBAV_VER>::DoDecode(
       inputData += len;
       inputSize -= len;
     }
+    FFMPEG_LOG("FFmpegDataDecoder: internal decode loop, done");
     return NS_OK;
   }
+  FFMPEG_LOG("FFmpegDataDecoder: internal base DoDecode start");
   return DoDecode(aSample, inputData, inputSize, aGotFrame, aResults);
+  FFMPEG_LOG("FFmpegDataDecoder: internal base DoDecode end");
 }
 
 RefPtr<MediaDataDecoder::FlushPromise> FFmpegDataDecoder<LIBAV_VER>::Flush() {
@@ -224,6 +231,14 @@ RefPtr<MediaDataDecoder::FlushPromise> FFmpegDataDecoder<LIBAV_VER>::Flush() {
 RefPtr<MediaDataDecoder::DecodePromise> FFmpegDataDecoder<LIBAV_VER>::Drain() {
   return InvokeAsync(mTaskQueue, this, __func__,
                      &FFmpegDataDecoder<LIBAV_VER>::ProcessDrain);
+}
+
+void FFmpegDataDecoder<LIBAV_VER>::SetSeekThreshold(
+    const media::TimeUnit& aTime) {
+  MOZ_ALWAYS_SUCCEEDS(mTaskQueue->Dispatch(
+      NS_NewRunnableFunction(__func__, [self = RefPtr{this}, time = aTime] {
+        self->mSeekTarget = time.IsValid() ? Some(time) : Nothing();
+      })));
 }
 
 RefPtr<MediaDataDecoder::DecodePromise>
@@ -241,15 +256,35 @@ FFmpegDataDecoder<LIBAV_VER>::ProcessDrain() {
   // as pending data in the pipeline being corrupt or invalid, non-EOS errors
   // like NS_ERROR_DOM_MEDIA_DECODE_ERR will be returned and must be handled
   // accordingly.
+  FFMPEG_LOG("FFmpegDataDecoder: drain started");
   do {
     MediaResult r = DoDecode(empty, &gotFrame, results);
     if (NS_FAILED(r)) {
       if (r.Code() == NS_ERROR_DOM_MEDIA_END_OF_STREAM) {
+        FFMPEG_LOG("FFmpegDataDecoder: drain end of stream");
         break;
       }
+      FFMPEG_LOG("FFmpegDataDecoder: drain error");
       return DecodePromise::CreateAndReject(r, __func__);
     }
+    if (gotFrame) {
+      if (mSeekTarget && results.LastElement()->GetEndTime() <= mSeekTarget.value()) {
+        FFMPEG_LOG("FFmpegDataDecoder: drop sample due to seek target");
+        results.RemoveElementAt(0);
+      } else if (mSeekTarget) {
+        FFMPEG_LOG("FFmpegDataDecoder: seek target reset");
+        mSeekTarget.reset();
+      } else if (results.Length() > 4) {
+        FFMPEG_LOG("FFmpegDataDecoder: drop sample due to excess frames");
+        results.RemoveElementAt(0);
+      } else {
+        FFMPEG_LOG("FFmpegDataDecoder: keep sample");
+      }
+    } else {
+      FFMPEG_LOG("FFmpegDataDecoder: no sample");
+    }
   } while (gotFrame);
+  FFMPEG_LOG("FFmpegDataDecoder: drain complete");
   return DecodePromise::CreateAndResolve(std::move(results), __func__);
 }
 
