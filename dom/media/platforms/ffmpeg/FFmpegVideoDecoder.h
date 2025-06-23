@@ -101,6 +101,8 @@ class FFmpegVideoDecoder<LIBAV_VER>
 #endif
   }
 
+  void SetSeekThreshold(const media::TimeUnit& aTime) override;
+
   static AVCodecID GetCodecId(const nsACString& aMimeType);
 
 #if LIBAVCODEC_VERSION_MAJOR >= 57 && LIBAVUTIL_VERSION_MAJOR >= 56
@@ -284,6 +286,8 @@ class FFmpegVideoDecoder<LIBAV_VER>
 
   PtsCorrectionContext mPtsContext;
 #endif
+
+  Maybe<media::TimeUnit> mSeekTarget;
 
 #ifdef MOZ_FFMPEG_USE_INPUT_INFO_MAP
   struct InputInfo {

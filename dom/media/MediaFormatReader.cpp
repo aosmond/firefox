@@ -2379,6 +2379,7 @@ void MediaFormatReader::Update(TrackType aTrack) {
   decoder.mUpdateScheduled = false;
 
   if (!mInitDone) {
+    LOGV("early return, !mInitDone");
     return;
   }
 
@@ -2407,6 +2408,7 @@ void MediaFormatReader::Update(TrackType aTrack) {
   FrameStatistics::AutoNotifyDecoded a(mFrameStats);
 
   // Drop any frames found prior our internal seek target.
+  LOGV("check for stale frames");
   while (decoder.mTimeThreshold && decoder.mOutput.Length()) {
     RefPtr<MediaData>& output = decoder.mOutput[0];
     InternalSeekTarget target = decoder.mTimeThreshold.ref();
@@ -2428,6 +2430,7 @@ void MediaFormatReader::Update(TrackType aTrack) {
     }
   }
 
+  LOGV("check for null frames");
   while (decoder.mOutput.Length() &&
          decoder.mOutput[0]->mType == MediaData::Type::NULL_DATA) {
     LOGV("Dropping null data. Time: %" PRId64,
@@ -2436,9 +2439,11 @@ void MediaFormatReader::Update(TrackType aTrack) {
     decoder.mSizeOfQueue -= 1;
   }
 
+  LOGV("check for decoder promise");
   if (decoder.HasPromise()) {
     needOutput = true;
     if (decoder.mOutput.Length()) {
+      LOGV("return output");
       RefPtr<MediaData> output = decoder.mOutput[0];
       decoder.mOutput.RemoveElementAt(0);
       decoder.mSizeOfQueue -= 1;

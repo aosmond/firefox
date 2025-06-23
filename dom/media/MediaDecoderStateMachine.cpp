@@ -3331,9 +3331,9 @@ void MediaDecoderStateMachine::BufferingState::Step() {
                mMaster->HasNotifiedPlaybackError());
     SLOG(
         "In buffering mode, waiting to be notified: outOfAudio: %d, "
-        "mAudioStatus: %s, outOfVideo: %d, mVideoStatus: %s",
-        mMaster->OutOfDecodedAudio(), mMaster->AudioRequestStatus(),
-        mMaster->OutOfDecodedVideo(), mMaster->VideoRequestStatus());
+        "mAudioStatus: %s, audioSize: %zu, outOfVideo: %d, mVideoStatus: %s, videoSize: %zu",
+        mMaster->OutOfDecodedAudio(), mMaster->AudioRequestStatus(), mMaster->AudioQueue().GetSize(),
+        mMaster->OutOfDecodedVideo(), mMaster->VideoRequestStatus(), mMaster->VideoQueue().GetSize());
     return;
   }
 
@@ -3551,6 +3551,7 @@ bool MediaDecoderStateMachine::HaveEnoughDecodedAudio() const {
 
 bool MediaDecoderStateMachine::HaveEnoughDecodedVideo() const {
   MOZ_ASSERT(OnTaskQueue());
+  LOG("[AO] queue size %f, ample frames %u, playback rate %f, enoughWithAudio %d, accel %d", static_cast<double>(VideoQueue().GetSize()), GetAmpleVideoFrames(), mPlaybackRate, IsVideoDataEnoughComparedWithAudio(), mReader->VideoIsHardwareAccelerated());
   return static_cast<double>(VideoQueue().GetSize()) >=
              GetAmpleVideoFrames() * mPlaybackRate + 1 &&
          IsVideoDataEnoughComparedWithAudio();

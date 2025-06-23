@@ -1112,6 +1112,12 @@ bool FFmpegVideoDecoder<LIBAV_VER>::DecodeStats::IsDecodingSlow() const {
   return mDecodedFramesLate > mMaxLateDecodedFrames;
 }
 
+void FFmpegVideoDecoder<LIBAV_VER>::SetSeekThreshold(const media::TimeUnit& aTime) {
+  MOZ_ALWAYS_SUCCEEDS(mTaskQueue->Dispatch(NS_NewRunnableFunction(__func__, [self = RefPtr{this}, time = aTime]() {
+				  self->mSeekTarget = time.IsValid() ? Some(time) : Nothing();
+				  })));
+}
+
 void FFmpegVideoDecoder<LIBAV_VER>::DecodeStats::UpdateDecodeTimes(
     const AVFrame* aFrame) {
   TimeStamp now = TimeStamp::Now();
@@ -1301,6 +1307,20 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
 
     mDecodeStats.UpdateDecodeTimes(mFrame);
 
+#ifdef MOZ_WIDGET_ANDROID
+    InputInfo info(aSample);
+    info.mTimecode = -1;
+    TakeInputInfo(mFrame, info);
+    if (mSeekTarget) {
+      auto endTime = TimeUnit::FromMicroseconds(GetFramePts(mFrame)) + TimeUnit::FromMicroseconds(info.mDuration);
+      FFMPEG_LOG("  frame end time %" PRId64  ", seek target %" PRId64, endTime.ToMicroseconds(), mSeekTarget.value().ToMicroseconds());
+      if (endTime <= mSeekTarget.value()) {
+        continue;
+      }
+      mSeekTarget.reset();
+    }
+#endif
+
     MediaResult rv;
 #  ifdef MOZ_USE_HWDECODE
     if (IsHardwareAccelerated()) {
@@ -1334,9 +1354,6 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
       rv = CreateImageD3D11(mFrame->pkt_pos, GetFramePts(mFrame),
                             Duration(mFrame), aResults);
 #    elif defined(MOZ_WIDGET_ANDROID)
-      InputInfo info(aSample);
-      info.mTimecode = -1;
-      TakeInputInfo(mFrame, info);
       rv = CreateImageMediaCodec(mFrame->pkt_pos, GetFramePts(mFrame),
                                  info.mTimecode, info.mDuration, aResults);
 #    else
@@ -1356,6 +1373,10 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
     RecordFrame(aSample, aResults.LastElement());
     if (aGotFrame) {
       *aGotFrame = true;
+    }
+
+    if (aResults.Length() > 3) {
+      return NS_OK;
     }
   } while (true);
 #else
@@ -2426,6 +2447,11 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::CreateImageMediaCodec(
     FFMPEG_LOG("  CreateImageMediaCodec failed to init listener");
     return NS_ERROR_INVALID_ARG;
   }
+
+  //if (mHasSentDrainPacket) {
+  //  FFMPEG_LOG("  forcing release of HW buffer during drain");
+  //  listener->MaybeRelease(false);
+  //}
 
   img->RegisterSetCurrentCallback(std::move(listener));
 

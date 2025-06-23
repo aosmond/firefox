@@ -4133,3 +4133,7 @@ pref("logging.MediaEncoder", 5);
 pref("logging.RemoteDecode", 5);
 pref("logging.MediaFormatReader", 5);
 pref("logging.WebCodecs", 5);
+pref("logging.MediaSource", 5);
+pref("logging.MediaSourceSamples", 5);
+pref("logging.AudioSinkWrapper", 5);
+pref("logging.AudioSink", 5);

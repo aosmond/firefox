@@ -639,14 +639,14 @@ void VideoSink::UpdateRenderedVideoFrames() {
 
   MaybeResolveEndPromise();
 
-  // Get the timestamp of the next frame. Schedule the next update at
-  // the start time of the next frame. If we don't have a next frame,
-  // we will run render loops again upon incoming frames.
-  if (frames.Length() < 2) {
+  if (frames.IsEmpty()) {
     return;
   }
 
-  int64_t nextFrameTime = frames[1]->mTime.ToMicroseconds();
+  int64_t nextFrameTime = frames.Length() >= 2
+                              ? frames[1]->mTime.ToMicroseconds()
+                              : frames[0]->GetEndTime().ToMicroseconds();
+
   int64_t delta = std::max(nextFrameTime - clockTime.ToMicroseconds(),
                            MIN_UPDATE_INTERVAL_US);
   TimeStamp target = nowTime + TimeDuration::FromMicroseconds(
