@@ -246,18 +246,22 @@ FFmpegDataDecoder<LIBAV_VER>::ProcessDrain() {
     MediaResult r = DoDecode(empty, &gotFrame, results);
     if (NS_FAILED(r)) {
       if (r.Code() == NS_ERROR_DOM_MEDIA_END_OF_STREAM) {
+        FFMPEG_LOG("FFmpegDataDecoder: drain hit end of stream");
         break;
       }
       if (r.Code() == NS_ERROR_NOT_AVAILABLE) {
         if (results.IsEmpty()) {
+          FFMPEG_LOG("FFmpegDataDecoder: deferring drain");
           return p;
         }
         break;
       }
+      FFMPEG_LOG("FFmpegDataDecoder: rejecting drain");
       mDrainPromise.Reject(r, __func__);
       return p;
     }
   } while (gotFrame);
+  FFMPEG_LOG("FFmpegDataDecoder: drained %zu buffers", results.Length());
   mDrainPromise.Resolve(std::move(results), __func__);
   return p;
 }

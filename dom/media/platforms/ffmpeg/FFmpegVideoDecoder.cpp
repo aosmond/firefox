@@ -1297,7 +1297,16 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
       return NS_ERROR_DOM_MEDIA_END_OF_STREAM;
     }
     if (res == AVERROR(EAGAIN)) {
-      return NS_OK;
+      if (aData) {
+        FFMPEG_LOG("  Try again, no buffer available.");
+        return NS_OK;
+      }
+      if (MaybeQueueDrain(aResults)) {
+        FFMPEG_LOG("  Try again, output buffer shortage.");
+        return NS_ERROR_NOT_AVAILABLE;
+      }
+      FFMPEG_LOG("  Try again, end of stream.");
+      return NS_ERROR_DOM_MEDIA_END_OF_STREAM;
     }
     if (res < 0) {
       char errStr[AV_ERROR_MAX_STRING_SIZE];
@@ -1498,12 +1507,14 @@ void FFmpegVideoDecoder<LIBAV_VER>::QueueResumeDrain() {
 bool FFmpegVideoDecoder<LIBAV_VER>::MaybeQueueDrain(
     const MediaDataDecoder::DecodedData& aData) {
 #if defined(MOZ_WIDGET_ANDROID) && defined(USING_MOZFFVPX)
+  FFMPEG_LOGV("check drain, %zu frames, eos %d", aData.Length(), mLib->moz_avcodec_mediacodec_is_eos(mCodecContext));
   if (aData.IsEmpty() && !mLib->moz_avcodec_mediacodec_is_eos(mCodecContext)) {
     FFMPEG_LOGV("Schedule drain");
     return true;
   }
   mShouldResumeDrain = false;
 #endif
+  FFMPEG_LOGV("drain finished");
   return false;
 }
 
