@@ -168,7 +168,8 @@ if not CONFIG['MOZ_FFVPX_AUDIOONLY']:
 
 if CONFIG["MOZ_WIDGET_TOOLKIT"] == "android":
     EXPORTS.ffvpx += [
-        "mediacodec.h"
+        "mediacodec.h",
+        "moz_avcodec.h",
     ]
 
 LOCAL_INCLUDES += [
