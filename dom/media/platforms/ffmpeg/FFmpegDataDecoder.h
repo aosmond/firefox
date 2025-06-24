@@ -42,7 +42,9 @@ class FFmpegDataDecoder<LIBAV_VER>
 
   static AVCodec* FindSoftwareAVCodec(FFmpegLibWrapper* aLib, AVCodecID aCodec);
 #ifdef MOZ_USE_HWDECODE
-  static AVCodec* FindHardwareAVCodec(FFmpegLibWrapper* aLib, AVCodecID aCodec);
+  static AVCodec* FindHardwareAVCodec(
+      FFmpegLibWrapper* aLib, AVCodecID aCodec,
+      AVHWDeviceType aDeviceType = AV_HWDEVICE_TYPE_NONE);
 #endif
 
  protected:

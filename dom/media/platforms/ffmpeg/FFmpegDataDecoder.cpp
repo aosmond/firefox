@@ -362,7 +362,7 @@ AVFrame* FFmpegDataDecoder<LIBAV_VER>::PrepareFrame() {
 
 #ifdef MOZ_USE_HWDECODE
 /* static */ AVCodec* FFmpegDataDecoder<LIBAV_VER>::FindHardwareAVCodec(
-    FFmpegLibWrapper* aLib, AVCodecID aCodec) {
+    FFmpegLibWrapper* aLib, AVCodecID aCodec, AVHWDeviceType aDeviceType) {
   AVCodec* fallbackCodec = nullptr;
   void* opaque = nullptr;
   while (AVCodec* codec = aLib->av_codec_iterate(&opaque)) {
@@ -375,7 +375,9 @@ AVFrame* FFmpegDataDecoder<LIBAV_VER>::PrepareFrame() {
     for (int i = 0;
          const AVCodecHWConfig* config = aLib->avcodec_get_hw_config(codec, i);
          ++i) {
-      if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) {
+      if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
+          (aDeviceType == AV_HWDEVICE_TYPE_NONE ||
+           config->device_type == aDeviceType)) {
         hasHwConfig = true;
         break;
       }

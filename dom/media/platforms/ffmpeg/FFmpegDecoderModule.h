@@ -36,6 +36,16 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
     }
 #  endif
 
+    const AVHWDeviceType kDeviceTypes[] = {
+#  ifdef XP_WIN
+        AV_HWDEVICE_TYPE_D3D11VA,
+#  endif
+#  ifdef MOZ_WIDGET_GTK
+        AV_HWDEVICE_TYPE_VAAPI,
+        AV_HWDEVICE_TYPE_NONE,  // Placeholder for V4L2.
+#  endif
+    };
+
     struct CodecEntry {
       AVCodecID mId;
       bool mHwAllowed;
@@ -72,8 +82,15 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
         continue;
       }
 
-      const auto* codec =
-          FFmpegDataDecoder<V>::FindHardwareAVCodec(aLib, entry.mId);
+      const AVCodec* codec = nullptr;
+      for (const auto& deviceType : kDeviceTypes) {
+        codec = FFmpegVideoDecoder<V>::FindVideoHardwareAVCodec(aLib, entry.mId,
+                                                                deviceType);
+        if (codec) {
+          break;
+        }
+      }
+
       if (!codec) {
         MOZ_LOG(sPDMLog, LogLevel::Debug,
                 ("No hw codec or decoder for %s", AVCodecToString(entry.mId)));
