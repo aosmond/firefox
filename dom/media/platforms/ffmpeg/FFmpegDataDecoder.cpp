@@ -319,6 +319,13 @@ AVFrame* FFmpegDataDecoder<LIBAV_VER>::PrepareFrame() {
     }
 #endif
 
+#ifdef MOZ_WIDGET_GTK
+    // Video4Linux codecs are hardware accelerated but not tagged as such.
+    if (strstr(codec->name, "_v4l")) {
+      continue;
+    }
+#endif
+
     // We prefer to use our own OpenH264 decoder through the plugin over ffmpeg
     // by default due to broken decoding with some versions. openh264 has broken
     // decoding of some h264 videos so don't use it unless explicitly allowed
