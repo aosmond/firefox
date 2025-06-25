@@ -305,6 +305,7 @@ AVFrame* FFmpegDataDecoder<LIBAV_VER>::PrepareFrame() {
 
 /* static */ AVCodec* FFmpegDataDecoder<LIBAV_VER>::FindSoftwareAVCodec(
     FFmpegLibWrapper* aLib, AVCodecID aCodec) {
+#if LIBAVCODEC_VERSION_MAJOR >= 58
   AVCodec* fallbackCodec = nullptr;
   void* opaque = nullptr;
   while (AVCodec* codec = aLib->av_codec_iterate(&opaque)) {
@@ -312,20 +313,9 @@ AVFrame* FFmpegDataDecoder<LIBAV_VER>::PrepareFrame() {
       continue;
     }
 
-#if LIBAVCODEC_VERSION_MAJOR >= 58
     if (codec->capabilities & AV_CODEC_CAP_HARDWARE) {
-      FFMPEGV_LOG("want software codec, is hardware, skipping %s", codec->name);
       continue;
     }
-#endif
-
-#ifdef MOZ_WIDGET_GTK
-    // Video4Linux codecs are hardware accelerated but not tagged as such.
-    if (strstr(codec->name, "_v4l")) {
-      FFMPEGV_LOG("want software codec, is v4l, skipping %s", codec->name);
-      continue;
-    }
-#endif
 
     // We prefer to use our own OpenH264 decoder through the plugin over ffmpeg
     // by default due to broken decoding with some versions. openh264 has broken
@@ -340,28 +330,14 @@ AVFrame* FFmpegDataDecoder<LIBAV_VER>::PrepareFrame() {
       continue;
     }
 
-#if LIBAVCODEC_VERSION_MAJOR >= 57
     if (codec->capabilities & AV_CODEC_CAP_EXPERIMENTAL) {
       if (!fallbackCodec) {
         fallbackCodec = codec;
       }
       continue;
     }
-#endif
 
-    bool hasHwConfig = false;
-#if LIBAVCODEC_VERSION_MAJOR >= 58
-    for (int i = 0; const AVCodecHWConfig* config =
-                        aLib->avcodec_get_hw_config(codec, i);
-         ++i) {
-      if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) {
-        hasHwConfig = true;
-        break;
-      }
-    }
-#endif
-
-    FFMPEGV_LOG("Using preferred software codec %s (hwctx=%d)", codec->name, hasHwConfig);
+    FFMPEGV_LOG("Using preferred software codec %s", codec->name);
     return codec;
   }
 
@@ -369,6 +345,23 @@ AVFrame* FFmpegDataDecoder<LIBAV_VER>::PrepareFrame() {
     FFMPEGV_LOG("Using fallback software codec %s", fallbackCodec->name);
   }
   return fallbackCodec;
+#else
+  AVCodec* codec = aLib->avcodec_find_decoder(aCodec);
+  if (codec) {
+    // We prefer to use our own OpenH264 decoder through the plugin over ffmpeg
+    // by default due to broken decoding with some versions. openh264 has broken
+    // decoding of some h264 videos so don't use it unless explicitly allowed
+    // for now.
+    if (strcmp(codec->name, "libopenh264") == 0 &&
+        !StaticPrefs::media_ffmpeg_allow_openh264()) {
+      FFMPEGV_LOG("libopenh264 selected but disabled by pref");
+      return nullptr;
+    }
+
+    FFMPEGV_LOG("Using preferred software codec %s", codec->name);
+  }
+  return codec;
+#endif
 }
 
 #ifdef MOZ_USE_HWDECODE
