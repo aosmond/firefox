@@ -313,8 +313,8 @@ AVFrame* FFmpegDataDecoder<LIBAV_VER>::PrepareFrame() {
     }
 
 #if LIBAVCODEC_VERSION_MAJOR >= 58
-    if (codec->capabilities & AV_CODEC_CAP_HARDWARE ||
-        aLib->avcodec_get_hw_config(codec, 0)) {
+    if (codec->capabilities & AV_CODEC_CAP_HARDWARE) {
+      FFMPEGV_LOG("want software codec, is hardware, skipping %s", codec->name);
       continue;
     }
 #endif
@@ -322,6 +322,7 @@ AVFrame* FFmpegDataDecoder<LIBAV_VER>::PrepareFrame() {
 #ifdef MOZ_WIDGET_GTK
     // Video4Linux codecs are hardware accelerated but not tagged as such.
     if (strstr(codec->name, "_v4l")) {
+      FFMPEGV_LOG("want software codec, is v4l, skipping %s", codec->name);
       continue;
     }
 #endif
@@ -363,21 +364,23 @@ AVFrame* FFmpegDataDecoder<LIBAV_VER>::PrepareFrame() {
     FFmpegLibWrapper* aLib, AVCodecID aCodec, AVHWDeviceType aDeviceType) {
   AVCodec* fallbackCodec = nullptr;
   void* opaque = nullptr;
+  const bool ignoreDeviceType = aDeviceType == AV_HWDEVICE_TYPE_NONE;
   while (AVCodec* codec = aLib->av_codec_iterate(&opaque)) {
-    if (codec->id != aCodec || !aLib->av_codec_is_decoder(codec) ||
-        !(codec->capabilities & AV_CODEC_CAP_HARDWARE)) {
+    if (codec->id != aCodec || !aLib->av_codec_is_decoder(codec)) {
       continue;
     }
 
-    bool hasHwConfig = false;
-    for (int i = 0;
-         const AVCodecHWConfig* config = aLib->avcodec_get_hw_config(codec, i);
-         ++i) {
-      if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
-          (aDeviceType == AV_HWDEVICE_TYPE_NONE ||
-           config->device_type == aDeviceType)) {
-        hasHwConfig = true;
-        break;
+    bool hasHwConfig =
+        codec->capabilities & AV_CODEC_CAP_HARDWARE && ignoreDeviceType;
+    if (!hasHwConfig) {
+      for (int i = 0; const AVCodecHWConfig* config =
+                          aLib->avcodec_get_hw_config(codec, i);
+           ++i) {
+        if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
+            (ignoreDeviceType || config->device_type == aDeviceType)) {
+          hasHwConfig = true;
+          break;
+        }
       }
     }
 

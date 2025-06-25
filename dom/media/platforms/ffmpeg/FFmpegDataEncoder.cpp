@@ -62,8 +62,7 @@ AVCodec* FFmpegDataEncoder<LIBAV_VER>::FindSoftwareEncoder(
   AVCodec* fallbackCodec = nullptr;
   void* opaque = nullptr;
   while (AVCodec* codec = aLib->av_codec_iterate(&opaque)) {
-    if (codec->id != aCodecId || !aLib->av_codec_is_encoder(codec) ||
-        aLib->avcodec_get_hw_config(codec, 0)) {
+    if (codec->id != aCodecId || !aLib->av_codec_is_encoder(codec)) {
       continue;
     }
 
@@ -110,18 +109,19 @@ AVCodec* FFmpegDataEncoder<LIBAV_VER>::FindHardwareEncoder(
   AVCodec* fallbackCodec = nullptr;
   void* opaque = nullptr;
   while (AVCodec* codec = aLib->av_codec_iterate(&opaque)) {
-    if (codec->id != aCodecId || !aLib->av_codec_is_encoder(codec) ||
-        !(codec->capabilities & AV_CODEC_CAP_HARDWARE)) {
+    if (codec->id != aCodecId || !aLib->av_codec_is_encoder(codec)) {
       continue;
     }
 
-    bool hasHwConfig = false;
-    for (int i = 0;
-         const AVCodecHWConfig* config = aLib->avcodec_get_hw_config(codec, i);
-         ++i) {
-      if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) {
-        hasHwConfig = true;
-        break;
+    bool hasHwConfig = codec->capabilities & AV_CODEC_CAP_HARDWARE;
+    if (!hasHwConfig) {
+      for (int i = 0; const AVCodecHWConfig* config =
+                          aLib->avcodec_get_hw_config(codec, i);
+           ++i) {
+        if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) {
+          hasHwConfig = true;
+          break;
+        }
       }
     }
 
