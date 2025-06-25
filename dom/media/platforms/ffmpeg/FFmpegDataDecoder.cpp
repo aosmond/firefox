@@ -349,7 +349,19 @@ AVFrame* FFmpegDataDecoder<LIBAV_VER>::PrepareFrame() {
     }
 #endif
 
-    FFMPEGV_LOG("Using preferred software codec %s", codec->name);
+    bool hasHwConfig = false;
+#if LIBAVCODEC_VERSION_MAJOR >= 58
+    for (int i = 0; const AVCodecHWConfig* config =
+                        aLib->avcodec_get_hw_config(codec, i);
+         ++i) {
+      if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) {
+        hasHwConfig = true;
+        break;
+      }
+    }
+#endif
+
+    FFMPEGV_LOG("Using preferred software codec %s (hwctx=%d)", codec->name, hasHwConfig);
     return codec;
   }
 
@@ -370,21 +382,19 @@ AVFrame* FFmpegDataDecoder<LIBAV_VER>::PrepareFrame() {
       continue;
     }
 
-    bool hasHwConfig =
-        codec->capabilities & AV_CODEC_CAP_HARDWARE && ignoreDeviceType;
-    if (!hasHwConfig) {
-      for (int i = 0; const AVCodecHWConfig* config =
-                          aLib->avcodec_get_hw_config(codec, i);
-           ++i) {
-        if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
-            (ignoreDeviceType || config->device_type == aDeviceType)) {
-          hasHwConfig = true;
-          break;
-        }
+    bool hasHwCap = codec->capabilities & AV_CODEC_CAP_HARDWARE;
+    bool hasHwConfig = false;
+    for (int i = 0; const AVCodecHWConfig* config =
+                        aLib->avcodec_get_hw_config(codec, i);
+         ++i) {
+      if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
+          (ignoreDeviceType || config->device_type == aDeviceType)) {
+        hasHwConfig = true;
+        break;
       }
     }
 
-    if (!hasHwConfig) {
+    if (!hasHwConfig && !hasHwCap) {
       continue;
     }
 
@@ -395,7 +405,7 @@ AVFrame* FFmpegDataDecoder<LIBAV_VER>::PrepareFrame() {
       continue;
     }
 
-    FFMPEGV_LOG("Using preferred hardware codec %s", codec->name);
+    FFMPEGV_LOG("Using preferred hardware codec %s (hwctx=%d hwcap=%d)", codec->name, hasHwConfig, hasHwCap);
     return codec;
   }
 
