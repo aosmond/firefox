@@ -4124,7 +4124,7 @@ pref("captchadetection.actor.enabled", true);
 
 pref("logging.FFmpegVideo", 5);
 pref("logging.FFmpegAudio", 5);
-pref("logging.FFmpegLib", 5);
+//pref("logging.FFmpegLib", 5);
 pref("logging.AndroidDecoderModule", 5);
 pref("logging.PlatformDecoderModule", 5);
 pref("logging.PlatformEncoderModule", 5);
