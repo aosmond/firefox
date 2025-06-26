@@ -75,8 +75,9 @@ class FFmpegDataDecoder<LIBAV_VER>
                               // for calls into ffmpeg
   const RefPtr<TaskQueue> mTaskQueue;  // set in constructor
 
+  RefPtr<DecodePromise::Private> TakeDrainPromise(StaticString aCallSite);
   RefPtr<DecodePromise> ProcessDrain();
-  MozPromiseHolder<DecodePromise> mDrainPromise;
+  nsTArray<RefPtr<DecodePromise::Private>> mDrainPromises;
 
  private:
   RefPtr<DecodePromise> ProcessDecode(MediaRawData* aSample);
