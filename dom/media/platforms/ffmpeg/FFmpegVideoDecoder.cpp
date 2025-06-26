@@ -1452,8 +1452,8 @@ void FFmpegVideoDecoder<LIBAV_VER>::RecordFrame(const MediaRawData* aSample,
 void FFmpegVideoDecoder<LIBAV_VER>::ResumeDrain() {
   MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
 
-  if (mDrainPromise.IsEmpty()) {
-    FFMPEG_LOGV("Resume drain but promise already fulfilled");
+  if (mDrainPromises.IsEmpty()) {
+    FFMPEG_LOGV("Resume drain but promises already fulfilled");
     return;
   }
 
