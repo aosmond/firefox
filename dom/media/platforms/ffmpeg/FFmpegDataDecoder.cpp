@@ -215,6 +215,16 @@ RefPtr<MediaDataDecoder::DecodePromise> FFmpegDataDecoder<LIBAV_VER>::Drain() {
                      &FFmpegDataDecoder<LIBAV_VER>::ProcessDrain);
 }
 
+RefPtr<MediaDataDecoder::DecodePromise::Private>
+FFmpegDataDecoder<LIBAV_VER>::TakeDrainPromise(StaticString aCallSite) {
+  if (mDrainPromises.IsEmpty()) {
+    return MakeRefPtr<MediaDataDecoder::DecodePromise::Private>(aCallSite);
+  }
+  auto p = std::move(mDrainPromises[0]);
+  mDrainPromises.RemoveElementAt(0);
+  return p;
+}
+
 RefPtr<MediaDataDecoder::DecodePromise>
 FFmpegDataDecoder<LIBAV_VER>::ProcessDrain() {
   MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
@@ -230,7 +240,6 @@ FFmpegDataDecoder<LIBAV_VER>::ProcessDrain() {
   // as pending data in the pipeline being corrupt or invalid, non-EOS errors
   // like NS_ERROR_DOM_MEDIA_DECODE_ERR will be returned and must be handled
   // accordingly.
-  RefPtr<MediaDataDecoder::DecodePromise> p = mDrainPromise.Ensure(__func__);
   do {
     MediaResult r = DoDecode(empty, &gotFrame, results);
     if (NS_FAILED(r)) {
@@ -240,18 +249,35 @@ FFmpegDataDecoder<LIBAV_VER>::ProcessDrain() {
       }
       if (r.Code() == NS_ERROR_NOT_AVAILABLE) {
         if (results.IsEmpty()) {
-          FFMPEG_LOG("FFmpegDataDecoder: deferring drain");
+          auto p =
+              MakeRefPtr<MediaDataDecoder::DecodePromise::Private>(__func__);
+          mDrainPromises.AppendElement(p);
+          FFMPEG_LOG("FFmpegDataDecoder: deferring drain, %zu pending",
+                     mDrainPromises.Length());
           return p;
         }
         break;
       }
       FFMPEG_LOG("FFmpegDataDecoder: rejecting drain");
-      mDrainPromise.Reject(r, __func__);
+      auto p = TakeDrainPromise(__func__);
+      p->Reject(r, __func__);
+      for (auto& p : mDrainPromises) {
+        p->Reject(r, __func__);
+      }
+      mDrainPromises.Clear();
       return p;
     }
   } while (gotFrame);
   FFMPEG_LOG("FFmpegDataDecoder: drained %zu buffers", results.Length());
-  mDrainPromise.Resolve(std::move(results), __func__);
+  bool drainComplete = results.IsEmpty();
+  auto p = TakeDrainPromise(__func__);
+  p->Resolve(std::move(results), __func__);
+  if (drainComplete) {
+    for (auto& p : mDrainPromises) {
+      p->Resolve(DecodedData(), __func__);
+    }
+    mDrainPromises.Clear();
+  }
   return p;
 }
 
@@ -272,6 +298,11 @@ FFmpegDataDecoder<LIBAV_VER>::ProcessFlush() {
 
 void FFmpegDataDecoder<LIBAV_VER>::ProcessShutdown() {
   MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
+  for (auto& p : mDrainPromises) {
+    p->Reject(MediaResult(NS_ERROR_ABORT), __func__);
+  }
+  mDrainPromises.Clear();
+
   StaticMutexAutoLock mon(sMutex);
 
   if (mCodecContext) {
