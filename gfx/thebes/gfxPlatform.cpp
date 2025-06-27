@@ -414,6 +414,27 @@ static void FontPrefChanged(const char* aPref, void* aData) {
   gfxPlatform::GetPlatform()->FontsPrefsChanged(aPref);
 }
 
+static void DumpFeature(Feature aFeature) {
+  FeatureState& feature = gfxConfig::GetFeature(aFeature);
+  printf_stderr("[AO] DumpFeature %d, enabled %d, init %d\n", static_cast<int>(aFeature),
+                feature.IsEnabled(), feature.IsInitialized());
+  if (!feature.IsInitialized()) {
+    return;
+  }
+  feature.ForEachStatusChange([&](const char* aType, FeatureStatus aStatus,
+                                  const char* aMessage,
+                                  const nsCString& aFailureId) -> void {
+    printf_stderr("[AO] type=%s status=%d msg=%s id=%s\n", aType,
+                  static_cast<int>(aStatus), aMessage, aFailureId.Data());
+  });
+}
+
+static void DumpGfxVars() {
+  printf_stderr("[AO] gfxVars hwdec=%d wmfhwdrm=%d\n",
+                gfxVars::CanUseHardwareVideoDecoding(),
+                gfxVars::UseWMFHWDWM());
+}
+
 void gfxPlatform::OnMemoryPressure(layers::MemoryPressureReason aWhy) {
   Factory::PurgeAllCaches();
   gfxGradientCache::PurgeAllCaches();
@@ -2412,6 +2433,10 @@ static void VideoDecodingFailedChangedCallback(const char* aPref, void*) {
 void gfxPlatform::UpdateCanUseHardwareVideoDecoding() {
   if (XRE_IsParentProcess()) {
     gfxVars::SetCanUseHardwareVideoDecoding(CanUseHardwareVideoDecoding());
+    printf_stderr("[AO] sanity test\n");
+    DumpFeature(Feature::HARDWARE_VIDEO_DECODING);
+    DumpFeature(Feature::WMF_HW_DRM);
+    DumpGfxVars();
   }
 }
 
@@ -3009,6 +3034,10 @@ void gfxPlatform::InitHardwareVideoConfig() {
   nsCString message;
   nsCString failureId;
 
+  // Monitor for sanity test changes if we are enabled.
+  Preferences::RegisterCallbackAndCall(VideoDecodingFailedChangedCallback,
+                                       "media.hardware-video-decoding.failed");
+
 #define CODEC_HW_FEATURE_SETUP(name)                                         \
   FeatureState& featureDec##name =                                           \
       gfxConfig::GetFeature(Feature::name##_HW_DECODE);                      \
@@ -3059,6 +3088,11 @@ void gfxPlatform::InitHardwareVideoConfig() {
   }
   gfxVars::SetUseWMFHWDWM(featureHWDRM.IsEnabled());
 #endif
+
+  printf_stderr("[AO] init config\n");
+  DumpFeature(Feature::HARDWARE_VIDEO_DECODING);
+  DumpFeature(Feature::WMF_HW_DRM);
+  DumpGfxVars();
 }
 
 void gfxPlatform::InitWebGLConfig() {

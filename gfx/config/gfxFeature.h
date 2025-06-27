@@ -133,6 +133,7 @@ class FeatureState {
                   const nsACString& aFailureId);
   bool IsForcedOnByUser() const;
   const char* GetRuntimeMessage() const;
+ public:
   bool IsInitialized() const { return mDefault.IsInitialized(); }
 
   void AssertInitialized() const { MOZ_ASSERT(IsInitialized()); }
