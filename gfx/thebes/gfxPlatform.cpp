@@ -414,6 +414,24 @@ static void FontPrefChanged(const char* aPref, void* aData) {
   gfxPlatform::GetPlatform()->FontsPrefsChanged(aPref);
 }
 
+static void DumpFeature(Feature aFeature) {
+  FeatureState& feature = gfxConfig::GetFeature(aFeature);
+  printf_stderr("[AO] DumpFeature %d, enabled %d\n", static_cast<int>(aFeature),
+                feature.IsEnabled());
+  aFeature.ForEachStatusChange([&](const char* aType, FeatureStatus aStatus,
+                                   const char* aMessage,
+                                   const nsCString& aFailureId) -> void {
+    printf_stderr("[AO] type=%s status=%d msg=%s id=%d\n", aType,
+                  static_cast<int>(aStatus), aMessage, aFailureId.Data());
+  });
+}
+
+static void DumpGfxVars() {
+  printf_stderr("[AO] gfxVars hwdec=%d hwenc=%d wmfhwdrm=%d\n",
+                gfxVars::CanUseHardwareVideoDecoding(),
+                gfxVars::CanUseHardwareVideoEncoding(), gfxVars::UseWMFHWDWM());
+}
+
 void gfxPlatform::OnMemoryPressure(layers::MemoryPressureReason aWhy) {
   Factory::PurgeAllCaches();
   gfxGradientCache::PurgeAllCaches();
@@ -2422,6 +2440,11 @@ static void VideoDecodingFailedChangedCallback(const char* aPref, void*) {
 
   gfxVars::SetCanUseHardwareVideoDecoding(featureDec.IsEnabled());
   gfxVars::SetCanUseHardwareVideoEncoding(featureEnc.IsEnabled());
+
+  DumpFeature(Feature::HARDWARE_VIDEO_DECODING);
+  DumpFeature(Feature::HARDWARE_VIDEO_ENCODING);
+  DumpFeature(Feature::WMF_HW_DRM);
+  DumpGfxVars();
 }
 
 void gfxPlatform::UpdateForceSubpixelAAWherePossible() {
@@ -3081,13 +3104,19 @@ void gfxPlatform::InitHardwareVideoConfig() {
   gfxVars::SetUseWMFHWDWM(featureHWDRM.IsEnabled());
 #endif
 
+  DumpFeature(Feature::HARDWARE_VIDEO_DECODING);
+  DumpFeature(Feature::HARDWARE_VIDEO_ENCODING);
+  DumpFeature(Feature::WMF_HW_DRM);
+
   // We don't want to expose codec info if whole HW de/encoding is disabled.
   if (!featureDec.IsEnabled() && !featureEnc.IsEnabled()) {
+    DumpGfxVars();
     return;
   }
 
   gfxVars::SetCanUseHardwareVideoDecoding(featureDec.IsEnabled());
   gfxVars::SetCanUseHardwareVideoEncoding(featureEnc.IsEnabled());
+  DumpGfxVars();
 
   // Monitor for sanity test changes if we are enabled.
   Preferences::RegisterCallbackAndCall(VideoDecodingFailedChangedCallback,
