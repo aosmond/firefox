@@ -2411,6 +2411,9 @@ static void VideoDecodingFailedChangedCallback(const char* aPref, void*) {
       gfxConfig::GetFeature(Feature::HARDWARE_VIDEO_DECODING);
   FeatureState& featureEnc =
       gfxConfig::GetFeature(Feature::HARDWARE_VIDEO_ENCODING);
+#ifdef XP_WIN
+  FeatureState& featureHWDRM = gfxConfig::GetFeature(Feature::WMF_HW_DRM);
+#endif
   if (Preferences::GetBool(aPref, false)) {
     featureDec.ForceDisable(FeatureStatus::Unavailable,
                             "Force disabled by failed sanity test",
@@ -2418,10 +2421,18 @@ static void VideoDecodingFailedChangedCallback(const char* aPref, void*) {
     featureEnc.ForceDisable(FeatureStatus::Unavailable,
                             "Force disabled by failed sanity test",
                             "FEATURE_FAILURE_SANITY_TEST_FAILED"_ns);
+#ifdef XP_WIN
+    featureHWDRM.ForceDisable(FeatureStatus::Unavailable,
+                              "Force disabled by no hardware video decoding",
+                              "FEATURE_FAILURE_NO_HARDWARE_VIDEO_DECODING"_ns);
+#endif
   }
 
   gfxVars::SetCanUseHardwareVideoDecoding(featureDec.IsEnabled());
   gfxVars::SetCanUseHardwareVideoEncoding(featureEnc.IsEnabled());
+#ifdef XP_WIN
+  gfxVars::SetUseWMFHWDWM(featureHWDRM.IsEnabled());
+#endif
 }
 
 void gfxPlatform::UpdateForceSubpixelAAWherePossible() {
@@ -3077,6 +3088,11 @@ void gfxPlatform::InitHardwareVideoConfig() {
   if (!IsGfxInfoStatusOkay(nsIGfxInfo::FEATURE_WMF_HW_DRM, &message,
                            failureId)) {
     featureHWDRM.Disable(FeatureStatus::Blocklisted, message.get(), failureId);
+  }
+  if (!featureDec.IsEnabled()) {
+    featureHWDRM.ForceDisable(FeatureStatus::Unavailable,
+                              "Force disabled by no hardware video decoding",
+                              "FEATURE_FAILURE_NO_HARDWARE_VIDEO_DECODING"_ns);
   }
   gfxVars::SetUseWMFHWDWM(featureHWDRM.IsEnabled());
 #endif
