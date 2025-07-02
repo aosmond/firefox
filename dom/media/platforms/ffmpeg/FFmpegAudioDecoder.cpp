@@ -18,6 +18,11 @@
 #endif
 #include "mozilla/StaticPrefs_media.h"
 
+#ifdef MOZ_WIDGET_ANDROID
+#  include "ffvpx/mediacodec.h"
+#  include "ffvpx/hwcontext_mediacodec.h"
+#endif
+
 namespace mozilla {
 
 using TimeUnit = media::TimeUnit;
@@ -109,7 +114,17 @@ RefPtr<MediaDataDecoder::InitPromise> FFmpegAudioDecoder<LIBAV_VER>::Init() {
     }
   }
 
-  MediaResult rv = InitSWDecoder(&options);
+  MediaResult rv;
+#ifdef MOZ_WIDGET_ANDROID
+  if (XRE_IsRDDProcess()) {
+    rv = InitMediaCodecDecoder(&options);
+  }
+
+  if (NS_FAILED(rv))
+#endif
+  {
+    rv = InitSWDecoder(&options);
+  }
 
   mLib->av_dict_free(&options);
 
@@ -117,6 +132,75 @@ RefPtr<MediaDataDecoder::InitPromise> FFmpegAudioDecoder<LIBAV_VER>::Init() {
              ? InitPromise::CreateAndResolve(TrackInfo::kAudioTrack, __func__)
              : InitPromise::CreateAndReject(rv, __func__);
 }
+
+#ifdef MOZ_WIDGET_ANDROID
+MediaResult FFmpegAudioDecoder<LIBAV_VER>::InitMediaCodecDecoder(
+    AVDictionary** aOptions) {
+  MOZ_DIAGNOSTIC_ASSERT(XRE_IsRDDProcess());
+  FFMPEG_LOG("Initialising MediaCodec FFmpeg decoder");
+  StaticMutexAutoLock mon(sMutex);
+
+  AVCodec* codec =
+      FindHardwareAVCodec(mLib, mCodecID, AV_HWDEVICE_TYPE_MEDIACODEC);
+  if (!codec) {
+    FFMPEG_LOG("  couldn't find MediaCodec decoder for %s",
+               AVCodecToString(mCodecID));
+    return MediaResult(NS_ERROR_DOM_MEDIA_FATAL_ERR,
+                       RESULT_DETAIL("unable to find codec"));
+  }
+  FFMPEG_LOG("  codec %s : %s", codec->name, codec->long_name);
+
+  if (!(mCodecContext = mLib->avcodec_alloc_context3(codec))) {
+    FFMPEG_LOG("  couldn't alloc_context3 for MediaCodec");
+    return NS_ERROR_OUT_OF_MEMORY;
+  }
+  mCodecContext->opaque = this;
+  InitCodecContext();
+
+  auto releaseResources = MakeScopeExit([&] {
+    if (mCodecContext) {
+      mLib->av_freep(&mCodecContext);
+    }
+    if (mMediaCodecDeviceContext) {
+      mLib->av_buffer_unref(&mMediaCodecDeviceContext);
+    }
+  });
+
+  FFMPEG_LOG("  creating device context");
+  mMediaCodecDeviceContext =
+      mLib->av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_MEDIACODEC);
+  if (!mMediaCodecDeviceContext) {
+    FFMPEG_LOG("  av_hwdevice_ctx_alloc failed.");
+    return NS_ERROR_DOM_MEDIA_FATAL_ERR;
+  }
+
+  AVHWDeviceContext* hwctx = (AVHWDeviceContext*)mMediaCodecDeviceContext->data;
+  AVMediaCodecDeviceContext* mediacodecctx =
+      (AVMediaCodecDeviceContext*)hwctx->hwctx;
+
+  if (mLib->av_hwdevice_ctx_init(mMediaCodecDeviceContext) < 0) {
+    FFMPEG_LOG("  av_hwdevice_ctx_init failed.");
+    return NS_ERROR_DOM_MEDIA_FATAL_ERR;
+  }
+
+  mCodecContext->hw_device_ctx = mLib->av_buffer_ref(mMediaCodecDeviceContext);
+
+  MediaResult ret = AllocateExtraData();
+  if (NS_FAILED(ret)) {
+    FFMPEG_LOG("  failed to allocate extradata.");
+    return ret;
+  }
+
+  if (mLib->avcodec_open2(mCodecContext, codec, aOptions) < 0) {
+    FFMPEG_LOG("  avcodec_open2 failed for MediaCodec decoder");
+    return NS_ERROR_DOM_MEDIA_FATAL_ERR;
+  }
+
+  FFMPEG_LOG("  MediaCodec FFmpeg init successful");
+  releaseResources.release();
+  return NS_OK;
+}
+#endif
 
 void FFmpegAudioDecoder<LIBAV_VER>::InitCodecContext() {
   MOZ_ASSERT(mCodecContext);

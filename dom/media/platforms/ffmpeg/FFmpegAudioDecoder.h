@@ -42,6 +42,11 @@ class FFmpegAudioDecoder<LIBAV_VER>
   }
   nsCString GetCodecName() const override;
 
+#ifdef MOZ_WIDGET_ANDROID
+  MediaResult InitMediaCodecDecoder(AVDictionary** aOptions);
+  AVBufferRef* mMediaCodecDeviceContext = nullptr;
+#endif
+
  private:
   MediaResult DoDecode(MediaRawData* aSample, uint8_t* aData, int aSize,
                        bool* aGotFrame, DecodedData& aResults) override;
