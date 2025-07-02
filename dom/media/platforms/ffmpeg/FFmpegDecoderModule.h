@@ -63,6 +63,7 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 #  endif
 #  ifdef MOZ_WIDGET_ANDROID
         AV_HWDEVICE_TYPE_MEDIACODEC,
+        AV_HWDEVICE_TYPE_NONE,  // Placeholder for audio.
 #  endif
     };
 
