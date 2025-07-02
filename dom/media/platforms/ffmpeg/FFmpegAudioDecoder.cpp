@@ -114,7 +114,7 @@ RefPtr<MediaDataDecoder::InitPromise> FFmpegAudioDecoder<LIBAV_VER>::Init() {
     }
   }
 
-  MediaResult rv;
+  MediaResult rv(NS_ERROR_NOT_AVAILABLE);
 #ifdef MOZ_WIDGET_ANDROID
   if (XRE_IsRDDProcess()) {
     rv = InitMediaCodecDecoder(&options);
