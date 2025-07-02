@@ -94,6 +94,9 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 #    endif
         {AV_CODEC_ID_H264, gfx::gfxVars::UseH264HwDecode()},
 #  endif
+#ifdef MOZ_WIDGET_ANDROID
+        {AV_CODEC_ID_AAC, true},
+#endif
     };
 
     for (const auto& entry : kCodecIDs) {
