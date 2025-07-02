@@ -2313,7 +2313,8 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::InitMediaCodecDecoder() {
                        RESULT_DETAIL("not supported color depth"));
   }
 
-  AVCodec* codec = FindHardwareAVCodec(mLib, mCodecID);
+  AVCodec* codec =
+      FindHardwareAVCodec(mLib, mCodecID, AV_HWDEVICE_TYPE_MEDIACODEC);
   if (!codec) {
     FFMPEG_LOG("  couldn't find MediaCodec decoder for %s",
                AVCodecToString(mCodecID));
