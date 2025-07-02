@@ -44,7 +44,7 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
       return;
     }
 #  else
-    if (!XRE_IsRDDProcess()) {
+    if (!XRE_IsRDDProcess() && !XRE_IsUtilityProcess()) {
       return;
     }
 #  endif
@@ -64,6 +64,7 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 #  endif
 #  ifdef MOZ_WIDGET_ANDROID
         AV_HWDEVICE_TYPE_MEDIACODEC,
+        AV_HWDEVICE_TYPE_NONE,  // Placeholder for audio.
 #  endif
     };
 
@@ -95,6 +96,9 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 #    endif
         {AV_CODEC_ID_H264, gfx::gfxVars::UseH264HwDecode()},
 #  endif
+#  ifdef MOZ_WIDGET_ANDROID
+        {AV_CODEC_ID_AAC, true},
+#  endif
     };
 
     {
@@ -105,6 +109,13 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
         if (!entry.mHwAllowed) {
           MOZ_LOG(sPDMLog, LogLevel::Debug,
                   ("Hw codec disabled by gfxVars for %s",
+                   AVCodecToString(entry.mId)));
+          continue;
+        }
+
+        if (XRE_IsUtilityProcess() && entry.mId != AV_CODEC_ID_AAC) {
+          MOZ_LOG(sPDMLog, LogLevel::Debug,
+                  ("Only audio in utility process for %s",
                    AVCodecToString(entry.mId)));
           continue;
         }
