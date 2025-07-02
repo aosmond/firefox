@@ -43,7 +43,7 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
       return;
     }
 #  else
-    if (!XRE_IsRDDProcess() && !XRE_IsParentProcess()) {
+    if (!XRE_IsRDDProcess() && !XRE_IsParentProcess() && !XRE_IsUtilityProcess()) {
       return;
     }
 #  endif
@@ -104,6 +104,13 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
       if (!entry.mHwAllowed) {
         MOZ_LOG(sPDMLog, LogLevel::Debug,
                 ("Hw codec disabled by gfxVars for %s",
+                 AVCodecToString(entry.mId)));
+        continue;
+      }
+
+      if (XRE_IsUtilityProcess() && entry.mId != AV_CODEC_ID_AAC) {
+        MOZ_LOG(sPDMLog, LogLevel::Debug,
+                ("Only audio in utility process for %s",
                  AVCodecToString(entry.mId)));
         continue;
       }
