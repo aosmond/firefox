@@ -174,10 +174,6 @@ MediaResult FFmpegAudioDecoder<LIBAV_VER>::InitMediaCodecDecoder(
     return NS_ERROR_DOM_MEDIA_FATAL_ERR;
   }
 
-  AVHWDeviceContext* hwctx = (AVHWDeviceContext*)mMediaCodecDeviceContext->data;
-  AVMediaCodecDeviceContext* mediacodecctx =
-      (AVMediaCodecDeviceContext*)hwctx->hwctx;
-
   if (mLib->av_hwdevice_ctx_init(mMediaCodecDeviceContext) < 0) {
     FFMPEG_LOG("  av_hwdevice_ctx_init failed.");
     return NS_ERROR_DOM_MEDIA_FATAL_ERR;
