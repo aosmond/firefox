@@ -59,6 +59,12 @@ CodecType ConvertWebrtcCodecTypeToCodecType(
 
 bool WebrtcMediaDataEncoder::CanCreate(
     const webrtc::VideoCodecType aCodecType) {
+  if (aCodecType != webrtc::VideoCodecType::kVideoCodecH264 &&
+      aCodecType != webrtc::VideoCodecType::kVideoCodecVP8 &&
+      aCodecType != webrtc::VideoCodecType::kVideoCodecVP9) {
+    // TODO: Disallow unsupported types.
+    return false;
+  }
   auto factory = MakeRefPtr<PEMFactory>();
   CodecType type = ConvertWebrtcCodecTypeToCodecType(aCodecType);
   return !factory->SupportsCodec(type).isEmpty();
