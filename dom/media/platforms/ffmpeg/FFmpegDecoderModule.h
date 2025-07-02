@@ -160,13 +160,16 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
     // decoder to allow PDMFactory to select an alternative HW-capable decoder
     // module if available. In contrast, in the RDD process, it is acceptable
     // to fallback to SW decoding when HW decoding is not available.
-    if (XRE_IsGPUProcess() &&
-        IsHWDecodingSupported(aParams.mConfig.mMimeType) &&
-        !decoder->IsHardwareAccelerated()) {
-      MOZ_LOG(sPDMLog, LogLevel::Debug,
-              ("FFmpeg video decoder can't perform hw decoding, abort!"));
-      Unused << decoder->Shutdown();
-      decoder = nullptr;
+    if (XRE_IsGPUProcess()) {
+      AVCodecID videoCodec =
+          FFmpegVideoDecoder<V>::GetCodecId(aParams.mConfig.mMimeType);
+      if (IsHWDecodingSupported(videoCodec) &&
+          !decoder->IsHardwareAccelerated()) {
+        MOZ_LOG(sPDMLog, LogLevel::Debug,
+                ("FFmpeg video decoder can't perform hw decoding, abort!"));
+        Unused << decoder->Shutdown();
+        decoder = nullptr;
+      }
     }
     return decoder.forget();
   }
@@ -247,7 +250,7 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
     if (FFmpegDataDecoder<V>::FindSoftwareAVCodec(mLib, codecId)) {
       supports += media::DecodeSupport::SoftwareDecode;
     }
-    if (IsHWDecodingSupported(mimeType)) {
+    if (IsHWDecodingSupported(codecId)) {
       supports += media::DecodeSupport::HardwareDecode;
     }
     MOZ_LOG(
@@ -267,7 +270,7 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
     return true;
   }
 
-  bool IsHWDecodingSupported(const nsACString& aMimeType) const {
+  bool IsHWDecodingSupported(AVCodecID aCodec) const {
     if (!gfx::gfxVars::IsInitialized() ||
         !gfx::gfxVars::CanUseHardwareVideoDecoding()) {
       return false;
@@ -277,8 +280,7 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
       return false;
     }
 #endif
-    AVCodecID videoCodec = FFmpegVideoDecoder<V>::GetCodecId(aMimeType);
-    return sSupportedHWCodecs.Contains(videoCodec);
+    return sSupportedHWCodecs.Contains(aCodec);
   }
 
  private:
