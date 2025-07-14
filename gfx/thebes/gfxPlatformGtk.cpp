@@ -252,6 +252,7 @@ void gfxPlatformGtk::InitPlatformHardwareVideoConfig() {
   FeatureState& featureZeroCopy =
       gfxConfig::GetFeature(Feature::HW_DECODED_VIDEO_ZERO_COPY);
 
+  featureZeroCopy.Reset();
   featureZeroCopy.EnableByDefault();
   uint32_t state =
       StaticPrefs::media_ffmpeg_vaapi_force_surface_zero_copy_AtStartup();
@@ -259,25 +260,26 @@ void gfxPlatformGtk::InitPlatformHardwareVideoConfig() {
     featureZeroCopy.UserDisable("Force disable by pref",
                                 "FEATURE_FAILURE_USER_FORCE_DISABLED"_ns);
   } else if (state == 1) {
-    featureZeroCopy.UserEnable("Force enabled by pref");
-  } else {
-    nsCString failureId;
-    int32_t status = nsIGfxInfo::FEATURE_STATUS_UNKNOWN;
-    nsCOMPtr<nsIGfxInfo> gfxInfo = components::GfxInfo::Service();
-    if (NS_FAILED(gfxInfo->GetFeatureStatus(
-            nsIGfxInfo::FEATURE_HW_DECODED_VIDEO_ZERO_COPY, failureId,
-            &status))) {
-      featureZeroCopy.Disable(FeatureStatus::BlockedNoGfxInfo,
-                              "gfxInfo is broken",
-                              "FEATURE_FAILURE_NO_GFX_INFO"_ns);
-    } else if (status == nsIGfxInfo::FEATURE_BLOCKED_PLATFORM_TEST) {
-      featureZeroCopy.ForceDisable(FeatureStatus::Unavailable,
-                                   "Force disabled by gfxInfo", failureId);
-    } else if (status != nsIGfxInfo::FEATURE_ALLOW_ALWAYS) {
-      featureZeroCopy.Disable(FeatureStatus::Blocklisted,
-                              "Blocklisted by gfxInfo", failureId);
-    }
+    featureZeroCopy.UserForceEnable("Force enabled by pref");
   }
+
+  nsCString failureId;
+  int32_t status = nsIGfxInfo::FEATURE_STATUS_UNKNOWN;
+  nsCOMPtr<nsIGfxInfo> gfxInfo = components::GfxInfo::Service();
+  if (NS_FAILED(gfxInfo->GetFeatureStatus(
+          nsIGfxInfo::FEATURE_HW_DECODED_VIDEO_ZERO_COPY, failureId,
+          &status))) {
+    featureZeroCopy.Disable(FeatureStatus::BlockedNoGfxInfo,
+                            "gfxInfo is broken",
+                            "FEATURE_FAILURE_NO_GFX_INFO"_ns);
+  } else if (status == nsIGfxInfo::FEATURE_BLOCKED_PLATFORM_TEST) {
+    featureZeroCopy.ForceDisable(FeatureStatus::Unavailable,
+                                 "Force disabled by gfxInfo", failureId);
+  } else if (status != nsIGfxInfo::FEATURE_ALLOW_ALWAYS) {
+    featureZeroCopy.Disable(FeatureStatus::Blocklisted,
+                            "Blocklisted by gfxInfo", failureId);
+  }
+
   if (featureZeroCopy.IsEnabled()) {
     gfxVars::SetHwDecodedVideoZeroCopy(true);
   }
