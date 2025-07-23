@@ -30,7 +30,8 @@ class FFmpegDataDecoder<LIBAV_VER>
  public:
   NS_INLINE_DECL_THREADSAFE_REFCOUNTING(FFmpegDataDecoder, final);
 
-  FFmpegDataDecoder(FFmpegLibWrapper* aLib, AVCodecID aCodecID);
+  FFmpegDataDecoder(FFmpegLibWrapper* aLib, AVCodecID aCodecID,
+                    PRemoteCDMActor* aCDM);
 
   static bool Link();
 
@@ -59,6 +60,9 @@ class FFmpegDataDecoder<LIBAV_VER>
   MediaResult DoDecode(MediaRawData* aSample, bool* aGotFrame,
                        DecodedData& aResults);
 
+  MediaResult MaybeAttachCDM();
+  void MaybeDetachCDM();
+
   FFmpegLibWrapper* mLib;  // set in constructor
 
   // mCodecContext is accessed on taskqueue only, no locking needed
@@ -66,6 +70,7 @@ class FFmpegDataDecoder<LIBAV_VER>
   AVCodecParserContext* mCodecParser;
   AVFrame* mFrame;
   RefPtr<MediaByteBuffer> mExtraData;
+  RefPtr<PRemoteCDMActor> mCDM;
   AVCodecID mCodecID;  // set in constructor
   bool mVideoCodec;
 

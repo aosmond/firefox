@@ -26,12 +26,14 @@ namespace mozilla {
 StaticMutex FFmpegDataDecoder<LIBAV_VER>::sMutex;
 
 FFmpegDataDecoder<LIBAV_VER>::FFmpegDataDecoder(FFmpegLibWrapper* aLib,
-                                                AVCodecID aCodecID)
+                                                AVCodecID aCodecID,
+                                                PRemoteCDMActor* aCDM)
     : mLib(aLib),
       mCodecContext(nullptr),
       mCodecParser(nullptr),
       mFrame(nullptr),
       mExtraData(nullptr),
+      mCDM(aCDM),
       mCodecID(aCodecID),
       mVideoCodec(IsVideoCodec(aCodecID)),
       mTaskQueue(TaskQueue::Create(
@@ -90,6 +92,39 @@ MediaResult FFmpegDataDecoder<LIBAV_VER>::InitSWDecoder(
   }
 
   return InitDecoder(codec, aOptions);
+}
+
+MediaResult FFmpegDataDecoder<LIBAV_VER>::MaybeAttachCDM() {
+  MOZ_ASSERT(mCodecContext);
+
+#ifdef MOZ_WIDGET_ANDROID
+  if (!mCDM) {
+    return NS_OK;
+  }
+
+  PRemoteCDMParent* parentCDM = mCDM->AsPRemoteCDMParent();
+  if (!parentCDM) {
+    return MediaResult(NS_ERROR_DOM_MEDIA_FATAL_ERR,
+                       RESULT_DETAIL("unable to get PRemoteCDMParent"));
+  }
+
+  auto* cdm = static_cast<MediaDrmRemoteCDMParent*>(parentCDM);
+#endif
+
+  return NS_OK;
+}
+
+void FFmpegDataDecoder<LIBAV_VER>::MaybeDetachCDM() {
+#ifdef MOZ_WIDGET_ANDROID
+  if (mCodecContext) {
+    mCodecContext->moz_ndk_crypto = nullptr;
+    mCodecContext->moz_ndk_crypto_info = nullptr;
+  }
+
+  if (mCDM) {
+    mCDM = nullptr;
+  }
+#endif
 }
 
 MediaResult FFmpegDataDecoder<LIBAV_VER>::InitDecoder(AVCodec* aCodec,

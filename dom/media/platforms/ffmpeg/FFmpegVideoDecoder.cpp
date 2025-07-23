@@ -589,7 +589,7 @@ FFmpegVideoDecoder<LIBAV_VER>::FFmpegVideoDecoder(
     KnowsCompositor* aAllocator, ImageContainer* aImageContainer,
     bool aLowLatency, bool aDisableHardwareDecoding, bool a8BitOutput,
     Maybe<TrackingId> aTrackingId, PRemoteCDMActor* aCDM)
-    : FFmpegDataDecoder(aLib, GetCodecId(aConfig.mMimeType)),
+    : FFmpegDataDecoder(aLib, GetCodecId(aConfig.mMimeType), aCDM),
       mImageAllocator(aAllocator),
 #ifdef MOZ_USE_HWDECODE
       mHardwareDecodingDisabled(
