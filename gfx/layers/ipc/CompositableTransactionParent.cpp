@@ -67,12 +67,7 @@ bool CompositableParentManager::ReceiveCompositableUpdate(
       AutoTArray<CompositableHost::TimedTexture, 4> textures;
       for (auto& timedTexture : op.textures()) {
         MOZ_LOG_FMT(gCompositableTextureParentLog, LogLevel::Debug,
-#ifdef DEBUG
-                    "ReceiveCompositableUpdate:TOpUseTexture ts={} id={}",
-                    timedTexture.timeStamp().GetValue(),
-#else
                     "ReceiveCompositableUpdate:TOpUseTexture id={}",
-#endif
                     timedTexture.frameID());
         CompositableHost::TimedTexture* t = textures.AppendElement();
         t->mTexture =

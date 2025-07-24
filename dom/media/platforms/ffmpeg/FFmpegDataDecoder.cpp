@@ -21,6 +21,10 @@
 
 #include "FFmpegLibs.h"
 
+#if defined(MOZ_WIDGET_ANDROID) && defined(USING_MOZFFVPX)
+#  include "mozilla/MediaDrmRemoteCDMParent.h"
+#endif
+
 namespace mozilla {
 
 StaticMutex FFmpegDataDecoder<LIBAV_VER>::sMutex;
@@ -97,7 +101,7 @@ MediaResult FFmpegDataDecoder<LIBAV_VER>::InitSWDecoder(
 MediaResult FFmpegDataDecoder<LIBAV_VER>::MaybeAttachCDM() {
   MOZ_ASSERT(mCodecContext);
 
-#ifdef MOZ_WIDGET_ANDROID
+#if defined(MOZ_WIDGET_ANDROID) && defined(USING_MOZFFVPX)
   if (!mCDM) {
     return NS_OK;
   }
@@ -115,10 +119,10 @@ MediaResult FFmpegDataDecoder<LIBAV_VER>::MaybeAttachCDM() {
 }
 
 void FFmpegDataDecoder<LIBAV_VER>::MaybeDetachCDM() {
-#ifdef MOZ_WIDGET_ANDROID
+#if defined(MOZ_WIDGET_ANDROID) && defined(USING_MOZFFVPX)
   if (mCodecContext) {
-    mCodecContext->moz_ndk_crypto = nullptr;
-    mCodecContext->moz_ndk_crypto_info = nullptr;
+    //mCodecContext->moz_ndk_crypto = nullptr;
+    //mCodecContext->moz_ndk_crypto_info = nullptr;
   }
 
   if (mCDM) {

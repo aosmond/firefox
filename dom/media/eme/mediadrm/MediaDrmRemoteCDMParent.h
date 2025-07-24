@@ -12,6 +12,7 @@
 #include "mozilla/StaticPtr.h"
 #include "mozilla/UniquePtr.h"
 
+#include "media/NdkMediaCodec.h"
 #include "media/NdkMediaCrypto.h"
 #include "media/NdkMediaDrm.h"
 #include "media/NdkMediaError.h"
@@ -71,6 +72,23 @@ using AMediaDrmFnPtr_setOnExpirationUpdateListener =
 using AMediaDrmFnPtr_setOnKeysChangeListener =
     media_status_t (*)(AMediaDrm*, AMediaDrmFnPtr_KeysChangeListener);
 
+class MediaDrmCryptoInfo final {
+  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(MediaDrmCryptoInfo);
+
+ public:
+  static already_AddRefed<MediaDrmCryptoInfo> Create(MediaRawData* aSample);
+
+  AMediaCodecCryptoInfo* GetNative() const { return mCryptoInfo; }
+
+ private:
+  explicit MediaDrmCryptoInfo(AMediaCodecCryptoInfo* aCryptoInfo)
+      : mCryptoInfo(aCryptoInfo) {}
+
+  ~MediaDrmCryptoInfo();
+
+  AMediaCodecCryptoInfo* mCryptoInfo;
+};
+
 class MediaDrmRemoteCDMParent final : public RemoteCDMParent {
  public:
   explicit MediaDrmRemoteCDMParent(const nsAString& aKeySystem);
@@ -104,6 +122,8 @@ class MediaDrmRemoteCDMParent final : public RemoteCDMParent {
   void ActorDestroy(ActorDestroyReason aWhy) override;
 
  private:
+  friend class MediaDrmCryptoInfo;
+
   virtual ~MediaDrmRemoteCDMParent();
 
   static constexpr uint8_t CLEARKEY_UUID[] = {

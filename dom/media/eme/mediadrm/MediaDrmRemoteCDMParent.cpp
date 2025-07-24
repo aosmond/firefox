@@ -712,4 +712,9 @@ void MediaDrmRemoteCDMParent::HandleKeysChange(
       RemoteCDMKeyStatusIPDL(std::move(aSessionId), std::move(aKeyInfo)));
 }
 
+/* static */ already_AddRefed<MediaDrmCryptoInfo> MediaDrmCryptoInfo::Create(
+    MediaRawData* aSample) {}
+
+MediaDrmCryptoInfo::~MediaDrmCryptoInfo() {}
+
 }  // namespace mozilla
