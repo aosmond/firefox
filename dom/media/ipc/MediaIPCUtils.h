@@ -415,8 +415,8 @@ template <>
 struct ParamTraits<mozilla::HardwarePreference>
     : public ContiguousEnumSerializerInclusive<
           mozilla::HardwarePreference,
-          mozilla::HardwarePreference::RequireHardware,
-          mozilla::HardwarePreference::None> {};
+          mozilla::HardwarePreference::None,
+          mozilla::HardwarePreference::RequireSoftware> {};
 
 template <>
 struct ParamTraits<mozilla::Usage>
