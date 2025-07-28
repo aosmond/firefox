@@ -326,6 +326,8 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvInit(
 
   EME_LOG("[%p] MediaDrmRemoteCDMParent::RecvInit -- drm %p", this, mDrm);
   sMediaNdk->cbMap[mDrm] = this;
+
+  EnsureHasAMediaCrypto();
   aResolver(MediaResult(NS_OK));
   return IPC_OK();
 }
@@ -403,11 +405,13 @@ MediaDrmRemoteCDMParent::EnsureProvisioned() {
           this);
 
   const uint8_t* provisionRequest = nullptr;
-  size_t provisionRequestSize = 0;
+  size_t provisionRequestSize = SIZE_MAX;
   const char* serverUrl = nullptr;
   media_status_t status = sMediaNdk->mAMediaDrm_getProvisionRequest(
       mDrm, &provisionRequest, &provisionRequestSize, &serverUrl);
   if (NS_WARN_IF(status != AMEDIA_OK)) {
+    EME_LOG("[%p] MediaDrmRemoteCDMParent::EnsureProvisioned -- failed drm %p provisionRequest %p size %zu serverUrl %p (%s) status %d",
+            this, mDrm, provisionRequest, provisionRequestSize, serverUrl, serverUrl ? serverUrl : "", status);
     mProvisionError.emplace(NS_ERROR_DOM_INVALID_STATE_ERR,
                             "AMediaDrm_getProvisionRequest failed"_ns);
     mProvisionPromise.Reject(*mProvisionError, __func__);
