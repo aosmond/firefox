@@ -117,6 +117,10 @@ void RemoteCDMChild::Init(PromiseId aPromiseId, const nsAString& aOrigin,
                           const nsAString& aName) {
   MOZ_ASSERT(NS_IsMainThread());
 
+  if (mKeys.IsNull()) {
+    return;
+  }
+
   LOGD("[{}] RemoteCDMChild::Init -- promise {}", fmt::ptr(this), aPromiseId);
   if (!mIPDLPromise) {
     RejectPromise(aPromiseId,
@@ -129,12 +133,8 @@ void RemoteCDMChild::Init(PromiseId aPromiseId, const nsAString& aOrigin,
       mThread, __func__,
       [self = RefPtr{this}, aPromiseId](
           const GenericNonExclusivePromise::ResolveOrRejectValue& aValue) {
-        LOGD("[{}] RemoteCDMChild::InitInternal -- promise {} resolved {}",
+        LOGD("[{}] RemoteCDMChild::Init -- promise {} resolved {}",
              fmt::ptr(self.get()), aPromiseId, aValue.IsResolve());
-
-        if (self->mKeys.IsNull()) {
-          return;
-        }
 
         if (aValue.IsReject()) {
           self->RejectPromise(
@@ -161,6 +161,7 @@ void RemoteCDMChild::InitInternal(PromiseId aPromiseId) {
     return;
   }
 
+  LOGD("[{}] RemoteCDMChild::InitInternal -- send constructor", fmt::ptr(this));
   if (!manager->SendPRemoteCDMConstructor(this, mKeySystem)) {
     RejectPromise(aPromiseId,
                   MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
@@ -168,6 +169,7 @@ void RemoteCDMChild::InitInternal(PromiseId aPromiseId) {
     return;
   }
 
+  LOGD("[{}] RemoteCDMChild::InitInternal -- send init", fmt::ptr(this));
   SendInit(RemoteCDMInitRequestIPDL(mDistinctiveIdentifierRequired,
                                     mPersistentStateRequired))
       ->Then(
