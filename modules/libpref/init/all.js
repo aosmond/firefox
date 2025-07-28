@@ -4133,3 +4133,5 @@ pref("logging.MediaFormatReader", 5);
 pref("logging.WebCodecs", 5);
 pref("logging.EME", 5);
 pref("logging.EMEV", 5);
+pref("logging.HTMLMediaElement", 5);
+pref("logging.HTMLMediaElementEvents", 5);
