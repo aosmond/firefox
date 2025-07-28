@@ -38,7 +38,7 @@ bool MediaDrmRemoteCDMParent::InitializeStatics() {
 
 #define LOAD_OPTIONAL_SYMBOL(objName, fnName) \
   mediaNdk->m##objName##_##fnName =           \
-      (objName##FnPtr_##fnName)dlsym(lib, "" #fnName);
+      (objName##FnPtr_##fnName)dlsym(lib, #objName "_" #fnName);
 
 #define LOAD_REQUIRED_SYMBOL(objName, fnName)         \
   LOAD_OPTIONAL_SYMBOL(objName, fnName);              \
