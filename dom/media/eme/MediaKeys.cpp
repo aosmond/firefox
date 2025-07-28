@@ -31,6 +31,9 @@
 
 #ifdef MOZ_WIDGET_ANDROID
 #  include "mozilla/MediaDrmCDMProxy.h"
+#  include "mozilla/RemoteCDMChild.h"
+#  include "mozilla/RemoteMediaManagerChild.h"
+#  include "mozilla/StaticPrefs_media.h"
 #endif
 #ifdef XP_WIN
 #  include "mozilla/WindowsVersion.h"
@@ -435,10 +438,17 @@ already_AddRefed<CDMProxy> MediaKeys::CreateCDMProxy() {
   RefPtr<CDMProxy> proxy;
 #ifdef MOZ_WIDGET_ANDROID
   if (IsWidevineKeySystem(mKeySystem)) {
-    proxy = new MediaDrmCDMProxy(
-        this, mKeySystem,
-        mConfig.mDistinctiveIdentifier == MediaKeysRequirement::Required,
-        mConfig.mPersistentState == MediaKeysRequirement::Required);
+    if (StaticPrefs::media_android_media_codec_enabled()) {
+      proxy = new MediaDrmCDMProxy(
+          this, mKeySystem,
+          mConfig.mDistinctiveIdentifier == MediaKeysRequirement::Required,
+          mConfig.mPersistentState == MediaKeysRequirement::Required);
+    } else {
+      proxy = RemoteMediaManagerChild::CreateCDM(
+          RemoteMediaIn::RddProcess, this, mKeySystem,
+          mConfig.mDistinctiveIdentifier == MediaKeysRequirement::Required,
+          mConfig.mPersistentState == MediaKeysRequirement::Required);
+    }
   } else
 #endif
 #ifdef MOZ_WMF_CDM
