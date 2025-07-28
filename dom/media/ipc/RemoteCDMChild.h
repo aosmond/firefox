@@ -24,6 +24,7 @@ class RemoteCDMChild final : public PRemoteCDMChild,
                                                 final);
 
   RemoteCDMChild(nsCOMPtr<nsISerialEventTarget>&& aThread,
+                 RefPtr<GenericNonExclusivePromise>&& aIPDLPromise,
                  RemoteMediaIn aLocation, dom::MediaKeys* aKeys,
                  const nsAString& aKeySystem,
                  bool aDistinctiveIdentifierRequired,
@@ -100,12 +101,15 @@ class RemoteCDMChild final : public PRemoteCDMChild,
   virtual ~RemoteCDMChild();
   RemoteMediaManagerChild* GetManager();
 
+  void InitInternal(PromiseId aPromiseId);
   void RejectPromise(PromiseId aId, const MediaResult& aResult);
   void ResolveOrRejectPromise(PromiseId aId, const MediaResult& aResult);
 
   void MaybeDestroyActor();
 
+  Mutex mMutex;
   const nsCOMPtr<nsISerialEventTarget> mThread;
+  RefPtr<GenericNonExclusivePromise> mIPDLPromise MOZ_GUARDED_BY(mMutex);
   const RemoteMediaIn mLocation;
   Atomic<bool> mNeedsShutdown{false};
 };
