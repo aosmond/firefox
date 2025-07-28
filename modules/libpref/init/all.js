@@ -4131,3 +4131,5 @@ pref("logging.MediaEncoder", 5);
 pref("logging.RemoteDecode", 5);
 pref("logging.MediaFormatReader", 5);
 pref("logging.WebCodecs", 5);
+pref("logging.EME", 5);
+pref("logging.EMEV", 5);
