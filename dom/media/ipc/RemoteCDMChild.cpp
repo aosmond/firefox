@@ -5,6 +5,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "RemoteCDMChild.h"
+#include "mozilla/RemoteDecodeUtils.h"
 #include "mozilla/dom/MediaKeySession.h"
 
 #ifdef MOZ_WIDGET_ANDROID
@@ -13,6 +14,9 @@
 
 namespace mozilla {
 
+#define LOGD(msg, ...) \
+  MOZ_LOG_FMT(gRemoteDecodeLog, LogLevel::Debug, msg, ##__VA_ARGS__)
+
 RemoteCDMChild::RemoteCDMChild(
     nsCOMPtr<nsISerialEventTarget>&& aThread,
     RefPtr<GenericNonExclusivePromise>&& aIPDLPromise, RemoteMediaIn aLocation,
@@ -20,7 +24,6 @@ RemoteCDMChild::RemoteCDMChild(
     bool aDistinctiveIdentifierRequired, bool aPersistentStateRequired)
     : CDMProxy(aKeys, aKeySystem, aDistinctiveIdentifierRequired,
                aPersistentStateRequired),
-      mMutex("RemoteCDMChild::mMutex"),
       mThread(std::move(aThread)),
       mIPDLPromise(std::move(aIPDLPromise)),
       mLocation(aLocation) {}
@@ -30,12 +33,14 @@ RemoteCDMChild::~RemoteCDMChild() = default;
 RemoteMediaManagerChild* RemoteCDMChild::GetManager() { return nullptr; }
 
 void RemoteCDMChild::ActorDestroy(ActorDestroyReason aWhy) {
+  LOGD("[{}] RemoteCDMChild::ActorDestroy", fmt::ptr(this));
   mNeedsShutdown = false;
 }
 
 mozilla::ipc::IPCResult RemoteCDMChild::RecvProvision(
     const RemoteCDMProvisionRequestIPDL& aRequest,
     ProvisionResolver&& aResolver) {
+  LOGD("[{}] RemoteCDMChild::RecvProvision", fmt::ptr(this));
 #  ifdef MOZ_WIDGET_ANDROID
   auto helper =
       MakeRefPtr<MediaDrmProvisioningHelper>(aRequest, std::move(aResolver));
@@ -48,6 +53,7 @@ mozilla::ipc::IPCResult RemoteCDMChild::RecvProvision(
 
 mozilla::ipc::IPCResult RemoteCDMChild::RecvOnSessionKeyStatus(
     const RemoteCDMKeyStatusIPDL& aMsg) {
+  LOGD("[{}] RemoteCDMChild::RecvOnSessionKeyStatus", fmt::ptr(this));
   bool changed = false;
   {
     auto caps = mCapabilites.Lock();
@@ -76,6 +82,7 @@ mozilla::ipc::IPCResult RemoteCDMChild::RecvOnSessionKeyStatus(
 
 mozilla::ipc::IPCResult RemoteCDMChild::RecvOnSessionKeyExpiration(
     RemoteCDMKeyExpirationIPDL&& aMsg) {
+  LOGD("[{}] RemoteCDMChild::RecvOnSessionKeyExpiration", fmt::ptr(this));
   NS_DispatchToMainThread(NS_NewRunnableFunction(
       __func__, [self = RefPtr{this}, msg = std::move(aMsg)]() {
         if (self->mKeys.IsNull()) {
@@ -91,6 +98,7 @@ mozilla::ipc::IPCResult RemoteCDMChild::RecvOnSessionKeyExpiration(
 
 mozilla::ipc::IPCResult RemoteCDMChild::RecvOnSessionKeyMessage(
     RemoteCDMKeyMessageIPDL&& aMsg) {
+  LOGD("[{}] RemoteCDMChild::RecvOnSessionKeyMessage", fmt::ptr(this));
   NS_DispatchToMainThread(NS_NewRunnableFunction(
       __func__, [self = RefPtr{this}, msg = std::move(aMsg)]() {
         if (self->mKeys.IsNull()) {
@@ -107,7 +115,9 @@ mozilla::ipc::IPCResult RemoteCDMChild::RecvOnSessionKeyMessage(
 void RemoteCDMChild::Init(PromiseId aPromiseId, const nsAString& aOrigin,
                           const nsAString& aTopLevelOrigin,
                           const nsAString& aName) {
-  MutexAutoLock lock(mMutex);
+  MOZ_ASSERT(NS_IsMainThread());
+
+  LOGD("[{}] RemoteCDMChild::Init -- promise {}", fmt::ptr(this), aPromiseId);
   if (!mIPDLPromise) {
     RejectPromise(aPromiseId,
                   MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
@@ -119,6 +129,9 @@ void RemoteCDMChild::Init(PromiseId aPromiseId, const nsAString& aOrigin,
       mThread, __func__,
       [self = RefPtr{this}, aPromiseId](
           const GenericNonExclusivePromise::ResolveOrRejectValue& aValue) {
+        LOGD("[{}] RemoteCDMChild::InitInternal -- promise {} resolved {}",
+             fmt::ptr(self.get()), aPromiseId, aValue.IsResolve());
+
         if (self->mKeys.IsNull()) {
           return;
         }
@@ -137,6 +150,8 @@ void RemoteCDMChild::Init(PromiseId aPromiseId, const nsAString& aOrigin,
 }
 
 void RemoteCDMChild::InitInternal(PromiseId aPromiseId) {
+  LOGD("[{}] RemoteCDMChild::InitInternal -- promise {}", fmt::ptr(this),
+       aPromiseId);
   RefPtr<RemoteMediaManagerChild> manager =
       RemoteMediaManagerChild::GetSingleton(mLocation);
   if (!manager) {
@@ -155,23 +170,27 @@ void RemoteCDMChild::InitInternal(PromiseId aPromiseId) {
 
   SendInit(RemoteCDMInitRequestIPDL(mDistinctiveIdentifierRequired,
                                     mPersistentStateRequired))
-      ->Then(GetMainThreadSerialEventTarget(), __func__,
-             [self = RefPtr{this},
-              aPromiseId](const InitPromise::ResolveOrRejectValue& aValue) {
-               if (self->mKeys.IsNull()) {
-                 return;
-               }
+      ->Then(
+          GetMainThreadSerialEventTarget(), __func__,
+          [self = RefPtr{this},
+           aPromiseId](const InitPromise::ResolveOrRejectValue& aValue) {
+            LOGD("[{}] RemoteCDMChild::InitInternal -- promise {} resolved {}",
+                 fmt::ptr(self.get()), aPromiseId, aValue.IsResolve());
 
-               if (aValue.IsReject()) {
-                 self->RejectPromise(
-                     aPromiseId,
-                     MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                                 "PRemoteCDMChild::SendInit IPC fail"_ns));
-                 return;
-               }
+            if (self->mKeys.IsNull()) {
+              return;
+            }
 
-               self->mKeys->OnCDMCreated(aPromiseId, 0);
-             });
+            if (aValue.IsReject()) {
+              self->RejectPromise(
+                  aPromiseId,
+                  MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                              "PRemoteCDMChild::SendInit IPC fail"_ns));
+              return;
+            }
+
+            self->mKeys->OnCDMCreated(aPromiseId, 0);
+          });
 }
 
 void RemoteCDMChild::CreateSession(uint32_t aCreateSessionToken,
@@ -183,6 +202,8 @@ void RemoteCDMChild::CreateSession(uint32_t aCreateSessionToken,
       __func__, [self = RefPtr{this}, aCreateSessionToken, aSessionType,
                  aPromiseId, initDataType = nsString(aInitDataType),
                  initData = std::move(aInitData)]() mutable {
+        LOGD("[{}] RemoteCDMChild::CreateSession -- promise {}",
+             fmt::ptr(self.get()), aPromiseId);
         self
             ->SendCreateSession(RemoteCDMCreateSessionRequestIPDL(
                 aSessionType, std::move(initDataType), std::move(initData)))
@@ -227,6 +248,8 @@ void RemoteCDMChild::LoadSession(PromiseId aPromiseId,
   MOZ_ALWAYS_SUCCEEDS(mThread->Dispatch(NS_NewRunnableFunction(
       __func__, [self = RefPtr{this}, aPromiseId, aSessionType,
                  sessionId = nsString(aSessionId)]() mutable {
+        LOGD("[{}] RemoteCDMChild::LoadSession -- promise {}",
+             fmt::ptr(self.get()), aPromiseId);
         self->SendLoadSession(RemoteCDMLoadSessionRequestIPDL(
                                   aSessionType, std::move(sessionId)))
             ->Then(GetMainThreadSerialEventTarget(), __func__,
@@ -248,6 +271,8 @@ void RemoteCDMChild::SetServerCertificate(PromiseId aPromiseId,
   MOZ_ALWAYS_SUCCEEDS(mThread->Dispatch(NS_NewRunnableFunction(
       __func__,
       [self = RefPtr{this}, aPromiseId, cert = std::move(aCert)]() mutable {
+        LOGD("[{}] RemoteCDMChild::SetServerCertificate -- promise {}",
+             fmt::ptr(self.get()), aPromiseId);
         self->SendSetServerCertificate(std::move(cert))
             ->Then(
                 GetMainThreadSerialEventTarget(), __func__,
@@ -279,6 +304,8 @@ void RemoteCDMChild::UpdateSession(const nsAString& aSessionId,
   MOZ_ALWAYS_SUCCEEDS(mThread->Dispatch(NS_NewRunnableFunction(
       __func__, [self = RefPtr{this}, sessionId = nsString(aSessionId),
                  aPromiseId, response = std::move(aResponse)]() mutable {
+        LOGD("[{}] RemoteCDMChild::UpdateSession -- promise {}",
+             fmt::ptr(self.get()), aPromiseId);
         self->SendUpdateSession(RemoteCDMUpdateSessionRequestIPDL(
                                     std::move(sessionId), std::move(response)))
             ->Then(
@@ -309,6 +336,8 @@ void RemoteCDMChild::CloseSession(const nsAString& aSessionId,
   MOZ_ALWAYS_SUCCEEDS(mThread->Dispatch(NS_NewRunnableFunction(
       __func__, [self = RefPtr{this}, sessionId = nsString(aSessionId),
                  aPromiseId]() mutable {
+        LOGD("[{}] RemoteCDMChild::CloseSession -- promise {}",
+             fmt::ptr(self.get()), aPromiseId);
         self->SendCloseSession(std::move(sessionId))
             ->Then(
                 GetMainThreadSerialEventTarget(), __func__,
@@ -338,6 +367,8 @@ void RemoteCDMChild::RemoveSession(const nsAString& aSessionId,
   MOZ_ALWAYS_SUCCEEDS(mThread->Dispatch(NS_NewRunnableFunction(
       __func__, [self = RefPtr{this}, sessionId = nsString(aSessionId),
                  aPromiseId]() mutable {
+        LOGD("[{}] RemoteCDMChild::RemoveSession -- promise {}",
+             fmt::ptr(self.get()), aPromiseId);
         self->SendRemoveSession(std::move(sessionId))
             ->Then(
                 GetMainThreadSerialEventTarget(), __func__,
@@ -369,6 +400,7 @@ void RemoteCDMChild::NotifyOutputProtectionStatus(
     OutputProtectionCaptureStatus aCaptureStatus) {}
 
 void RemoteCDMChild::Shutdown() {
+  LOGD("[{}] RemoteCDMChild::Shutdown", fmt::ptr(this));
   // If this is the last reference, and we still have an actor, then we know
   // that the last reference is solely due to the IPDL reference. Dispatch to
   // the owning thread to delete that so that we can clean up.
@@ -415,12 +447,14 @@ void RemoteCDMChild::OnDecrypted(uint32_t aId, DecryptStatus aResult,
 
 void RemoteCDMChild::RejectPromise(PromiseId aId, ErrorResult&& aException,
                                    const nsCString& aReason) {
+  LOGD("[{}] RemoteCDMChild::RejectPromise -- {}", fmt::ptr(this), aId);
   MOZ_ASSERT(NS_IsMainThread());
   MOZ_ASSERT(!mKeys.IsNull());
   mKeys->RejectPromise(aId, std::move(aException), aReason);
 }
 
 void RemoteCDMChild::ResolvePromise(PromiseId aId) {
+  LOGD("[{}] RemoteCDMChild::ResolvePromise -- {}", fmt::ptr(this), aId);
   MOZ_ASSERT(NS_IsMainThread());
   MOZ_ASSERT(!mKeys.IsNull());
   mKeys->ResolvePromise(aId);
@@ -454,5 +488,7 @@ void RemoteCDMChild::GetStatusForPolicy(
 #ifdef DEBUG
 bool RemoteCDMChild::IsOnOwnerThread() { return mThread->IsOnCurrentThread(); }
 #endif
+
+#undef LOGD
 
 }  // namespace mozilla

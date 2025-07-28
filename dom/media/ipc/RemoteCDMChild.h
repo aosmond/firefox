@@ -107,9 +107,8 @@ class RemoteCDMChild final : public PRemoteCDMChild,
 
   void MaybeDestroyActor();
 
-  Mutex mMutex;
   const nsCOMPtr<nsISerialEventTarget> mThread;
-  RefPtr<GenericNonExclusivePromise> mIPDLPromise MOZ_GUARDED_BY(mMutex);
+  RefPtr<GenericNonExclusivePromise> mIPDLPromise;
   const RemoteMediaIn mLocation;
   Atomic<bool> mNeedsShutdown{false};
 };
