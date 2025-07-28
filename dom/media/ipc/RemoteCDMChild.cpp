@@ -13,14 +13,16 @@
 
 namespace mozilla {
 
-RemoteCDMChild::RemoteCDMChild(nsCOMPtr<nsISerialEventTarget>&& aThread,
-                               RemoteMediaIn aLocation, dom::MediaKeys* aKeys,
-                               const nsAString& aKeySystem,
-                               bool aDistinctiveIdentifierRequired,
-                               bool aPersistentStateRequired)
+RemoteCDMChild::RemoteCDMChild(
+    nsCOMPtr<nsISerialEventTarget>&& aThread,
+    RefPtr<GenericNonExclusivePromise>&& aIPDLPromise, RemoteMediaIn aLocation,
+    dom::MediaKeys* aKeys, const nsAString& aKeySystem,
+    bool aDistinctiveIdentifierRequired, bool aPersistentStateRequired)
     : CDMProxy(aKeys, aKeySystem, aDistinctiveIdentifierRequired,
                aPersistentStateRequired),
+      mMutex("RemoteCDMChild::mMutex"),
       mThread(std::move(aThread)),
+      mIPDLPromise(std::move(aIPDLPromise)),
       mLocation(aLocation) {}
 
 RemoteCDMChild::~RemoteCDMChild() = default;
@@ -105,30 +107,71 @@ mozilla::ipc::IPCResult RemoteCDMChild::RecvOnSessionKeyMessage(
 void RemoteCDMChild::Init(PromiseId aPromiseId, const nsAString& aOrigin,
                           const nsAString& aTopLevelOrigin,
                           const nsAString& aName) {
-  MOZ_ALWAYS_SUCCEEDS(mThread->Dispatch(
-      NS_NewRunnableFunction(__func__, [self = RefPtr{this}, aPromiseId]() {
-        self->SendInit(
-                RemoteCDMInitRequestIPDL(self->mDistinctiveIdentifierRequired,
-                                         self->mPersistentStateRequired))
-            ->Then(
-                GetMainThreadSerialEventTarget(), __func__,
-                [self,
-                 aPromiseId](const InitPromise::ResolveOrRejectValue& aValue) {
-                  if (self->mKeys.IsNull()) {
-                    return;
-                  }
+  MutexAutoLock lock(mMutex);
+  if (!mIPDLPromise) {
+    RejectPromise(aPromiseId,
+                  MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                              "PRemoteCDMChild already initialized"_ns));
+    return;
+  }
 
-                  if (aValue.IsReject()) {
-                    self->RejectPromise(
-                        aPromiseId,
-                        MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                                    "PRemoteCDMChild::SendInit IPC fail"_ns));
-                    return;
-                  }
+  mIPDLPromise->Then(
+      mThread, __func__,
+      [self = RefPtr{this}, aPromiseId](
+          const GenericNonExclusivePromise::ResolveOrRejectValue& aValue) {
+        if (self->mKeys.IsNull()) {
+          return;
+        }
 
-                  self->mKeys->OnCDMCreated(aPromiseId, 0);
-                });
-      })));
+        if (aValue.IsReject()) {
+          self->RejectPromise(
+              aPromiseId,
+              MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                          "PRemoteCDMChild ensure process fail"_ns));
+          return;
+        }
+
+        self->InitInternal(aPromiseId);
+      });
+  mIPDLPromise = nullptr;
+}
+
+void RemoteCDMChild::InitInternal(PromiseId aPromiseId) {
+  RefPtr<RemoteMediaManagerChild> manager =
+      RemoteMediaManagerChild::GetSingleton(mLocation);
+  if (!manager) {
+    RejectPromise(aPromiseId,
+                  MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                              "PRemoteCDMChild manager is not available"_ns));
+    return;
+  }
+
+  if (!manager->SendPRemoteCDMConstructor(this, mKeySystem)) {
+    RejectPromise(aPromiseId,
+                  MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                              "PRemoteCDMChild manager is unable to send"_ns));
+    return;
+  }
+
+  SendInit(RemoteCDMInitRequestIPDL(mDistinctiveIdentifierRequired,
+                                    mPersistentStateRequired))
+      ->Then(GetMainThreadSerialEventTarget(), __func__,
+             [self = RefPtr{this},
+              aPromiseId](const InitPromise::ResolveOrRejectValue& aValue) {
+               if (self->mKeys.IsNull()) {
+                 return;
+               }
+
+               if (aValue.IsReject()) {
+                 self->RejectPromise(
+                     aPromiseId,
+                     MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                                 "PRemoteCDMChild::SendInit IPC fail"_ns));
+                 return;
+               }
+
+               self->mKeys->OnCDMCreated(aPromiseId, 0);
+             });
 }
 
 void RemoteCDMChild::CreateSession(uint32_t aCreateSessionToken,
