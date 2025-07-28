@@ -458,6 +458,7 @@ RemoteMediaManagerChild::CreateVideoDecoder(const CreateDecoderParams& aParams,
 RefPtr<RemoteCDMChild> RemoteMediaManagerChild::CreateCDM(
     RemoteMediaIn aLocation, dom::MediaKeys* aKeys, const nsAString& aKeySystem,
     bool aDistinctiveIdentifierRequired, bool aPersistentStateRequired) {
+  MOZ_ASSERT(NS_IsMainThread());
   MOZ_ASSERT(aLocation == RemoteMediaIn::RddProcess);
 
   nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
