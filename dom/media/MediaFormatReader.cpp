@@ -30,6 +30,7 @@
 #include "mozilla/Preferences.h"
 #include "mozilla/ProfilerLabels.h"
 #include "mozilla/ProfilerMarkers.h"
+#include "mozilla/RemoteCDMChild.h"
 #include "mozilla/SharedThreadPool.h"
 #include "mozilla/StaticPrefs_media.h"
 #include "mozilla/TaskQueue.h"
@@ -366,10 +367,12 @@ void MediaFormatReader::DecoderFactory::DoCreateDecoder(Data& aData) {
   auto& ownerData = aData.mOwnerData;
   auto& decoder = mOwner->GetDecoderData(aData.mTrack);
 
+  PRemoteCDMActor* cdmActor = nullptr;
   RefPtr<PDMFactory> platform = new PDMFactory();
   if (decoder.IsEncrypted()) {
     MOZ_DIAGNOSTIC_ASSERT(mOwner->mCDMProxy);
     platform->SetCDMProxy(mOwner->mCDMProxy);
+    cdmActor = static_cast<PRemoteCDMActor*>(mOwner->mCDMProxy->AsRemoteCDMChild());
   }
 
   RefPtr<PlatformDecoderModule::CreateDecoderPromise> p;
@@ -387,7 +390,7 @@ void MediaFormatReader::DecoderFactory::DoCreateDecoder(Data& aData) {
           {*ownerData.GetCurrentInfo()->GetAsAudioInfo(), mOwner->mCrashHelper,
            CreateDecoderParams::UseNullDecoder(ownerData.mIsNullDecode),
            TrackInfo::kAudioTrack, std::move(onWaitingForKeyEvent),
-           mOwner->mMediaEngineId, mOwner->mTrackingId,
+           mOwner->mMediaEngineId, mOwner->mTrackingId, cdmActor,
            mOwner->mEncryptedCustomIdent
                ? CreateDecoderParams::EncryptedCustomIdent::True
                : CreateDecoderParams::EncryptedCustomIdent::False});
@@ -413,7 +416,7 @@ void MediaFormatReader::DecoderFactory::DoCreateDecoder(Data& aData) {
                      mOwner->mVideoFrameContainer->SupportsOnly8BitImage()
                          ? Option::Output8BitPerChannel
                          : Option::Default),
-           mOwner->mMediaEngineId, mOwner->mTrackingId,
+           mOwner->mMediaEngineId, mOwner->mTrackingId, cdmActor,
            mOwner->mEncryptedCustomIdent
                ? CreateDecoderParams::EncryptedCustomIdent::True
                : CreateDecoderParams::EncryptedCustomIdent::False});
