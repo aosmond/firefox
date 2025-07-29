@@ -344,9 +344,9 @@ RemoteMediaManagerChild::CreateAudioDecoder(const CreateDecoderParams& aParams,
   } else if (aLocation == RemoteMediaIn::UtilityProcess_MFMediaEngineCDM) {
     launchPromise = LaunchUtilityProcessIfNeeded(aLocation);
   } else {
-    if (StaticPrefs::media_allow_audio_non_utility()) {
+//    if (StaticPrefs::media_allow_audio_non_utility()) {
       launchPromise = LaunchRDDProcessIfNeeded();
-    } else {
+/*    } else {
       return PlatformDecoderModule::CreateDecoderPromise::CreateAndReject(
           MediaResult(
               NS_ERROR_DOM_MEDIA_DENIED_IN_NON_UTILITY,
@@ -355,6 +355,7 @@ RemoteMediaManagerChild::CreateAudioDecoder(const CreateDecoderParams& aParams,
                   .get()),
           __func__);
     }
+*/
   }
   LOG("Create audio decoder in %s", RemoteMediaInToStr(aLocation));
 
