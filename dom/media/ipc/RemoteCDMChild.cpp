@@ -484,7 +484,10 @@ void RemoteCDMChild::OnKeyStatusesChange(const nsAString& aSessionId) {}
 
 void RemoteCDMChild::GetStatusForPolicy(
     PromiseId aPromiseId, const dom::HDCPVersion& aMinHdcpVersion) {
-  RejectPromise(aPromiseId, MediaResult(NS_ERROR_DOM_MEDIA_NOT_SUPPORTED_ERR));
+  RejectPromise(
+      aPromiseId,
+      MediaResult(NS_ERROR_DOM_MEDIA_NOT_SUPPORTED_ERR,
+                  "Currently Fennec does not support GetStatusForPolicy"));
 }
 
 #ifdef DEBUG

@@ -672,9 +672,13 @@ void MediaDrmRemoteCDMParent::HandleEvent(nsString&& aSessionId,
                                           nsTArray<uint8_t>&& aData) {
   const auto i = mSessions.find(aSessionId);
   if (i == mSessions.end()) {
+    EME_LOG("[%p] MediaDrmRemoteCDMParent::HandleEvent -- session not found",
+            this);
     return;
   }
 
+  EME_LOG("[%p] MediaDrmRemoteCDMParent::HandleEvent -- event %d", this,
+          aEventType);
   MOZ_ASSERT(mDrm);
 
   switch (aEventType) {
@@ -762,9 +766,14 @@ void MediaDrmRemoteCDMParent::HandleExpirationUpdate(nsString&& aSessionId,
                                                      int aExpiryTimeInMS) {
   const auto i = mSessions.find(aSessionId);
   if (i == mSessions.end()) {
+    EME_LOG(
+        "[%p] MediaDrmRemoteCDMParent::HandleExpirationUpdate -- session not "
+        "found",
+        this);
     return;
   }
 
+  EME_LOG("[%p] MediaDrmRemoteCDMParent::HandleExpirationUpdate", this);
   Unused << SendOnSessionKeyExpiration(
       RemoteCDMKeyExpirationIPDL(std::move(aSessionId), aExpiryTimeInMS));
 }
@@ -774,9 +783,13 @@ void MediaDrmRemoteCDMParent::HandleKeysChange(
     nsTArray<CDMKeyInfo>&& aKeyInfo) {
   const auto i = mSessions.find(aSessionId);
   if (i == mSessions.end()) {
+    EME_LOG(
+        "[%p] MediaDrmRemoteCDMParent::HandleKeysChange -- session not found",
+        this);
     return;
   }
 
+  EME_LOG("[%p] MediaDrmRemoteCDMParent::HandleKeysChange", this);
   Unused << SendOnSessionKeyStatus(
       RemoteCDMKeyStatusIPDL(std::move(aSessionId), std::move(aKeyInfo)));
 }
