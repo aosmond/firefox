@@ -4135,3 +4135,5 @@ pref("logging.EME", 5);
 pref("logging.EMEV", 5);
 pref("logging.HTMLMediaElement", 5);
 pref("logging.HTMLMediaElementEvents", 5);
+pref("logging.MediaDrmProxySupport", 5);
+pref("logging.MediaCapabilities", 5);
