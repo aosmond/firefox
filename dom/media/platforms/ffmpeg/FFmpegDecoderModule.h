@@ -224,7 +224,7 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
     const nsACString& mimeType = trackInfo.mMimeType;
     if (VPXDecoder::IsVPX(mimeType) && trackInfo.GetAsVideoInfo()->HasAlpha()) {
       MOZ_LOG(sPDMLog, LogLevel::Debug,
-              ("FFmpeg decoder rejects requested type '%s'",
+              ("FFmpeg decoder rejects requested type '%s' due to VPX alpha",
                mimeType.BeginReading()));
       return media::DecodeSupportSet{};
     }
@@ -254,7 +254,7 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
         trackInfo.GetAsAudioInfo() ? *trackInfo.GetAsAudioInfo() : AudioInfo());
     if (audioCodec == AV_CODEC_ID_NONE && videoCodec == AV_CODEC_ID_NONE) {
       MOZ_LOG(sPDMLog, LogLevel::Debug,
-              ("FFmpeg decoder rejects requested type '%s'",
+              ("FFmpeg decoder rejects requested type '%s' due to invalid id",
                mimeType.BeginReading()));
       return media::DecodeSupportSet{};
     }
