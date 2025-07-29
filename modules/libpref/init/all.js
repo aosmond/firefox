@@ -4119,3 +4119,21 @@ pref("captchadetection.actor.enabled", true);
 // Make general.smoothScroll sticky to avoid being clobbered by
 // preferes-reduced-motion system setting.
 pref("general.smoothScroll", true, sticky);
+
+pref("logging.FFmpegVideo", 5);
+pref("logging.FFmpegAudio", 5);
+pref("logging.FFmpegLib", 5);
+pref("logging.AndroidDecoderModule", 5);
+pref("logging.PlatformDecoderModule", 5);
+pref("logging.PlatformEncoderModule", 5);
+pref("logging.MediaDecoder", 5);
+pref("logging.MediaEncoder", 5);
+pref("logging.RemoteDecode", 5);
+pref("logging.MediaFormatReader", 5);
+pref("logging.WebCodecs", 5);
+pref("logging.EME", 5);
+pref("logging.EMEV", 5);
+pref("logging.HTMLMediaElement", 5);
+pref("logging.HTMLMediaElementEvents", 5);
+pref("logging.MediaDrmProxySupport", 5);
+pref("logging.MediaCapabilities", 5);
