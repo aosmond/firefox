@@ -874,8 +874,11 @@ TrackSupportSet RemoteMediaManagerChild::GetTrackSupport(
       if (StaticPrefs::media_use_remote_encoder_video()) {
         s += TrackSupport::EncodeVideo;
       }
+#ifndef ANDROID
       // Only use RDD for audio coding if we don't have the utility process.
-      if (!StaticPrefs::media_utility_process_enabled()) {
+      if (!StaticPrefs::media_utility_process_enabled())
+#endif
+      {
         s += TrackSupport::DecodeAudio;
         if (StaticPrefs::media_use_remote_encoder_audio()) {
           s += TrackSupport::EncodeAudio;
