@@ -140,6 +140,10 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
         MOZ_LOG(sPDMLog, LogLevel::Debug,
                 ("Support %s for hw decoding", AVCodecToString(entry.mId)));
       }
+      MOZ_LOG(sPDMLog, LogLevel::Debug, ("FFmpeg contains at init, len=%zu", hwCodecs->Length()));
+      for (const auto& i : *hwCodecs) {
+        MOZ_LOG(sPDMLog, LogLevel::Debug, ("FFmpeg does contain at init 0x%x", uint32_t(i)));
+      }
     }
 #endif  // (XP_WIN || MOZ_WIDGET_GTK || MOZ_WIDGET_ANDROID) && MOZ_USE_HWDECODE
         // && !MOZ_FFVPX_AUDIOONLY
@@ -303,17 +307,28 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
   }
 
   bool IsHWDecodingSupported(AVCodecID aCodec) const {
+#if 0
     if (!gfx::gfxVars::IsInitialized() ||
         !gfx::gfxVars::CanUseHardwareVideoDecoding()) {
+      MOZ_LOG(sPDMLog, LogLevel::Debug, ("FFmpeg rejects gfxVars init %d canUseHw %d", gfx::gfxVars::IsInitialized(), gfx::gfxVars::CanUseHardwareVideoDecoding()));
       return false;
     }
+#endif
 #ifdef FFVPX_VERSION
     if (!StaticPrefs::media_ffvpx_hw_enabled()) {
+      MOZ_LOG(sPDMLog, LogLevel::Debug, ("FFmpeg rejects ffvpx hw pref false"));
       return false;
     }
 #endif
     auto hwCodecs = sSupportedHWCodecs.Lock();
-    return hwCodecs->Contains(aCodec);
+    bool contains = hwCodecs->Contains(aCodec);
+    if (!contains) {
+      MOZ_LOG(sPDMLog, LogLevel::Debug, ("FFmpeg rejects not contains, len=%zu", hwCodecs->Length()));
+      for (const auto& i : *hwCodecs) {
+        MOZ_LOG(sPDMLog, LogLevel::Debug, ("FFmpeg does contain 0x%x", uint32_t(i)));
+      }
+    }
+    return contains;
   }
 
  private:
