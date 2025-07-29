@@ -35,11 +35,20 @@ using namespace gfx;
 using namespace layers;
 
 static VPXDecoder::Codec MimeTypeToCodec(const nsACString& aMimeType) {
-  if (aMimeType.EqualsLiteral("video/vp8")) {
+  if (aMimeType.Equals("video/vp8"_ns)) {
     return VPXDecoder::Codec::VP8;
-  } else if (aMimeType.EqualsLiteral("video/vp9")) {
+  }
+  if (aMimeType.Equals("video/vp9"_ns)) {
     return VPXDecoder::Codec::VP9;
   }
+#ifdef ANDROID
+  if (aMimeType.Equals("video/x-vnd.on2.vp8"_ns)) {
+    return VPXDecoder::Codec::VP8;
+  }
+  if (aMimeType.Equals("video/x-vnd.on2.vp9"_ns)) {
+    return VPXDecoder::Codec::VP9;
+  }
+#endif
   return VPXDecoder::Codec::Unknown;
 }
 
@@ -327,10 +336,7 @@ nsCString VPXDecoder::GetCodecName() const {
 
 /* static */
 bool VPXDecoder::IsVPX(const nsACString& aMimeType, uint8_t aCodecMask) {
-  return ((aCodecMask & VPXDecoder::VP8) &&
-          aMimeType.EqualsLiteral("video/vp8")) ||
-         ((aCodecMask & VPXDecoder::VP9) &&
-          aMimeType.EqualsLiteral("video/vp9"));
+  return !!(aCodecMask & MimeTypeToCodec(aMimeType));
 }
 
 /* static */
