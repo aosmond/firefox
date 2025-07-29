@@ -72,6 +72,12 @@ media::DecodeSupportSet RemoteDecoderModule::Supports(
       mLocation != RemoteMediaIn::UtilityProcess_MFMediaEngineCDM) {
     supports = false;
   }
+#ifdef ANDROID
+  if (aParams.mCDM && mLocation != RemoteMediaIn::RddProcess) {
+    supports = false;
+  }
+  // TODO: maybe !mCDM && mLocation != Utility?
+#endif
   MOZ_LOG(
       sPDMLog, LogLevel::Debug,
       ("Sandbox %s decoder %s requested type %s", RemoteMediaInToStr(mLocation),
