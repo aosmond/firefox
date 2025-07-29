@@ -96,6 +96,11 @@ MediaResult FFmpegDataDecoder<LIBAV_VER>::InitSWDecoder(
   FFMPEG_LOG("Initialising FFmpeg decoder");
 
   AVCodec* codec = FindSoftwareAVCodec(mLib, mCodecID);
+#if defined(MOZ_WIDGET_ANDROID) && defined(FFVPX_VERSION)
+  if (!codec && mCodecID == AV_CODEC_ID_AAC) {
+    codec = FindHardwareAVCodec(mLib, mCodecID);
+  }
+#endif
   if (!codec) {
     FFMPEG_LOG("  couldn't find ffmpeg decoder for codec id %d", mCodecID);
     return MediaResult(NS_ERROR_DOM_MEDIA_FATAL_ERR,
