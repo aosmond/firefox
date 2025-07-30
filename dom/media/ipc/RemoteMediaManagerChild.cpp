@@ -12,6 +12,7 @@
 #include "PlatformDecoderModule.h"
 #include "PlatformEncoderModule.h"
 #include "RemoteAudioDecoder.h"
+#include "RemoteCDMChild.h"
 #include "RemoteMediaDataDecoder.h"
 #include "RemoteMediaDataEncoderChild.h"
 #include "RemoteVideoDecoder.h"
@@ -451,6 +452,31 @@ RemoteMediaManagerChild::CreateVideoDecoder(const CreateDecoderParams& aParams,
         return PlatformDecoderModule::CreateDecoderPromise::CreateAndReject(
             MediaResult(aResult, "Couldn't start RDD process"), __func__);
       });
+}
+
+/* static */
+RefPtr<RemoteCDMChild> RemoteMediaManagerChild::CreateCDM(
+    RemoteMediaIn aLocation, dom::MediaKeys* aKeys, const nsAString& aKeySystem,
+    bool aDistinctiveIdentifierRequired, bool aPersistentStateRequired) {
+  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(aLocation == RemoteMediaIn::RddProcess);
+
+  nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
+  if (!managerThread) {
+    // We got shutdown.
+    return nullptr;
+  }
+
+  if (!GetTrackSupport(aLocation).contains(TrackSupport::DecodeVideo)) {
+    return nullptr;
+  }
+
+  RefPtr<GenericNonExclusivePromise> p = LaunchRDDProcessIfNeeded();
+  LOG("Create CDM in %s", RemoteMediaInToStr(aLocation));
+
+  return MakeRefPtr<RemoteCDMChild>(
+      std::move(managerThread), std::move(p), aLocation, aKeys, aKeySystem,
+      aDistinctiveIdentifierRequired, aPersistentStateRequired);
 }
 
 /* static */
