@@ -362,8 +362,9 @@ MediaDrmRemoteCDMParent::EnsureHasAMediaCrypto() {
   }
 
   if (NS_WARN_IF(status != AMEDIA_OK)) {
-    mCryptoError.emplace(NS_ERROR_DOM_INVALID_STATE_ERR,
-                         "AMediaDrm_openSession failed for crypto"_ns);
+    mCryptoError.emplace(
+        NS_ERROR_DOM_INVALID_STATE_ERR,
+        RESULT_DETAIL("AMediaDrm_openSession failed for crypto %d", status));
     return InternalPromise::CreateAndReject(*mCryptoError, __func__);
   }
 
@@ -511,8 +512,9 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvCreateSession(
   }
 
   if (NS_WARN_IF(status != AMEDIA_OK)) {
-    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "AMediaDrm_openSession failed"_ns));
+    aResolver(
+        MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
+                    RESULT_DETAIL("AMediaDrm_openSession failed %d", status)));
     return IPC_OK();
   }
 

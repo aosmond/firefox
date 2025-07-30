@@ -110,7 +110,7 @@ class RemoteCDMChild final : public PRemoteCDMChild,
   const nsCOMPtr<nsISerialEventTarget> mThread;
   RefPtr<GenericNonExclusivePromise> mIPDLPromise;
   const RemoteMediaIn mLocation;
-  Atomic<bool> mNeedsShutdown{false};
+  Atomic<bool> mNeedsShutdown{true};
 };
 
 }  // namespace mozilla
