@@ -812,13 +812,12 @@ already_AddRefed<PlatformDecoderModule> PDMFactory::GetDecoderModule(
 void PDMFactory::SetCDMProxy(CDMProxy* aProxy) {
   MOZ_ASSERT(aProxy);
 
-#ifdef MOZ_WIDGET_ANDROID
-  PDM_INIT_LOG("PDMFactory::SetCDMProxy -- proxy %p", aProxy);
-  if (IsWidevineKeySystem(aProxy->KeySystem())) {
+// #ifdef MOZ_WIDGET_ANDROID
+//   if (IsWidevineKeySystem(aProxy->KeySystem())) {
 //     mEMEPDM = AndroidDecoderModule::Create(aProxy);
-    return;
-  }
-#endif
+//     return;
+//   }
+// #endif
 #ifdef MOZ_WMF_CDM
   if (IsPlayReadyKeySystemAndSupported(aProxy->KeySystem()) ||
       IsWidevineExperimentKeySystemAndSupported(aProxy->KeySystem()) ||
