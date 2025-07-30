@@ -44,7 +44,8 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
       return;
     }
 #  else
-    if (!XRE_IsRDDProcess() && !XRE_IsUtilityProcess() && !XRE_IsParentProcess()) {
+    if (!XRE_IsRDDProcess() && !XRE_IsUtilityProcess() &&
+        !XRE_IsParentProcess()) {
       return;
     }
 #  endif
@@ -109,13 +110,6 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
         if (!entry.mHwAllowed) {
           MOZ_LOG(sPDMLog, LogLevel::Debug,
                   ("Hw codec disabled by gfxVars for %s",
-                   AVCodecToString(entry.mId)));
-          continue;
-        }
-
-        if (XRE_IsUtilityProcess() && entry.mId != AV_CODEC_ID_AAC) {
-          MOZ_LOG(sPDMLog, LogLevel::Debug,
-                  ("Only audio in utility process for %s",
                    AVCodecToString(entry.mId)));
           continue;
         }
@@ -303,15 +297,13 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
   }
 
   bool IsHWDecodingSupported(AVCodecID aCodec) const {
-    if (!gfx::gfxVars::IsInitialized() ||
-        !gfx::gfxVars::CanUseHardwareVideoDecoding()) {
-      return false;
-    }
 #ifdef FFVPX_VERSION
     if (!StaticPrefs::media_ffvpx_hw_enabled()) {
       return false;
     }
 #endif
+    // We don't need to check the gfxVars again because we check them when we
+    // populated sSupportedHWCodecs.
     auto hwCodecs = sSupportedHWCodecs.Lock();
     return hwCodecs->Contains(aCodec);
   }
