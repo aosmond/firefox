@@ -78,6 +78,9 @@ template <int V>
 #  endif
   };
 
+  // Reset the list of supported hardware codecs and reevaluate them.
+  auto hwCodecs = sSupportedHWCodecs.Lock();
+  hwCodecs->Clear();
   for (const auto& entry : kCodecIDs) {
     if (!entry.mHwAllowed) {
       MOZ_LOG(
@@ -94,7 +97,7 @@ template <int V>
       continue;
     }
 
-    sSupportedHWCodecs.AppendElement(entry.mId);
+    hwCodecs->AppendElement(entry.mId);
     MOZ_LOG(sPEMLog, LogLevel::Debug,
             ("Support %s for hw encoding", AVCodecToString(entry.mId)));
   }
@@ -141,10 +144,13 @@ EncodeSupportSet FFmpegEncoderModule<V>::SupportsCodec(CodecType aCodec) const {
   }
   EncodeSupportSet supports;
 #ifdef MOZ_USE_HWDECODE
-  if (StaticPrefs::media_ffvpx_hw_enabled() && gfx::gfxVars::IsInitialized() &&
-      gfx::gfxVars::CanUseHardwareVideoEncoding() &&
-      sSupportedHWCodecs.Contains(static_cast<uint32_t>(id))) {
-    supports += EncodeSupport::HardwareEncode;
+  if (StaticPrefs::media_ffvpx_hw_enabled()) {
+    // We don't need to check the gfxVars again because we check them when we
+    // populated sSupportedHWCodecs.
+    auto hwCodecs = sSupportedHWCodecs.Lock();
+    if (hwCodecs->Contains(static_cast<uint32_t>(id))) {
+      supports += EncodeSupport::HardwareEncode;
+    }
   }
 #endif
   if (FFmpegDataEncoder<V>::FindSoftwareEncoder(mLib, id)) {
