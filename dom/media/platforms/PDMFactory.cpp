@@ -170,7 +170,12 @@ class PDMInitializer final {
 
   static void InitDefaultPDMs() {
 #ifdef XP_WIN
-    WMFDecoderModule::Init();
+#  ifdef MOZ_WMF
+      if (!StaticPrefs::media_rdd_process_enabled() ||
+          !StaticPrefs::media_rdd_wmf_enabled()) {
+        WMFDecoderModule::Init();
+      }
+#  endif
 #endif
 #ifdef MOZ_APPLEMEDIA
     AppleDecoderModule::Init();
@@ -182,6 +187,7 @@ class PDMInitializer final {
 #ifdef MOZ_FFMPEG
     FFmpegRuntimeLinker::Init();
 #endif
+    RemoteMediaManagerChild::Init();
   }
 
   static bool sHasInitializedPDMs;

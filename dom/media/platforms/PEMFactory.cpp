@@ -197,7 +197,7 @@ void PEMFactory::InitUtilityPEMs() {
 #endif
 }
 
-void PEMFactory::InitContentPEMs() {
+void PEMFactory::InitDefaultPEMs() {
   if ((StaticPrefs::media_use_remote_encoder_video() ||
        StaticPrefs::media_use_remote_encoder_audio()) &&
       StaticPrefs::media_rdd_process_enabled()) {
@@ -236,7 +236,9 @@ void PEMFactory::InitContentPEMs() {
 #endif
 
 #ifdef MOZ_WIDGET_ANDROID
-    mCurrentPEMs.AppendElement(new AndroidEncoderModule());
+    if (StaticPrefs::media_android_media_codec_enabled()) {
+      mCurrentPEMs.AppendElement(new AndroidEncoderModule());
+    }
 #endif
 
 #ifdef XP_WIN
@@ -288,47 +290,6 @@ void PEMFactory::InitContentPEMs() {
   }
 }
 
-void PEMFactory::InitDefaultPEMs() {
-#ifdef MOZ_APPLEMEDIA
-  RefPtr<PlatformEncoderModule> m(new AppleEncoderModule());
-  mCurrentPEMs.AppendElement(m);
-#endif
-
-#ifdef MOZ_WIDGET_ANDROID
-  mCurrentPEMs.AppendElement(new AndroidEncoderModule());
-#endif
-
-#ifdef XP_WIN
-  mCurrentPEMs.AppendElement(new WMFEncoderModule());
-#endif
-
-  if (StaticPrefs::media_ffmpeg_encoder_enabled()) {
-    if (RefPtr<PlatformEncoderModule> pem =
-            FFVPXRuntimeLinker::CreateEncoder()) {
-      mCurrentPEMs.AppendElement(pem);
-    }
-  }
-
-#ifdef MOZ_FFMPEG
-  if (StaticPrefs::media_ffmpeg_enabled() &&
-      StaticPrefs::media_ffmpeg_encoder_enabled()) {
-    if (RefPtr<PlatformEncoderModule> pem =
-            FFmpegRuntimeLinker::CreateEncoder()) {
-      mCurrentPEMs.AppendElement(pem);
-    }
-  }
-#endif
-
-  if (StaticPrefs::media_gmp_encoder_enabled()) {
-    auto pem = MakeRefPtr<GMPEncoderModule>();
-    if (StaticPrefs::media_gmp_encoder_preferred()) {
-      mCurrentPEMs.InsertElementAt(0, std::move(pem));
-    } else {
-      mCurrentPEMs.AppendElement(std::move(pem));
-    }
-  }
-}
-
 PEMFactory::PEMFactory() {
   gfx::gfxVars::Initialize();
 
@@ -338,9 +299,10 @@ PEMFactory::PEMFactory() {
     InitRddPEMs();
   } else if (XRE_IsUtilityProcess()) {
     InitUtilityPEMs();
-  } else if (XRE_IsContentProcess()) {
-    InitContentPEMs();
   } else {
+    MOZ_DIAGNOSTIC_ASSERT(XRE_IsContentProcess() || XRE_IsParentProcess(),
+                          "PEMFactory is only usable in the "
+                          "Parent/GPU/RDD/Utility/Content process");
     InitDefaultPEMs();
   }
 }

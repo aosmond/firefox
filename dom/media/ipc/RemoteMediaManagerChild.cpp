@@ -16,6 +16,7 @@
 #include "RemoteMediaDataEncoderChild.h"
 #include "RemoteVideoDecoder.h"
 #include "VideoUtils.h"
+#include "mozilla/AppShutdown.h"
 #include "mozilla/DataMutex.h"
 #include "mozilla/RemoteDecodeUtils.h"
 #include "mozilla/SyncRunnable.h"
@@ -127,9 +128,32 @@ void RemoteMediaManagerChild::Init() {
     NS_ENSURE_SUCCESS_VOID(rv);
     *remoteDecoderManagerThread = childThread;
     sRecreateTasks = new nsTArray<RefPtr<Runnable>>();
-    sObserver = new ShutdownObserver();
-    nsContentUtils::RegisterShutdownObserver(sObserver);
+
+    if (NS_IsMainThread()) {
+      InitShutdownObserver();
+    } else {
+      NS_DispatchToMainThread(NS_NewRunnableFunction(
+          "RemoteMediaManagerChild::InitShutdownObserver",
+          []() { InitShutdownObserver(); }));
+    }
   }
+}
+
+/* static */
+void RemoteMediaManagerChild::InitShutdownObserver() {
+  MOZ_ASSERT(NS_IsMainThread());
+
+  if (sObserver) {
+    return;
+  }
+
+  if (AppShutdown::IsInOrBeyond(ShutdownPhase::XPCOMShutdown)) {
+    Shutdown();
+    return;
+  }
+
+  sObserver = new ShutdownObserver();
+  nsContentUtils::RegisterShutdownObserver(sObserver);
 }
 
 /* static */
@@ -647,8 +671,8 @@ RemoteMediaManagerChild::InitializeEncoder(
 /* static */
 RefPtr<GenericNonExclusivePromise>
 RemoteMediaManagerChild::LaunchRDDProcessIfNeeded() {
-  MOZ_DIAGNOSTIC_ASSERT(XRE_IsContentProcess(),
-                        "Only supported from a content process.");
+  MOZ_DIAGNOSTIC_ASSERT(XRE_IsContentProcess() || XRE_IsParentProcess(),
+                        "Only supported from content or parent process.");
 
   nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
   if (!managerThread) {
@@ -731,8 +755,8 @@ RemoteMediaManagerChild::LaunchRDDProcessIfNeeded() {
 /* static */
 RefPtr<GenericNonExclusivePromise>
 RemoteMediaManagerChild::LaunchUtilityProcessIfNeeded(RemoteMediaIn aLocation) {
-  MOZ_DIAGNOSTIC_ASSERT(XRE_IsContentProcess(),
-                        "Only supported from a content process.");
+  MOZ_DIAGNOSTIC_ASSERT(XRE_IsContentProcess() || XRE_IsParentProcess(),
+                        "Only supported from content or parent process.");
 
   nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
   if (!managerThread) {
@@ -1146,7 +1170,9 @@ void RemoteMediaManagerChild::OnSetCurrent(
 }
 
 void RemoteMediaManagerChild::HandleFatalError(const char* aMsg) {
-  dom::ContentChild::FatalErrorIfNotUsingGPUProcess(aMsg, OtherChildID());
+  if (XRE_IsContentProcess()) {
+    dom::ContentChild::FatalErrorIfNotUsingGPUProcess(aMsg, OtherChildID());
+  }
 }
 
 void RemoteMediaManagerChild::SetSupported(

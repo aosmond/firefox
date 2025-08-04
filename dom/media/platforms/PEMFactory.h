@@ -45,7 +45,6 @@ class PEMFactory final {
   void InitGpuPEMs();
   void InitRddPEMs();
   void InitUtilityPEMs();
-  void InitContentPEMs();
   void InitDefaultPEMs();
 
   RefPtr<PlatformEncoderModule::CreateEncoderPromise>

@@ -155,6 +155,9 @@ class RemoteMediaManagerChild final
  private:
   explicit RemoteMediaManagerChild(RemoteMediaIn aLocation);
   ~RemoteMediaManagerChild() = default;
+
+  static void InitShutdownObserver();
+
   static RefPtr<PlatformDecoderModule::CreateDecoderPromise> Construct(
       RefPtr<RemoteDecoderChild>&& aChild, RemoteMediaIn aLocation);
 

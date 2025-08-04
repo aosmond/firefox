@@ -25,7 +25,7 @@ already_AddRefed<PlatformDecoderModule> RemoteDecoderModule::Create(
     RemoteMediaIn aLocation) {
   MOZ_ASSERT(!XRE_IsGPUProcess() && !XRE_IsRDDProcess(),
              "Should not be created in GPU or RDD process.");
-  if (!XRE_IsContentProcess()) {
+  if (!XRE_IsContentProcess() && !XRE_IsParentProcess()) {
     // For now, the RemoteDecoderModule is only available in the content
     // process.
     return nullptr;
