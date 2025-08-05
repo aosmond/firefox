@@ -6,7 +6,6 @@
 
 #include "MediaDrmRemoteCDMParent.h"
 
-#include "media/NdkMediaDrm.h"
 #include "mozilla/CheckedInt.h"
 #include "mozilla/EMEUtils.h"
 #include "mozilla/RemoteMediaManagerParent.h"
@@ -15,67 +14,30 @@
 
 namespace mozilla {
 
-StaticAutoPtr<MediaDrmRemoteCDMParent::Internals>
-    MediaDrmRemoteCDMParent::sMediaNdk;
+StaticAutoPtr<MediaDrmRemoteCDMParent::DrmCallbackMap>
+    MediaDrmRemoteCDMParent::sCbMap;
 
-MediaDrmRemoteCDMParent::Internals::~Internals() {
-  if (mLib) {
-    dlclose(mLib);
-  }
-}
+AMediaCodecCryptoInfoFnPtr_setPattern
+    MediaDrmRemoteCDMParent::sAMediaCodecCryptoInfo_setPattern;
 
 /* static */
-bool MediaDrmRemoteCDMParent::InitializeStatics() {
-  if (sMediaNdk) {
-    return true;
+void MediaDrmRemoteCDMParent::InitializeStatics() {
+  if (sCbMap) {
+    return;
   }
 
+  sCbMap = new DrmCallbackMap();
+
+  // The NDK header is wrong for AMediaCodecCryptoInfo_setPattern. It is only
+  // present in 24+, not 21+. As such, we can't rely upon the builtin check,
+  // instead we need to load it manually.
   void* lib = dlopen("libmediandk.so", RTLD_NOW);
-  if (!lib) {
-    return false;
+  sAMediaCodecCryptoInfo_setPattern =
+      (AMediaCodecCryptoInfoFnPtr_setPattern)dlsym(
+          lib, "AMediaCodecCryptoInfo_setPattern");
+  if (__builtin_available(android 24, *)) {
+    MOZ_ASSERT(sAMediaCodecCryptoInfo_setPattern);
   }
-
-  auto mediaNdk = MakeUnique<MediaDrmRemoteCDMParent::Internals>(lib);
-
-#define LOAD_OPTIONAL_SYMBOL(objName, fnName) \
-  mediaNdk->m##objName##_##fnName =           \
-      (objName##FnPtr_##fnName)dlsym(lib, #objName "_" #fnName);
-
-#define LOAD_REQUIRED_SYMBOL(objName, fnName)         \
-  LOAD_OPTIONAL_SYMBOL(objName, fnName);              \
-  if (NS_WARN_IF(!mediaNdk->m##objName##_##fnName)) { \
-    return false;                                     \
-  }
-
-  LOAD_REQUIRED_SYMBOL(AMediaDrm, createByUUID);
-  LOAD_REQUIRED_SYMBOL(AMediaDrm, openSession);
-  LOAD_REQUIRED_SYMBOL(AMediaDrm, closeSession);
-  LOAD_REQUIRED_SYMBOL(AMediaDrm, getProvisionRequest);
-  LOAD_REQUIRED_SYMBOL(AMediaDrm, getKeyRequest);
-  LOAD_REQUIRED_SYMBOL(AMediaDrm, provideProvisionResponse);
-  LOAD_REQUIRED_SYMBOL(AMediaDrm, provideKeyResponse);
-  LOAD_REQUIRED_SYMBOL(AMediaDrm, setOnEventListener);
-  LOAD_REQUIRED_SYMBOL(AMediaDrm, setPropertyByteArray);
-  LOAD_REQUIRED_SYMBOL(AMediaDrm, setPropertyString);
-  LOAD_REQUIRED_SYMBOL(AMediaDrm, release);
-  LOAD_REQUIRED_SYMBOL(AMediaDrm, setOnEventListener);
-  LOAD_OPTIONAL_SYMBOL(AMediaDrm, setOnExpirationUpdateListener);
-  LOAD_OPTIONAL_SYMBOL(AMediaDrm, setOnKeysChangeListener);
-  LOAD_OPTIONAL_SYMBOL(AMediaDrm, getKeyRequestWithDefaultUrlAndType);
-
-  LOAD_REQUIRED_SYMBOL(AMediaCrypto, isCryptoSchemeSupported);
-  LOAD_REQUIRED_SYMBOL(AMediaCrypto, delete);
-  LOAD_REQUIRED_SYMBOL(AMediaCrypto, new);
-
-  LOAD_REQUIRED_SYMBOL(AMediaCodecCryptoInfo, delete);
-  LOAD_REQUIRED_SYMBOL(AMediaCodecCryptoInfo, new);
-  LOAD_REQUIRED_SYMBOL(AMediaCodecCryptoInfo, setPattern);
-
-#undef LOAD_REQUIRED_SYMBOL
-#undef LOAD_OPTIONAL_SYMBOL
-
-  sMediaNdk = mediaNdk.release();
-  return true;
 }
 
 /* static */
@@ -101,8 +63,8 @@ void MediaDrmRemoteCDMParent::HandleEventCb(
       __func__,
       [aDrm, aEventType, aExtra, sessionIdStr = std::move(sessionIdStr),
        data = std::move(data)]() mutable {
-        auto i = sMediaNdk->cbMap.find(aDrm);
-        if (i == sMediaNdk->cbMap.end()) {
+        auto i = sCbMap->find(aDrm);
+        if (i == sCbMap->end()) {
           return;
         }
 
@@ -125,8 +87,8 @@ void MediaDrmRemoteCDMParent::HandleExpirationUpdateCb(
   RemoteMediaManagerParent::Dispatch(NS_NewRunnableFunction(
       __func__, [aDrm, aExpiryTimeInMS,
                  sessionIdStr = std::move(sessionIdStr)]() mutable {
-        auto i = sMediaNdk->cbMap.find(aDrm);
-        if (i == sMediaNdk->cbMap.end()) {
+        auto i = sCbMap->find(aDrm);
+        if (i == sCbMap->end()) {
           return;
         }
 
@@ -181,8 +143,8 @@ void MediaDrmRemoteCDMParent::HandleKeysChangeCb(
   RemoteMediaManagerParent::Dispatch(NS_NewRunnableFunction(
       __func__, [aDrm, aHasNewUsableKey, sessionIdStr = std::move(sessionIdStr),
                  keyInfo = std::move(keyInfo)]() mutable {
-        auto i = sMediaNdk->cbMap.find(aDrm);
-        if (i == sMediaNdk->cbMap.end()) {
+        auto i = sCbMap->find(aDrm);
+        if (i == sCbMap->end()) {
           return;
         }
 
@@ -231,8 +193,8 @@ void MediaDrmRemoteCDMParent::Destroy() {
   }
 
   if (mDrm) {
-    sMediaNdk->cbMap.erase(mDrm);
-    sMediaNdk->mAMediaDrm_release(mDrm);
+    sCbMap->erase(mDrm);
+    AMediaDrm_release(mDrm);
     mDrm = nullptr;
   }
 }
@@ -252,19 +214,13 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvInit(
     return IPC_OK();
   }
 
-  if (!InitializeStatics()) {
-    aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
-                          "Cannot load media NDK symbols"_ns));
-    return IPC_OK();
-  }
-
-  if (NS_WARN_IF(!sMediaNdk->mAMediaCrypto_isCryptoSchemeSupported(mUuid))) {
+  if (NS_WARN_IF(!AMediaCrypto_isCryptoSchemeSupported(mUuid))) {
     aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
                           "AMediaCrypto_isCryptoSchemeSupported failed"_ns));
     return IPC_OK();
   }
 
-  mDrm = sMediaNdk->mAMediaDrm_createByUUID(mUuid);
+  mDrm = AMediaDrm_createByUUID(mUuid);
   if (NS_WARN_IF(!mDrm)) {
     aResolver(MediaResult(NS_ERROR_DOM_INVALID_STATE_ERR,
                           "AMediaDrm_createByUUID failed"_ns));
@@ -272,7 +228,7 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvInit(
   }
 
   media_status_t status =
-      sMediaNdk->mAMediaDrm_setPropertyString(mDrm, "securityLevel", "L3");
+      AMediaDrm_setPropertyString(mDrm, "securityLevel", "L3");
   if (NS_WARN_IF(status != AMEDIA_OK)) {
     aResolver(MediaResult(
         NS_ERROR_DOM_INVALID_STATE_ERR,
@@ -281,8 +237,7 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvInit(
     return IPC_OK();
   }
 
-  status =
-      sMediaNdk->mAMediaDrm_setPropertyString(mDrm, "privacyMode", "enable");
+  status = AMediaDrm_setPropertyString(mDrm, "privacyMode", "enable");
   if (NS_WARN_IF(status != AMEDIA_OK)) {
     aResolver(MediaResult(
         NS_ERROR_DOM_INVALID_STATE_ERR,
@@ -291,8 +246,7 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvInit(
     return IPC_OK();
   }
 
-  status =
-      sMediaNdk->mAMediaDrm_setPropertyString(mDrm, "sessionSharing", "enable");
+  status = AMediaDrm_setPropertyString(mDrm, "sessionSharing", "enable");
   if (NS_WARN_IF(status != AMEDIA_OK)) {
     aResolver(MediaResult(
         NS_ERROR_DOM_INVALID_STATE_ERR,
@@ -301,7 +255,7 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvInit(
     return IPC_OK();
   }
 
-  status = sMediaNdk->mAMediaDrm_setOnEventListener(mDrm, HandleEventCb);
+  status = AMediaDrm_setOnEventListener(mDrm, HandleEventCb);
   if (NS_WARN_IF(status != AMEDIA_OK)) {
     aResolver(MediaResult(
         NS_ERROR_DOM_INVALID_STATE_ERR,
@@ -309,9 +263,9 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvInit(
     return IPC_OK();
   }
 
-  if (sMediaNdk->mAMediaDrm_setOnExpirationUpdateListener) {
-    status = sMediaNdk->mAMediaDrm_setOnExpirationUpdateListener(
-        mDrm, HandleExpirationUpdateCb);
+  if (__builtin_available(android 29, *)) {
+    status =
+        AMediaDrm_setOnExpirationUpdateListener(mDrm, HandleExpirationUpdateCb);
     if (NS_WARN_IF(status != AMEDIA_OK)) {
       aResolver(MediaResult(
           NS_ERROR_DOM_INVALID_STATE_ERR,
@@ -319,11 +273,8 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvInit(
                         status)));
       return IPC_OK();
     }
-  }
 
-  if (sMediaNdk->mAMediaDrm_setOnKeysChangeListener) {
-    status =
-        sMediaNdk->mAMediaDrm_setOnKeysChangeListener(mDrm, HandleKeysChangeCb);
+    status = AMediaDrm_setOnKeysChangeListener(mDrm, HandleKeysChangeCb);
     if (NS_WARN_IF(status != AMEDIA_OK)) {
       aResolver(MediaResult(
           NS_ERROR_DOM_INVALID_STATE_ERR,
@@ -334,7 +285,9 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvInit(
   }
 
   EME_LOG("[%p] MediaDrmRemoteCDMParent::RecvInit -- drm %p", this, mDrm);
-  sMediaNdk->cbMap[mDrm] = this;
+
+  InitializeStatics();
+  sCbMap->insert(std::pair{mDrm, this});
   aResolver(MediaResult(NS_OK));
 
   EnsureHasAMediaCrypto();
@@ -360,8 +313,7 @@ MediaDrmRemoteCDMParent::EnsureHasAMediaCrypto() {
   EME_LOG("[%p] MediaDrmRemoteCDMParent::EnsureHasAMediaCrypto -- open session",
           this);
 
-  media_status_t status =
-      sMediaNdk->mAMediaDrm_openSession(mDrm, &mCryptoSessionId);
+  media_status_t status = AMediaDrm_openSession(mDrm, &mCryptoSessionId);
   if (status == AMEDIA_DRM_NOT_PROVISIONED) {
     return EnsureProvisioned()->Then(
         GetCurrentSerialEventTarget(), __func__,
@@ -377,10 +329,10 @@ MediaDrmRemoteCDMParent::EnsureHasAMediaCrypto() {
     return InternalPromise::CreateAndReject(*mCryptoError, __func__);
   }
 
-  AMediaCrypto* crypto = sMediaNdk->mAMediaCrypto_new(
-      mUuid, mCryptoSessionId.ptr, mCryptoSessionId.length);
+  AMediaCrypto* crypto =
+      AMediaCrypto_new(mUuid, mCryptoSessionId.ptr, mCryptoSessionId.length);
   if (NS_WARN_IF(!crypto)) {
-    sMediaNdk->mAMediaDrm_closeSession(mDrm, &mCryptoSessionId);
+    AMediaDrm_closeSession(mDrm, &mCryptoSessionId);
     mCryptoSessionId = {};
     mCryptoError.emplace(NS_ERROR_DOM_INVALID_STATE_ERR,
                          "AMediaCrypto_new failed"_ns);
@@ -420,7 +372,7 @@ MediaDrmRemoteCDMParent::EnsureProvisioned() {
   size_t provisionRequestSize = std::numeric_limits<size_t>::max();
   const uint8_t* provisionRequest = nullptr;
   const char* serverUrl = nullptr;
-  media_status_t status = sMediaNdk->mAMediaDrm_getProvisionRequest(
+  media_status_t status = AMediaDrm_getProvisionRequest(
       mDrm, &provisionRequest, &provisionRequestSize, &serverUrl);
   if (NS_WARN_IF(status != AMEDIA_OK)) {
     EME_LOG("[%p] MediaDrmRemoteCDMParent::EnsureProvisioned -- failed drm %p provisionRequest %p size %zu serverUrl %p (%s) status %d",
@@ -451,10 +403,9 @@ MediaDrmRemoteCDMParent::EnsureProvisioned() {
               return;
             }
 
-            media_status_t status =
-                sMediaNdk->mAMediaDrm_provideProvisionResponse(
-                    self->mDrm, aResponse.get_ArrayOfuint8_t().Elements(),
-                    aResponse.get_ArrayOfuint8_t().Length());
+            media_status_t status = AMediaDrm_provideProvisionResponse(
+                self->mDrm, aResponse.get_ArrayOfuint8_t().Elements(),
+                aResponse.get_ArrayOfuint8_t().Length());
             if (NS_WARN_IF(status != AMEDIA_OK)) {
               EME_LOG(
                   "[%p] MediaDrmRemoteCDMParent::EnsureProvisioned -- response "
@@ -508,7 +459,7 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvCreateSession(
   }
 
   AMediaDrmSessionId sessionId;
-  media_status_t status = sMediaNdk->mAMediaDrm_openSession(mDrm, &sessionId);
+  media_status_t status = AMediaDrm_openSession(mDrm, &sessionId);
   if (status == AMEDIA_DRM_NOT_PROVISIONED) {
     EnsureProvisioned()->Then(
         GetCurrentSerialEventTarget(), __func__,
@@ -536,14 +487,14 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvCreateSession(
 
   const uint8_t* keyRequest = nullptr;
   size_t keyRequestSize = 0;
-  status = sMediaNdk->mAMediaDrm_getKeyRequest(
-      mDrm, &sessionId, aRequest.initData().Elements(),
-      aRequest.initData().Length(), mimeType.get(),
-      AMediaDrmKeyType::KEY_TYPE_STREAMING, nullptr, 0, &keyRequest,
-      &keyRequestSize);
+  status =
+      AMediaDrm_getKeyRequest(mDrm, &sessionId, aRequest.initData().Elements(),
+                              aRequest.initData().Length(), mimeType.get(),
+                              AMediaDrmKeyType::KEY_TYPE_STREAMING, nullptr, 0,
+                              &keyRequest, &keyRequestSize);
 
   if (status == AMEDIA_DRM_NOT_PROVISIONED) {
-    sMediaNdk->mAMediaDrm_closeSession(mDrm, &sessionId);
+    AMediaDrm_closeSession(mDrm, &sessionId);
     EnsureProvisioned()->Then(
         GetCurrentSerialEventTarget(), __func__,
         [self = RefPtr{this}, request = std::move(aRequest),
@@ -560,7 +511,7 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvCreateSession(
   }
 
   if (NS_WARN_IF(status != AMEDIA_OK)) {
-    sMediaNdk->mAMediaDrm_closeSession(mDrm, &sessionId);
+    AMediaDrm_closeSession(mDrm, &sessionId);
     aResolver(MediaResult(
         NS_ERROR_DOM_INVALID_STATE_ERR,
         RESULT_DETAIL("AMediaDrm_getKeyRequest failed %d", status)));
@@ -603,7 +554,7 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvUpdateSession(
   MOZ_ASSERT(HasCrypto());
 
   AMediaDrmKeySetId keySetId{};
-  media_status_t status = sMediaNdk->mAMediaDrm_provideKeyResponse(
+  media_status_t status = AMediaDrm_provideKeyResponse(
       mDrm, &i->second.id, aRequest.response().Elements(),
       aRequest.response().Length(), &keySetId);
   if (NS_WARN_IF(status != AMEDIA_OK)) {
@@ -640,8 +591,7 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvCloseSession(
 
   EME_LOG("[%p] MediaDrmRemoteCDMParent::RecvCloseSession -- closeSession",
           this);
-  media_status_t status =
-      sMediaNdk->mAMediaDrm_closeSession(mDrm, &i->second.id);
+  media_status_t status = AMediaDrm_closeSession(mDrm, &i->second.id);
   EME_LOG("[%p] MediaDrmRemoteCDMParent::RecvCloseSession -- status %d", this,
           status);
   if (NS_WARN_IF(status != AMEDIA_OK)) {
@@ -672,7 +622,7 @@ mozilla::ipc::IPCResult MediaDrmRemoteCDMParent::RecvSetServerCertificate(
       "[%p] MediaDrmRemoteCDMParent::RecvSetServerCertificate -- "
       "setPropertyByteArray",
       this);
-  media_status_t status = sMediaNdk->mAMediaDrm_setPropertyByteArray(
+  media_status_t status = AMediaDrm_setPropertyByteArray(
       mDrm, "certificate", aCertificate.Elements(), aCertificate.Length());
   EME_LOG("[%p] MediaDrmRemoteCDMParent::RecvSetServerCertificate -- status %d",
           this, status);
@@ -712,13 +662,13 @@ void MediaDrmRemoteCDMParent::HandleEvent(nsString&& aSessionId,
           AMediaDrmKeyRequestType::KEY_REQUEST_TYPE_INITIAL;
       media_status_t status;
 
-      if (sMediaNdk->mAMediaDrm_getKeyRequestWithDefaultUrlAndType) {
-        status = sMediaNdk->mAMediaDrm_getKeyRequestWithDefaultUrlAndType(
+      if (__builtin_available(android 33, *)) {
+        status = AMediaDrm_getKeyRequestWithDefaultUrlAndType(
             mDrm, &i->second.id, aData.Elements(), aData.Length(),
             i->second.mimeType.get(), AMediaDrmKeyType::KEY_TYPE_STREAMING,
             nullptr, 0, &keyRequest, &keyRequestSize, nullptr, &keyRequestType);
       } else {
-        status = sMediaNdk->mAMediaDrm_getKeyRequest(
+        status = AMediaDrm_getKeyRequest(
             mDrm, &i->second.id, aData.Elements(), aData.Length(),
             i->second.mimeType.get(), AMediaDrmKeyType::KEY_TYPE_STREAMING,
             nullptr, 0, &keyRequest, &keyRequestSize);
@@ -903,10 +853,15 @@ already_AddRefed<MediaDrmCryptoInfo> MediaDrmRemoteCDMParent::CreateCryptoInfo(
   }
 
   if (mode == AMEDIACODECRYPTOINFO_MODE_AES_CBC) {
+    if (NS_WARN_IF(
+            !MediaDrmRemoteCDMParent::sAMediaCodecCryptoInfo_setPattern)) {
+      return nullptr;
+    }
     cryptoinfo_pattern_t pattern = {};
     pattern.encryptBlocks = cryptoObj.mCryptByteBlock;
     pattern.skipBlocks = cryptoObj.mSkipByteBlock;
-    sMediaNdk->mAMediaCodecCryptoInfo_setPattern(cryptoInfo, &pattern);
+    MediaDrmRemoteCDMParent::sAMediaCodecCryptoInfo_setPattern(cryptoInfo,
+                                                               &pattern);
   }
 
   return MakeAndAddRef<MediaDrmCryptoInfo>(cryptoInfo);
