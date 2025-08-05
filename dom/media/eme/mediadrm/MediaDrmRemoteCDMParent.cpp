@@ -218,7 +218,7 @@ void MediaDrmRemoteCDMParent::Destroy() {
       MediaResult(NS_ERROR_DOM_ABORT_ERR, "Destroyed"_ns), __func__);
 
   for (const auto& i : mSessions) {
-    sMediaNdk->mAMediaDrm_closeSession(mDrm, &i.second.id);
+    AMediaDrm_closeSession(mDrm, &i.second.id);
   }
   mSessions.clear();
 
@@ -894,7 +894,7 @@ already_AddRefed<MediaDrmCryptoInfo> MediaDrmRemoteCDMParent::CreateCryptoInfo(
       return nullptr;
   }
 
-  AMediaCodecCryptoInfo* cryptoInfo = sMediaNdk->mAMediaCodecCryptoInfo_new(
+  AMediaCodecCryptoInfo* cryptoInfo = AMediaCodecCryptoInfo_new(
       static_cast<int32_t>(numSubSamples), key, iv, mode, plainSizes.Elements(),
       encryptedSizes.Elements());
   if (NS_WARN_IF(!cryptoInfo)) {
@@ -913,12 +913,11 @@ already_AddRefed<MediaDrmCryptoInfo> MediaDrmRemoteCDMParent::CreateCryptoInfo(
 }
 
 MediaDrmCrypto::~MediaDrmCrypto() {
-  MediaDrmRemoteCDMParent::sMediaNdk->mAMediaCrypto_delete(mCrypto);
+  AMediaCrypto_delete(mCrypto);
 }
 
 MediaDrmCryptoInfo::~MediaDrmCryptoInfo() {
-  MediaDrmRemoteCDMParent::sMediaNdk->mAMediaCodecCryptoInfo_delete(
-      mCryptoInfo);
+  AMediaCodecCryptoInfo_delete(mCryptoInfo);
 }
 
 }  // namespace mozilla
