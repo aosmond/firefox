@@ -266,7 +266,7 @@ class nsDisplayCanvas final : public nsPaintedDisplayItem {
 
     gfxContextMatrixAutoSaveRestore saveMatrix(aCtx);
 
-    if (RefPtr<layers::Image> image = canvas->GetAsImage()) {
+    if (RefPtr<layers::Image> image = canvas->GetAsImageForPresent()) {
       gfxRect destGFXRect = presContext->AppUnitsToGfxUnits(dest);
 
       // Transform the canvas into the right place
