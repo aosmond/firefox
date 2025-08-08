@@ -930,7 +930,8 @@ nsresult HTMLCanvasElement::ExtractData(JSContext* aCx,
   }
 
   return ImageEncoder::ExtractData(aType, aOptions, GetSize(), usePlaceholder,
-                                   mCurrentContext, mOffscreenDisplay, aStream);
+                                   mCurrentContext, aSubjectPrincipal,
+                                   mOffscreenDisplay, aStream);
 }
 
 nsresult HTMLCanvasElement::ToDataURLImpl(JSContext* aCx,
@@ -981,12 +982,14 @@ nsresult HTMLCanvasElement::ToDataURLImpl(JSContext* aCx,
 }
 
 UniquePtr<uint8_t[]> HTMLCanvasElement::GetImageBuffer(
-    nsIPrincipal& aPrincipal, int32_t* aOutFormat, gfx::IntSize* aOutImageSize) {
+    nsIPrincipal& aSubjectPrincipal, int32_t* aOutFormat,
+    gfx::IntSize* aOutImageSize) {
   if (mCurrentContext) {
     return mCurrentContext->GetImageBuffer(aOutFormat, aOutImageSize);
   }
   if (mOffscreenDisplay) {
-    return mOffscreenDisplay->GetImageBuffer(aPrincipal, aOutFormat, aOutImageSize);
+    return mOffscreenDisplay->GetImageBuffer(aSubjectPrincipal, aOutFormat,
+                                             aOutImageSize);
   }
   return nullptr;
 }
@@ -1409,11 +1412,11 @@ void HTMLCanvasElement::SetFrameCapture(
 }
 
 already_AddRefed<SourceSurface> HTMLCanvasElement::GetSurfaceSnapshot(
-    gfxAlphaType* const aOutAlphaType, DrawTarget* aTarget) {
+    nsIPrincipal& aSubjectPrincipal, gfxAlphaType* const aOutAlphaType, DrawTarget* aTarget) {
   if (mCurrentContext) {
     return mCurrentContext->GetOptimizedSnapshot(aTarget, aOutAlphaType);
   } else if (mOffscreenDisplay) {
-    return mOffscreenDisplay->GetSurfaceSnapshot();
+    return mOffscreenDisplay->GetSurfaceSnapshotForReadback(aSubjectPrincipal);
   }
   return nullptr;
 }

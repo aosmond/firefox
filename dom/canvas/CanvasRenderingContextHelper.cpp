@@ -125,7 +125,8 @@ void CanvasRenderingContextHelper::ToBlob(nsIPrincipal& aSubjectPrincipal, Encod
 }
 
 UniquePtr<uint8_t[]> CanvasRenderingContextHelper::GetImageBuffer(
-    int32_t* aOutFormat, gfx::IntSize* aOutImageSize) {
+    nsIPrincipal& aSubjectPrincipal, int32_t* aOutFormat,
+    gfx::IntSize* aOutImageSize) {
   if (mCurrentContext) {
     return mCurrentContext->GetImageBuffer(aOutFormat, aOutImageSize);
   }

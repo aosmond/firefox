@@ -39,6 +39,7 @@ class ImageEncoder {
   static nsresult ExtractData(nsAString& aType, const nsAString& aOptions,
                               const CSSIntSize aSize, bool aUsePlaceholder,
                               nsICanvasRenderingContextInternal* aContext,
+                              nsIPrincipal& aSubjectPrincipal,
                               OffscreenCanvasDisplayHelper* aOffscreenDisplay,
                               nsIInputStream** aStream);
 
@@ -85,6 +86,7 @@ class ImageEncoder {
       const nsAString& aType, const nsAString& aOptions, uint8_t* aImageBuffer,
       int32_t aFormat, const CSSIntSize aSize, bool aUsePlaceholder,
       layers::Image* aImage, nsICanvasRenderingContextInternal* aContext,
+      nsIPrincipal* aSubjectPrincipal,
       OffscreenCanvasDisplayHelper* aOffscreenDisplay, nsIInputStream** aStream,
       imgIEncoder* aEncoder);
 

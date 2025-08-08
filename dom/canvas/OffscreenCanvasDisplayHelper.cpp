@@ -486,7 +486,8 @@ OffscreenCanvasDisplayHelper::GetSurfaceSnapshot(
       // main thread's request for readback, we need to check again to make sure
       // this is allowed in the present stable state.
       RefPtr<gfx::SourceSurface> surface;
-      if (canvas && (!mReadbackPrincipal || canvas->CallerCanRead(*mReadbackPrincipal)) {
+      if (canvas &&
+          (!mReadbackPrincipal || canvas->CallerCanRead(*mReadbackPrincipal))) {
         if (auto* context = canvas->GetContext()) {
           surface =
               context->GetFrontBufferSnapshot(/* requireAlphaPremult */ false);
@@ -551,7 +552,8 @@ OffscreenCanvasDisplayHelper::GetSurfaceSnapshot(
     originPos = mData.mOriginPos;
     canvasElement = mCanvasElement;
     if (mWorkerRef) {
-      workerRunnable = MakeRefPtr<SnapshotWorkerRunnable>(this);
+      workerRunnable =
+          MakeRefPtr<SnapshotWorkerRunnable>(this, aReadbackPrincipal);
       workerRunnable->Dispatch(mWorkerRef->Private());
     }
   }

@@ -175,7 +175,7 @@ class EncodingRunnable : public Runnable {
     if (rv == NS_ERROR_INVALID_ARG && mUsingCustomOptions) {
       rv = ImageEncoder::ExtractDataInternal(
           mType, u""_ns, mImageBuffer.get(), mFormat, mSize, mUsePlaceholder,
-          mImage, nullptr, nullptr, getter_AddRefs(stream), mEncoder);
+          mImage, nullptr, nullptr, nullptr, getter_AddRefs(stream), mEncoder);
     }
     NS_ENSURE_SUCCESS(rv, rv);
 
@@ -225,15 +225,16 @@ class EncodingRunnable : public Runnable {
 nsresult ImageEncoder::ExtractData(
     nsAString& aType, const nsAString& aOptions, const CSSIntSize aSize,
     bool aUsePlaceholder, nsICanvasRenderingContextInternal* aContext,
+    nsIPrincipal& aSubjectPrincipal,
     OffscreenCanvasDisplayHelper* aOffscreenDisplay, nsIInputStream** aStream) {
   nsCOMPtr<imgIEncoder> encoder = ImageEncoder::GetImageEncoder(aType);
   if (!encoder) {
     return NS_IMAGELIB_ERROR_NO_ENCODER;
   }
 
-  return ExtractDataInternal(aType, aOptions, nullptr, 0, aSize,
-                             aUsePlaceholder, nullptr, aContext,
-                             aOffscreenDisplay, aStream, encoder);
+  return ExtractDataInternal(
+      aType, aOptions, nullptr, 0, aSize, aUsePlaceholder, nullptr, aContext,
+      &aSubjectPrincipal, aOffscreenDisplay, aStream, encoder);
 }
 
 /* static */
@@ -297,6 +298,7 @@ nsresult ImageEncoder::ExtractDataInternal(
     const nsAString& aType, const nsAString& aOptions, uint8_t* aImageBuffer,
     int32_t aFormat, const CSSIntSize aSize, bool aUsePlaceholder,
     layers::Image* aImage, nsICanvasRenderingContextInternal* aContext,
+    nsIPrincipal* aSubjectPrincipal,
     OffscreenCanvasDisplayHelper* aOffscreenDisplay, nsIInputStream** aStream,
     imgIEncoder* aEncoder) {
   if (aSize.IsEmpty()) {
@@ -320,13 +322,17 @@ nsresult ImageEncoder::ExtractDataInternal(
     rv = aContext->GetInputStream(encoderType.get(), aOptions,
                                   getter_AddRefs(imgStream));
   } else if (aOffscreenDisplay && !aUsePlaceholder) {
+    if (NS_WARN_IF(!aSubjectPrincipal)) {
+      return NS_ERROR_DOM_SECURITY_ERR;
+    }
+
     const NS_ConvertUTF16toUTF8 encoderType(aType);
     if (BufferSizeFromDimensions(aSize.width, aSize.height, 4) == 0) {
       return NS_ERROR_INVALID_ARG;
     }
 
     const RefPtr<SourceSurface> snapshot =
-        aOffscreenDisplay->GetSurfaceSnapshot();
+        aOffscreenDisplay->GetSurfaceSnapshotForReadback(*aSubjectPrincipal);
     if (!snapshot) {
       return NS_ERROR_OUT_OF_MEMORY;
     }

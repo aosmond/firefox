@@ -70,7 +70,8 @@ class CanvasRenderingContextHelper {
               const nsAString& aEncodeOptions, bool aUsingCustomOptions,
               bool aUsePlaceholder, ErrorResult& aRv);
 
-  virtual UniquePtr<uint8_t[]> GetImageBuffer(int32_t* aOutFormat,
+  virtual UniquePtr<uint8_t[]> GetImageBuffer(nsIPrincipal& aSubjectPrincipal,
+                                              int32_t* aOutFormat,
                                               gfx::IntSize* aOutImageSize);
 
   already_AddRefed<nsISupports> GetOrCreateContext(

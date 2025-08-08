@@ -276,7 +276,7 @@ class HTMLCanvasElement final : public nsGenericHTMLElement,
    * Helpers called by various users of Canvas
    */
 
-  already_AddRefed<layers::Image> GetAsImage();
+  already_AddRefed<layers::Image> GetAsImageForPresent();
   bool UpdateWebRenderCanvasData(nsDisplayListBuilder* aBuilder,
                                  WebRenderCanvasData* aCanvasData);
   bool InitializeCanvasRenderer(nsDisplayListBuilder* aBuilder,
@@ -331,7 +331,8 @@ class HTMLCanvasElement final : public nsGenericHTMLElement,
                          const nsAString& aMimeType,
                          const JS::Value& aEncoderOptions, nsAString& aDataURL);
 
-  UniquePtr<uint8_t[]> GetImageBuffer(int32_t* aOutFormat,
+  UniquePtr<uint8_t[]> GetImageBuffer(nsIPrincipal& aSubjectPrincipal,
+                                      int32_t* aOutFormat,
                                       gfx::IntSize* aOutImageSize) override;
 
   MOZ_CAN_RUN_SCRIPT void CallPrintCallback();
