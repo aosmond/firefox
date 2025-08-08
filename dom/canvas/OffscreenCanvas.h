@@ -103,10 +103,12 @@ class OffscreenCanvas final : public DOMEventTargetHelper,
   already_AddRefed<ImageBitmap> TransferToImageBitmap(ErrorResult& aRv);
 
   already_AddRefed<Promise> ConvertToBlob(const ImageEncodeOptions& aOptions,
+                                          nsIPrincipal& aSubjectPrincipal,
                                           ErrorResult& aRv);
 
   already_AddRefed<Promise> ToBlob(JSContext* aCx, const nsAString& aType,
                                    JS::Handle<JS::Value> aParams,
+                                   nsIPrincipal& aSubjectPrincipal,
                                    ErrorResult& aRv);
 
   Maybe<uint64_t> GetWindowID();

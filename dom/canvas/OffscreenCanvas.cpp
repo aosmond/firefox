@@ -465,7 +465,8 @@ OffscreenCanvas::CreateEncodeCompleteCallback(Promise* aPromise) {
 }
 
 already_AddRefed<Promise> OffscreenCanvas::ConvertToBlob(
-    const ImageEncodeOptions& aOptions, ErrorResult& aRv) {
+    const ImageEncodeOptions& aOptions, nsIPrincipal& aSubjectPrincipal,
+    ErrorResult& aRv) {
   // do a trust check if this is a write-only canvas
   if (mIsWriteOnly) {
     aRv.ThrowSecurityError("Cannot get blob from write-only canvas.");
@@ -519,10 +520,9 @@ already_AddRefed<Promise> OffscreenCanvas::ConvertToBlob(
   return promise.forget();
 }
 
-already_AddRefed<Promise> OffscreenCanvas::ToBlob(JSContext* aCx,
-                                                  const nsAString& aType,
-                                                  JS::Handle<JS::Value> aParams,
-                                                  ErrorResult& aRv) {
+already_AddRefed<Promise> OffscreenCanvas::ToBlob(
+    JSContext* aCx, const nsAString& aType, JS::Handle<JS::Value> aParams,
+    nsIPrincipal& aSubjectPrincipal, ErrorResult& aRv) {
   // do a trust check if this is a write-only canvas
   if (mIsWriteOnly) {
     aRv.ThrowSecurityError("Cannot get blob from write-only canvas.");
