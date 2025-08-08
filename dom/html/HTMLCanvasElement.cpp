@@ -767,8 +767,7 @@ void HTMLCanvasElement::ToDataURL(JSContext* aCx, const nsAString& aType,
                                   nsAString& aDataURL,
                                   nsIPrincipal& aSubjectPrincipal,
                                   ErrorResult& aRv) {
-  // mWriteOnly check is redundant, but optimizes for the common case.
-  if (mWriteOnly && !CallerCanRead(aSubjectPrincipal)) {
+  if (!CallerCanRead(aSubjectPrincipal)) {
     aRv.Throw(NS_ERROR_DOM_SECURITY_ERR);
     return;
   }
@@ -997,8 +996,7 @@ void HTMLCanvasElement::ToBlob(JSContext* aCx, BlobCallback& aCallback,
                                JS::Handle<JS::Value> aParams,
                                nsIPrincipal& aSubjectPrincipal,
                                ErrorResult& aRv) {
-  // mWriteOnly check is redundant, but optimizes for the common case.
-  if (mWriteOnly && !CallerCanRead(aSubjectPrincipal)) {
+  if (!CallerCanRead(aSubjectPrincipal)) {
     aRv.Throw(NS_ERROR_DOM_SECURITY_ERR);
     return;
   }
@@ -1103,6 +1101,10 @@ void HTMLCanvasElement::SetWriteOnly(
 }
 
 bool HTMLCanvasElement::CallerCanRead(nsIPrincipal& aPrincipal) const {
+  if (mOffscreenDisplay && !mOffscreenDisplay->CallerCanRead(aPrincipal)) {
+    return false;
+  }
+
   if (!mWriteOnly) {
     return true;
   }
