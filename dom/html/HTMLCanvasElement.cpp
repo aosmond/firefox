@@ -1021,7 +1021,7 @@ void HTMLCanvasElement::ToBlob(JSContext* aCx, BlobCallback& aCallback,
   // If no permission, return all-white, opaque image data.
   bool usePlaceholder = !CanvasUtils::IsImageExtractionAllowed(
       OwnerDoc(), aCx, aSubjectPrincipal);
-  CanvasRenderingContextHelper::ToBlob(aCx, global, aCallback, aType, aParams,
+  CanvasRenderingContextHelper::ToBlob(aCx, aSubjectPrincipal, global, aCallback, aType, aParams,
                                        usePlaceholder, aRv);
 }
 

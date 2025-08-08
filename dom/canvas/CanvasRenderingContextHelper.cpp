@@ -28,7 +28,7 @@ CanvasRenderingContextHelper::CanvasRenderingContextHelper()
     : mCurrentContextType(CanvasContextType::NoContext) {}
 
 void CanvasRenderingContextHelper::ToBlob(
-    JSContext* aCx, nsIGlobalObject* aGlobal, BlobCallback& aCallback,
+    JSContext* aCx, nsIPrincipal& aSubjectPrincipal, nsIGlobalObject* aGlobal, BlobCallback& aCallback,
     const nsAString& aType, JS::Handle<JS::Value> aParams, bool aUsePlaceholder,
     ErrorResult& aRv) {
   // Encoder callback when encoding is complete.
@@ -73,11 +73,11 @@ void CanvasRenderingContextHelper::ToBlob(
   RefPtr<EncodeCompleteCallback> callback =
       new EncodeCallback(aGlobal, &aCallback);
 
-  ToBlob(aCx, callback, aType, aParams, aUsePlaceholder, aRv);
+  ToBlob(aCx, aSubjectPrincipal, callback, aType, aParams, aUsePlaceholder, aRv);
 }
 
 void CanvasRenderingContextHelper::ToBlob(
-    JSContext* aCx, EncodeCompleteCallback* aCallback, const nsAString& aType,
+    JSContext* aCx, nsIPrincipal& aSubjectPrincipal, EncodeCompleteCallback* aCallback, const nsAString& aType,
     JS::Handle<JS::Value> aParams, bool aUsePlaceholder, ErrorResult& aRv) {
   nsAutoString type;
   nsContentUtils::ASCIIToLower(aType, type);
@@ -89,11 +89,11 @@ void CanvasRenderingContextHelper::ToBlob(
     return;
   }
 
-  ToBlob(aCallback, type, params, usingCustomParseOptions, aUsePlaceholder,
+  ToBlob(aSubjectPrincipal, aCallback, type, params, usingCustomParseOptions, aUsePlaceholder,
          aRv);
 }
 
-void CanvasRenderingContextHelper::ToBlob(EncodeCompleteCallback* aCallback,
+void CanvasRenderingContextHelper::ToBlob(nsIPrincipal& aSubjectPrincipal, EncodeCompleteCallback* aCallback,
                                           nsAString& aType,
                                           const nsAString& aEncodeOptions,
                                           bool aUsingCustomOptions,
@@ -115,7 +115,7 @@ void CanvasRenderingContextHelper::ToBlob(EncodeCompleteCallback* aCallback,
 
   int32_t format = 0;
   auto imageSize = gfx::IntSize{elementSize.width, elementSize.height};
-  UniquePtr<uint8_t[]> imageBuffer = GetImageBuffer(&format, &imageSize);
+  UniquePtr<uint8_t[]> imageBuffer = GetImageBuffer(aSubjectPrincipal, &format, &imageSize);
   RefPtr<EncodeCompleteCallback> callback = aCallback;
 
   aRv = ImageEncoder::ExtractDataAsync(

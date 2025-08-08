@@ -58,15 +58,15 @@ class CanvasRenderingContextHelper {
                                nsAString& outParams,
                                bool* const outCustomParseOptions);
 
-  void ToBlob(JSContext* aCx, nsIGlobalObject* global, BlobCallback& aCallback,
+  void ToBlob(JSContext* aCx, nsIPrincipal& aSubjectPrincipal, nsIGlobalObject* global, BlobCallback& aCallback,
               const nsAString& aType, JS::Handle<JS::Value> aParams,
               bool aUsePlaceholder, ErrorResult& aRv);
 
-  void ToBlob(JSContext* aCx, EncodeCompleteCallback* aCallback,
+  void ToBlob(JSContext* aCx, nsIPrincipal& aSubjectPrincipal, EncodeCompleteCallback* aCallback,
               const nsAString& aType, JS::Handle<JS::Value> aParams,
               bool aUsePlaceholder, ErrorResult& aRv);
 
-  void ToBlob(EncodeCompleteCallback* aCallback, nsAString& aType,
+  void ToBlob(nsIPrincipal& aSubjectPrincipal, EncodeCompleteCallback* aCallback, nsAString& aType,
               const nsAString& aEncodeOptions, bool aUsingCustomOptions,
               bool aUsePlaceholder, ErrorResult& aRv);
 
