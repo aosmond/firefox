@@ -68,15 +68,26 @@ class OffscreenCanvasDisplayHelper final {
   bool CanElementCaptureStream() const;
   bool UsingElementCaptureStream() const;
 
-  already_AddRefed<mozilla::gfx::SourceSurface> GetSurfaceSnapshot();
-  already_AddRefed<mozilla::layers::Image> GetAsImage();
-  UniquePtr<uint8_t[]> GetImageBuffer(int32_t* aOutFormat,
+  already_AddRefed<mozilla::gfx::SourceSurface> GetSurfaceSnapshotForPresent() {
+    return GetSurfaceSnapshot(/* aPrincipalForReadback */ nullptr);
+  }
+
+  already_AddRefed<mozilla::gfx::SourceSurface> GetSurfaceSnapshotForReadback(
+      nsIPrincipal& aPrincipal) {
+    return GetSurfaceSnapshot(&aPrincipal);
+  }
+
+  already_AddRefed<mozilla::layers::Image> GetAsImageForPresent();
+  UniquePtr<uint8_t[]> GetImageBuffer(nsIPrincipal& aPrincipal, int32_t* aOutFormat,
                                       gfx::IntSize* aOutImageSize);
 
  private:
   ~OffscreenCanvasDisplayHelper();
   void MaybeQueueInvalidateElement() MOZ_REQUIRES(mMutex);
   void InvalidateElement();
+
+  already_AddRefed<mozilla::gfx::SourceSurface> GetSurfaceSnapshot(
+      nsIPrincipal* aReadbackPrincipal);
 
   already_AddRefed<gfx::SourceSurface> TransformSurface(
       gfx::SourceSurface* aSurface, bool aHasAlpha, bool aIsAlphaPremult,

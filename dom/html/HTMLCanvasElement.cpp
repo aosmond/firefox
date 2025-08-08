@@ -981,12 +981,12 @@ nsresult HTMLCanvasElement::ToDataURLImpl(JSContext* aCx,
 }
 
 UniquePtr<uint8_t[]> HTMLCanvasElement::GetImageBuffer(
-    int32_t* aOutFormat, gfx::IntSize* aOutImageSize) {
+    nsIPrincipal& aPrincipal, int32_t* aOutFormat, gfx::IntSize* aOutImageSize) {
   if (mCurrentContext) {
     return mCurrentContext->GetImageBuffer(aOutFormat, aOutImageSize);
   }
   if (mOffscreenDisplay) {
-    return mOffscreenDisplay->GetImageBuffer(aOutFormat, aOutImageSize);
+    return mOffscreenDisplay->GetImageBuffer(aPrincipal, aOutFormat, aOutImageSize);
   }
   return nullptr;
 }
@@ -1268,9 +1268,9 @@ CanvasContextType HTMLCanvasElement::GetCurrentContextType() {
   return mCurrentContextType;
 }
 
-already_AddRefed<Image> HTMLCanvasElement::GetAsImage() {
+already_AddRefed<Image> HTMLCanvasElement::GetAsImageForPresent() {
   if (mOffscreenDisplay) {
-    return mOffscreenDisplay->GetAsImage();
+    return mOffscreenDisplay->GetAsImageForPresent();
   }
 
   if (mCurrentContext) {

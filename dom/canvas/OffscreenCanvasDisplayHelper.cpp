@@ -452,16 +452,19 @@ OffscreenCanvasDisplayHelper::TransformSurface(gfx::SourceSurface* aSurface,
 }
 
 already_AddRefed<gfx::SourceSurface>
-OffscreenCanvasDisplayHelper::GetSurfaceSnapshot() {
+OffscreenCanvasDisplayHelper::GetSurfaceSnapshot(
+    nsIPrincipal* aReadbackPrincipal) {
   MOZ_ASSERT(NS_IsMainThread());
 
   class SnapshotWorkerRunnable final : public MainThreadWorkerRunnable {
    public:
     explicit SnapshotWorkerRunnable(
-        OffscreenCanvasDisplayHelper* aDisplayHelper)
+        OffscreenCanvasDisplayHelper* aDisplayHelper,
+        nsIPrincipal* aReadbackPrincipal)
         : MainThreadWorkerRunnable("SnapshotWorkerRunnable"),
           mMonitor("SnapshotWorkerRunnable::mMonitor"),
-          mDisplayHelper(aDisplayHelper) {}
+          mDisplayHelper(aDisplayHelper),
+          mReadbackPrincipal(aReadbackPrincipal) {}
 
     bool WorkerRun(JSContext*, WorkerPrivate*) override {
       // The OffscreenCanvas can only be freed on the worker thread, so we
@@ -477,8 +480,13 @@ OffscreenCanvasDisplayHelper::GetSurfaceSnapshot() {
 
       // Now that we are on the correct thread, we can extract the snapshot. If
       // it is a Skia surface, perform a copy to threading issues.
+      //
+      // If we are given a principal, then we must be performing a readback.
+      // Because putting write-only data in the canvas may have raced with the
+      // main thread's request for readback, we need to check again to make sure
+      // this is allowed in the present stable state.
       RefPtr<gfx::SourceSurface> surface;
-      if (canvas) {
+      if (canvas && (!mReadbackPrincipal || canvas->CallerCanRead(*mReadbackPrincipal)) {
         if (auto* context = canvas->GetContext()) {
           surface =
               context->GetFrontBufferSnapshot(/* requireAlphaPremult */ false);
@@ -510,8 +518,14 @@ OffscreenCanvasDisplayHelper::GetSurfaceSnapshot() {
     }
 
    private:
+    ~SnapshotWorkerRunnable() override {
+      NS_ReleaseOnMainThread("SnapshotWorkerRunnable::mReadbackPrincipal",
+                             mReadbackPrincipal.forget());
+    }
+
     Monitor mMonitor;
     RefPtr<OffscreenCanvasDisplayHelper> mDisplayHelper;
+    RefPtr<nsIPrincipal> mReadbackPrincipal;
     RefPtr<gfx::SourceSurface> mSurface MOZ_GUARDED_BY(mMonitor);
     bool mComplete MOZ_GUARDED_BY(mMonitor) = false;
   };
@@ -550,6 +564,16 @@ OffscreenCanvasDisplayHelper::GetSurfaceSnapshot() {
   } else if (canvasElement) {
     // If we have a context, it is owned by the main thread.
     const auto* offscreenCanvas = canvasElement->GetOffscreenCanvas();
+
+    // If we are given a principal, then we must be performing a readback.
+    // Because putting write-only data in the canvas may have raced with the
+    // main thread's request for readback, we need to check again to make sure
+    // this is allowed in the present stable state.
+    if (aReadbackPrincipal &&
+        !offscreenCanvas->CallerCanRead(*aReadbackPrincipal)) {
+      return nullptr;
+    }
+
     if (nsICanvasRenderingContextInternal* context =
             offscreenCanvas->GetContext()) {
       surface =
@@ -560,10 +584,10 @@ OffscreenCanvasDisplayHelper::GetSurfaceSnapshot() {
   return TransformSurface(surface, hasAlpha, isAlphaPremult, originPos);
 }
 
-already_AddRefed<layers::Image> OffscreenCanvasDisplayHelper::GetAsImage() {
+already_AddRefed<layers::Image> OffscreenCanvasDisplayHelper::GetAsImageForPresent() {
   MOZ_ASSERT(NS_IsMainThread());
 
-  RefPtr<gfx::SourceSurface> surface = GetSurfaceSnapshot();
+  RefPtr<gfx::SourceSurface> surface = GetSurfaceSnapshotForPresent();
   if (!surface) {
     return nullptr;
   }
@@ -571,8 +595,8 @@ already_AddRefed<layers::Image> OffscreenCanvasDisplayHelper::GetAsImage() {
 }
 
 UniquePtr<uint8_t[]> OffscreenCanvasDisplayHelper::GetImageBuffer(
-    int32_t* aOutFormat, gfx::IntSize* aOutImageSize) {
-  RefPtr<gfx::SourceSurface> surface = GetSurfaceSnapshot();
+    nsIPrincipal& aPrincipal, int32_t* aOutFormat, gfx::IntSize* aOutImageSize) {
+  RefPtr<gfx::SourceSurface> surface = GetSurfaceSnapshotForReadback(aPrincipal);
   if (!surface) {
     return nullptr;
   }
