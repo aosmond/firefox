@@ -245,6 +245,7 @@ class FFmpegVideoDecoder<LIBAV_VER>
     void DecodeStart();
     void UpdateDecodeTimes(int64_t aDuration);
     bool IsDecodingSlow() const;
+    bool HasDecoded() const { return !!mDecodedFrames; }
 
    private:
     uint32_t mDecodedFrames = 0;
@@ -362,6 +363,7 @@ class FFmpegVideoDecoder<LIBAV_VER>
   void ResumeDrain();
 
   Atomic<bool> mShouldResumeDrain{false};
+  RefPtr<MediaRawData> mLastSample;
 #endif
 
   // True if we're allocating shmem for ffmpeg decode buffer.
