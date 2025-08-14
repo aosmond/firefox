@@ -1217,6 +1217,8 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
 #  ifdef MOZ_WIDGET_ANDROID
   if (!aData) {
     mShouldResumeDrain = true;
+  } else if (!mDecodeStats.HasDecoded()) {
+    mLastSample = aSample;
   }
 #  endif
   if (aData || !mHasSentDrainPacket) {
