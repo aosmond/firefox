@@ -269,10 +269,6 @@ class FFmpegVideoDecoder<LIBAV_VER>
   DecodeStats mDecodeStats;
 #endif
 
-#if LIBAVCODEC_VERSION_MAJOR >= 58
-  bool mHasSentDrainPacket = false;
-#endif
-
 #if LIBAVCODEC_VERSION_MAJOR < 58
   class PtsCorrectionContext {
    public:
@@ -363,7 +359,6 @@ class FFmpegVideoDecoder<LIBAV_VER>
   void ResumeDrain();
 
   Atomic<bool> mShouldResumeDrain{false};
-  RefPtr<MediaRawData> mLastSample;
 #endif
 
   // True if we're allocating shmem for ffmpeg decode buffer.
