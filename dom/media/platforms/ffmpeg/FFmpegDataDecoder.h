@@ -82,6 +82,10 @@ class FFmpegDataDecoder<LIBAV_VER>
   AVCodecID mCodecID;  // set in constructor
   bool mVideoCodec;
 
+#if LIBAVCODEC_VERSION_MAJOR >= 58
+  bool mHasSentDrainPacket = false;
+#endif
+
  protected:
   virtual ~FFmpegDataDecoder();
 
@@ -91,6 +95,7 @@ class FFmpegDataDecoder<LIBAV_VER>
 
   RefPtr<DecodePromise> ProcessDrain();
   MozPromiseHolder<DecodePromise> mDrainPromise;
+  RefPtr<MediaRawData> mDrainSample;
 
  private:
   RefPtr<DecodePromise> ProcessDecode(MediaRawData* aSample);

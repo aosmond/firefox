@@ -306,7 +306,13 @@ FFmpegDataDecoder<LIBAV_VER>::ProcessDrain() {
   // accordingly.
   RefPtr<MediaDataDecoder::DecodePromise> p = mDrainPromise.Ensure(__func__);
   do {
-    MediaResult r = DoDecode(empty, &gotFrame, results);
+    MediaResult r = DoDecode(
+#if defined(MOZ_WIDGET_ANDROID) && defined(FFVPX_VERSION)
+		    mDrainSample ? mDrainSample : empty,
+#else
+		    empty,
+#endif
+		    &gotFrame, results);
     if (NS_FAILED(r)) {
       if (r.Code() == NS_ERROR_DOM_MEDIA_END_OF_STREAM) {
         break;

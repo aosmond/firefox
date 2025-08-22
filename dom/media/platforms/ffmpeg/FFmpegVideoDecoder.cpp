@@ -1218,7 +1218,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
   if (!aData) {
     mShouldResumeDrain = true;
   } else if (!mDecodeStats.HasDecoded()) {
-    mLastSample = aSample;
+    mDrainSample = aSample;
   }
 #  endif
   if (aData || !mHasSentDrainPacket) {
@@ -1288,6 +1288,12 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
           NS_ERROR_DOM_MEDIA_DECODE_ERR,
           RESULT_DETAIL("avcodec_receive_frame error: %s", errStr));
     }
+
+#  ifdef MOZ_WIDGET_ANDROID
+    if (mDrainSample) {
+      mDrainSample = nullptr;
+    }
+#  endif
 
     MediaResult rv;
 #  ifdef MOZ_USE_HWDECODE

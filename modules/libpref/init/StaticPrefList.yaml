@@ -11613,6 +11613,17 @@
   value: true
   mirror: always
 
+# Max number of frames to allow the ffmpeg decoder to resubmit to flush the
+# decoding pipeline when draining if we have not received any output yet.
+- name: media.ffmpeg.max-drain-frame-resubmits
+  type: RelaxedAtomicUint32
+#ifdef ANDROID
+  value: 16
+#else
+  value: 0
+#endif
+  mirror: always
+
 # Disable falling back to software decoders in case of frame drop
 - name: media.ffmpeg.disable-software-fallback
   type: RelaxedAtomicBool
