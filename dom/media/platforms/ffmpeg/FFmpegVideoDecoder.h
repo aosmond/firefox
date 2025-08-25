@@ -121,6 +121,7 @@ class FFmpegVideoDecoder<LIBAV_VER>
   }
 
  private:
+  RefPtr<MediaDataDecoder::DecodePromise> ProcessDrain() override;
   RefPtr<FlushPromise> ProcessFlush() override;
   void ProcessShutdown() override;
   MediaResult DoDecode(MediaRawData* aSample, uint8_t* aData, int aSize,
@@ -237,16 +238,27 @@ class FFmpegVideoDecoder<LIBAV_VER>
 #endif
 
   RefPtr<ImageContainer> mImageContainer;
+
+#ifdef MOZ_WIDGET_ANDROID
+  RefPtr<MediaRawData> mDrainSample;
+  media::TimeUnit mDrainSampleTime = media::TimeUnit::Invalid();
+  bool mDrainSampleDecoded = false;
+#endif
+
   VideoInfo mInfo;
 
 #if LIBAVCODEC_VERSION_MAJOR >= 58
   class DecodeStats {
    public:
-    void DecodeStart();
+    void DecodeStart(bool aEOS);
     void UpdateDecodeTimes(int64_t aDuration);
     bool IsDecodingSlow() const;
+#  ifdef MOZ_WIDGET_ANDROID
+    bool IsReadyForDrain() const;
+#  endif
 
    private:
+    uint32_t mSubmittedFrames = 0;
     uint32_t mDecodedFrames = 0;
 
     float mAverageFrameDecodeTime = 0;

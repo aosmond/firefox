@@ -1060,13 +1060,24 @@ static int64_t GetFramePts(const AVFrame* aFrame) {
 }
 
 #if LIBAVCODEC_VERSION_MAJOR >= 58
-void FFmpegVideoDecoder<LIBAV_VER>::DecodeStats::DecodeStart() {
+void FFmpegVideoDecoder<LIBAV_VER>::DecodeStats::DecodeStart(bool aEOS) {
   mDecodeStart = TimeStamp::Now();
+  if (!aEOS) {
+    ++mSubmittedFrames;
+  }
 }
 
 bool FFmpegVideoDecoder<LIBAV_VER>::DecodeStats::IsDecodingSlow() const {
   return mDecodedFramesLate > mMaxLateDecodedFrames;
 }
+
+#  ifdef MOZ_WIDGET_ANDROID
+bool FFmpegVideoDecoder<LIBAV_VER>::DecodeStats::IsReadyForDrain() const {
+  return mDecodedFrames > 0 ||
+         mSubmittedFrames >
+             StaticPrefs::media_ffmpeg_max_drain_frame_resubmits();
+}
+#  endif
 
 void FFmpegVideoDecoder<LIBAV_VER>::DecodeStats::UpdateDecodeTimes(
     int64_t aDuration) {
@@ -1138,7 +1149,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
 #endif
 
 #if LIBAVCODEC_VERSION_MAJOR >= 58
-  mDecodeStats.DecodeStart();
+  mDecodeStats.DecodeStart(!!aData);
 #endif
 
   packet->data = aData;
@@ -1217,6 +1228,9 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
 #  ifdef MOZ_WIDGET_ANDROID
   if (!aData) {
     mShouldResumeDrain = true;
+  } else if (!mDecodeStats.IsReadyForDrain() && mDrainSample != aSample) {
+    mDrainSample = aSample->Clone();
+    mDrainSampleTime = aSample->mTime;
   }
 #  endif
   if (aData || !mHasSentDrainPacket) {
@@ -1322,6 +1336,21 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
       rv = CreateImageD3D11(mFrame->pkt_pos, GetFramePts(mFrame),
                             Duration(mFrame), aResults);
 #    elif defined(MOZ_WIDGET_ANDROID)
+      // If this is a duplicate of the drain sample result, then we want to
+      // silently drop it.
+      if (mDrainSampleTime.IsValid() &&
+          mFrame->pts == mDrainSampleTime.ToMicroseconds()) {
+        if (mDrainSampleDecoded) {
+          FFMPEGV_LOG("Discarding duplicate frame from forced draining");
+          continue;
+        }
+        mDrainSampleDecoded = true;
+      }
+
+      if (aSample != mDrainSample) {
+        mDrainSample = nullptr;
+      }
+
       InputInfo info(aSample);
       info.mTimecode = -1;
       TakeInputInfo(mFrame, info);
@@ -1867,6 +1896,80 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::CreateImageV4L2(
   return NS_OK;
 }
 #endif
+
+RefPtr<MediaDataDecoder::DecodePromise>
+FFmpegVideoDecoder<LIBAV_VER>::ProcessDrain() {
+  AUTO_PROFILER_LABEL("FFmpegVideoDecoder::ProcessDrain", MEDIA_PLAYBACK);
+  MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
+  FFMPEG_LOG("FFmpegVideoDecoder: draining buffers");
+  bool gotFrame = false;
+  DecodedData results;
+  RefPtr<MediaDataDecoder::DecodePromise> p = mDrainPromise.Ensure(__func__);
+
+#ifdef MOZ_WIDGET_ANDROID
+  // On some platforms, if we haven't decoded any frames yet, the decoder is
+  // waiting until it receives sufficient samples. If we receive a drain, that
+  // means we won't ever successfully drain what we have already decoded. If we
+  // are able, we resubmit the last frame for decoding until the pipeline yields
+  // a frame. This must happen before we send the empty frame indicating EOS.
+  if (mDrainSample) {
+    do {
+      bool readyForDrain = mDecodeStats.IsReadyForDrain();
+      if (readyForDrain) {
+        break;
+      }
+      FFMPEGV_LOG("Drain not ready, resubmit last sample to force drain");
+      MediaResult r =
+          FFmpegDataDecoder::DoDecode(mDrainSample, &gotFrame, results);
+      if (NS_FAILED(r)) {
+        if (r.Code() == NS_ERROR_DOM_MEDIA_END_OF_STREAM) {
+          break;
+        }
+        if (r.Code() == NS_ERROR_NOT_AVAILABLE) {
+          continue;
+        }
+
+        mDrainSample = nullptr;
+        mDrainPromise.Reject(r, __func__);
+        return p;
+      }
+      if (gotFrame) {
+        break;
+      }
+    } while(true);
+
+    mDrainSample = nullptr;
+  }
+#endif
+
+  RefPtr<MediaRawData> empty(new MediaRawData());
+  empty->mTimecode = mLastInputDts;
+  // When draining the underlying FFmpeg decoder without encountering any
+  // problems, DoDecode will either return a single frame at a time until
+  // gotFrame is set to false, or it will return a block of frames with
+  // NS_ERROR_DOM_MEDIA_END_OF_STREAM (EOS). However, if any issue arises, such
+  // as pending data in the pipeline being corrupt or invalid, non-EOS errors
+  // like NS_ERROR_DOM_MEDIA_DECODE_ERR will be returned and must be handled
+  // accordingly.
+  do {
+    MediaResult r = FFmpegDataDecoder::DoDecode(empty, &gotFrame, results);
+    if (NS_FAILED(r)) {
+      if (r.Code() == NS_ERROR_DOM_MEDIA_END_OF_STREAM) {
+        break;
+      }
+      if (r.Code() == NS_ERROR_NOT_AVAILABLE) {
+        if (results.IsEmpty()) {
+          return p;
+        }
+        break;
+      }
+      mDrainPromise.Reject(r, __func__);
+      return p;
+    }
+  } while (gotFrame);
+  mDrainPromise.Resolve(std::move(results), __func__);
+  return p;
+}
 
 RefPtr<MediaDataDecoder::FlushPromise>
 FFmpegVideoDecoder<LIBAV_VER>::ProcessFlush() {

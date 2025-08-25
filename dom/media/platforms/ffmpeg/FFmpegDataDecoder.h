@@ -89,8 +89,9 @@ class FFmpegDataDecoder<LIBAV_VER>
                               // for calls into ffmpeg
   const RefPtr<TaskQueue> mTaskQueue;  // set in constructor
 
-  RefPtr<DecodePromise> ProcessDrain();
+  virtual RefPtr<DecodePromise> ProcessDrain();
   MozPromiseHolder<DecodePromise> mDrainPromise;
+  media::TimeUnit mLastInputDts;  // used on Taskqueue
 
  private:
   RefPtr<DecodePromise> ProcessDecode(MediaRawData* aSample);
@@ -101,7 +102,6 @@ class FFmpegDataDecoder<LIBAV_VER>
   virtual int ParserFlags() const { return PARSER_FLAG_COMPLETE_FRAMES; }
 
   MozPromiseHolder<DecodePromise> mPromise;
-  media::TimeUnit mLastInputDts;  // used on Taskqueue
 };
 
 }  // namespace mozilla
