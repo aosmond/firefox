@@ -90,6 +90,12 @@ class FFmpegDataDecoder<LIBAV_VER>
   const RefPtr<TaskQueue> mTaskQueue;  // set in constructor
 
   RefPtr<DecodePromise> ProcessDrain();
+#ifdef MOZ_WIDGET_ANDROID
+  virtual bool PrepareDrain(bool& aGotFrame,
+                            MediaDataDecoder::DecodedData& aOutResults) {
+    return true;
+  }
+#endif
   MozPromiseHolder<DecodePromise> mDrainPromise;
 
  private:
