@@ -6,6 +6,7 @@
 
 #include "FFmpegVideoDecoder.h"
 
+#include <unistd.h>
 #include "EncoderConfig.h"
 #include "FFmpegLibWrapper.h"
 #include "FFmpegLog.h"
@@ -1073,7 +1074,7 @@ bool FFmpegVideoDecoder<LIBAV_VER>::DecodeStats::IsDecodingSlow() const {
 
 bool FFmpegVideoDecoder<LIBAV_VER>::DecodeStats::IsReadyForDrain() const {
   return mDecodedFrames > 0 ||
-         mSubmittedFrames <
+         mSubmittedFrames >
              StaticPrefs::media_ffmpeg_max_drain_frame_resubmits();
 }
 
@@ -1222,8 +1223,9 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
   }
 #endif
 
-  if (aData && !mDecodeStats.IsReadyForDrain()) {
-    mDrainSample = aSample;
+  if (aData && !mDecodeStats.IsReadyForDrain() && mDrainSample != aSample) {
+    FFMPEG_LOG("Cloning mDrainSample %p setting to %p", mDrainSample.get(), aSample);
+    mDrainSample = aSample->Clone();
   }
 
 #if LIBAVCODEC_VERSION_MAJOR >= 58
@@ -1358,7 +1360,10 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
     }
 
     RecordFrame(aSample, aResults.LastElement());
-    mDrainSample = nullptr;
+    if (mDrainSample != aSample) {
+      FFMPEG_LOG("Clear mDrainSample %p", mDrainSample.get());
+      mDrainSample = nullptr;
+    }
     if (aGotFrame) {
       *aGotFrame = true;
     }
@@ -1411,7 +1416,11 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
   mTrackingId.apply(
       [&](const auto&) { RecordFrame(aSample, aResults.LastElement()); });
 
-  mDrainSample = nullptr;
+  FFMPEG_LOG("Clear mDrainSample %p", mDrainSample.get());
+  if (mDrainSample != aSample) {
+    FFMPEG_LOG("Clear mDrainSample %p", mDrainSample.get());
+    mDrainSample = nullptr;
+  }
   if (aGotFrame) {
     *aGotFrame = true;
   }
@@ -1898,7 +1907,12 @@ FFmpegVideoDecoder<LIBAV_VER>::ProcessDrain() {
   // are able, we resubmit the last frame for decoding until the pipeline yields
   // a frame. This must happen before we send the empty frame indicating EOS.
   if (mDrainSample) {
-    while (!mDecodeStats.IsReadyForDrain() && !gotFrame) {
+    do {
+      bool readyForDrain = mDecodeStats.IsReadyForDrain();
+      FFMPEG_LOG("FFmpegVideoDecoder: readyForDrain %d, gotFrame %d", readyForDrain, gotFrame);
+      if (readyForDrain) {
+        break;
+      }
       MediaResult r =
           FFmpegDataDecoder::DoDecode(mDrainSample, &gotFrame, results);
       if (NS_FAILED(r)) {
@@ -1913,9 +1927,14 @@ FFmpegVideoDecoder<LIBAV_VER>::ProcessDrain() {
         mDrainPromise.Reject(r, __func__);
         return p;
       }
-    }
+      if (gotFrame) {
+        break;
+      }
+    } while(true);
 
     mDrainSample = nullptr;
+  } else {
+    FFMPEG_LOG("FFmpegVideoDecoder: no sample, readyForDrain %d", mDecodeStats.IsReadyForDrain());
   }
 
   RefPtr<MediaRawData> empty(new MediaRawData());
