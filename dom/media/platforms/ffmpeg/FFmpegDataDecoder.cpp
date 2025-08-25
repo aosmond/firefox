@@ -293,10 +293,18 @@ FFmpegDataDecoder<LIBAV_VER>::ProcessDrain() {
   AUTO_PROFILER_LABEL("FFmpegDataDecoder::ProcessDrain", MEDIA_PLAYBACK);
   MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
   FFMPEG_LOG("FFmpegDataDecoder: draining buffers");
-  RefPtr<MediaRawData> empty(new MediaRawData());
-  empty->mTimecode = mLastInputDts;
+
   bool gotFrame = false;
   DecodedData results;
+  RefPtr<MediaDataDecoder::DecodePromise> p = mDrainPromise.Ensure(__func__);
+#ifdef MOZ_WIDGET_ANDROID
+  if (!PrepareDrain(gotFrame, results)) {
+    return p;
+  }
+#endif
+
+  RefPtr<MediaRawData> empty(new MediaRawData());
+  empty->mTimecode = mLastInputDts;
   // When draining the underlying FFmpeg decoder without encountering any
   // problems, DoDecode will either return a single frame at a time until
   // gotFrame is set to false, or it will return a block of frames with
@@ -304,7 +312,6 @@ FFmpegDataDecoder<LIBAV_VER>::ProcessDrain() {
   // as pending data in the pipeline being corrupt or invalid, non-EOS errors
   // like NS_ERROR_DOM_MEDIA_DECODE_ERR will be returned and must be handled
   // accordingly.
-  RefPtr<MediaDataDecoder::DecodePromise> p = mDrainPromise.Ensure(__func__);
   do {
     MediaResult r = DoDecode(empty, &gotFrame, results);
     if (NS_FAILED(r)) {
