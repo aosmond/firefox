@@ -239,6 +239,8 @@ class FFmpegVideoDecoder<LIBAV_VER>
 
   RefPtr<ImageContainer> mImageContainer;
   RefPtr<MediaRawData> mDrainSample;
+  media::TimeUnit mDrainSampleTime = media::TimeUnit::Invalid();
+  bool mDrainSampleDecoded = false;
   VideoInfo mInfo;
 
 #if LIBAVCODEC_VERSION_MAJOR >= 58
@@ -339,17 +341,29 @@ class FFmpegVideoDecoder<LIBAV_VER>
     mInputInfo.Insert(GetSampleInputKey(aSample), InputInfo(aSample));
   }
 
-  void TakeInputInfo(const AVFrame* aFrame, InputInfo& aEntry) {
+  void TakeInputInfo(const AVFrame* aFrame, const MediaRawData* aDrainSample,
+                     InputInfo& aEntry) {
     // Retrieve duration from the given ts.
     // We use the first entry found matching this ts (this is done to
     // handle damaged file with multiple frames with the same ts)
-    if (!mInputInfo.Find(GetFrameInputKey(aFrame), aEntry)) {
-      NS_WARNING("Unable to retrieve input info from map");
-      // dts are probably incorrectly reported ; so clear the map as we're
-      // unlikely to find them in the future anyway. This also guards
-      // against the map becoming extremely big.
-      mInputInfo.Clear();
+    if (mInputInfo.Find(GetFrameInputKey(aFrame), aEntry)) {
+      return;
     }
+
+    // If there is no entry, this might be a duplicate due to forced draining.
+    if (aDrainSample &&
+        GetSampleInputKey(aDrainSample) == GetFrameInputKey(aFrame)) {
+      aEntry.mDuration = aDrainSample->mDuration.ToMicroseconds();
+#  ifdef MOZ_WIDGET_ANDROID
+      aEntry.mTimecode = aDrainSample->mTimecode.ToMicroseconds();
+#  endif
+    }
+
+    NS_WARNING("Unable to retrieve input info from map");
+    // dts are probably incorrectly reported ; so clear the map as we're
+    // unlikely to find them in the future anyway. This also guards
+    // against the map becoming extremely big.
+    mInputInfo.Clear();
   }
 #endif
 
@@ -359,6 +373,9 @@ class FFmpegVideoDecoder<LIBAV_VER>
   void RecordFrame(const MediaRawData* aSample, const MediaData* aData);
 
   PerformanceRecorderMulti<DecodeStage> mPerformanceRecorder;
+
+  void FinalizeFrame(const MediaRawData* aSample,
+                     MediaDataDecoder::DecodedData& aResults, bool* aGotFrame);
 
   bool MaybeQueueDrain(const MediaDataDecoder::DecodedData& aData);
 #ifdef MOZ_WIDGET_ANDROID

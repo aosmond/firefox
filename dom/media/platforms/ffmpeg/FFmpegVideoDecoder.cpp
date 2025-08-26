@@ -1226,6 +1226,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
   if (aData && !mDecodeStats.IsReadyForDrain() && mDrainSample != aSample) {
     FFMPEG_LOG("Cloning mDrainSample %p setting to %p", mDrainSample.get(), aSample);
     mDrainSample = aSample->Clone();
+    mDrainSampleTime = aSample->mTime;
   }
 
 #if LIBAVCODEC_VERSION_MAJOR >= 58
@@ -1339,7 +1340,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
 #    elif defined(MOZ_WIDGET_ANDROID)
       InputInfo info(aSample);
       info.mTimecode = -1;
-      TakeInputInfo(mFrame, info);
+      TakeInputInfo(mFrame, mDrainSample, info);
       mDecodeStats.UpdateDecodeTimes(info.mDuration);
       rv = CreateImageMediaCodec(mFrame->pkt_pos, GetFramePts(mFrame),
                                  info.mTimecode, info.mDuration, aResults);
@@ -1360,13 +1361,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
     }
 
     RecordFrame(aSample, aResults.LastElement());
-    if (mDrainSample != aSample) {
-      FFMPEG_LOG("Clear mDrainSample %p", mDrainSample.get());
-      mDrainSample = nullptr;
-    }
-    if (aGotFrame) {
-      *aGotFrame = true;
-    }
+    FinalizeFrame(aSample, aResults, aGotFrame);
   } while (true);
 #else
   if (!PrepareFrame()) {
@@ -1406,7 +1401,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
       mPtsContext.GuessCorrectPts(GetFramePts(mFrame), mFrame->pkt_dts);
 
   InputInfo info(aSample);
-  TakeInputInfo(mFrame, info);
+  TakeInputInfo(mFrame, mDrainSample, info);
 
   MediaResult rv = CreateImage(aSample->mOffset, pts, info.mDuration, aResults);
   if (NS_FAILED(rv)) {
@@ -1416,14 +1411,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
   mTrackingId.apply(
       [&](const auto&) { RecordFrame(aSample, aResults.LastElement()); });
 
-  FFMPEG_LOG("Clear mDrainSample %p", mDrainSample.get());
-  if (mDrainSample != aSample) {
-    FFMPEG_LOG("Clear mDrainSample %p", mDrainSample.get());
-    mDrainSample = nullptr;
-  }
-  if (aGotFrame) {
-    *aGotFrame = true;
-  }
+  FinalizeFrame(aSample, aResults, aGotFrame);
   return rv;
 #endif
 }
@@ -1475,6 +1463,31 @@ void FFmpegVideoDecoder<LIBAV_VER>::RecordFrame(const MediaRawData* aSample,
         aStage.SetStartTimeAndEndTime(aSample->mTime.ToMicroseconds(),
                                       aSample->GetEndTime().ToMicroseconds());
       });
+}
+
+void FFmpegVideoDecoder<LIBAV_VER>::FinalizeFrame(
+    const MediaRawData* aSample, MediaDataDecoder::DecodedData& aResults,
+    bool* aGotFrame) {
+  if (mDrainSampleTime.IsValid()) {
+    if (aResults.LastElement()->mTime.ToMicroseconds() == mDrainSampleTime.ToMicroseconds()) {
+      if (mDrainSampleDecoded) {
+        FFMPEG_LOGV("Dropping duplicate frame matching drain sample");
+        aResults.RemoveLastElement();
+        return;
+      }
+
+      FFMPEG_LOGV("Received first frame matching drain sample");
+      mDrainSampleDecoded = true;
+    }
+
+    if (mDrainSample != aSample) {
+      mDrainSample = nullptr;
+    }
+  }
+
+  if (aGotFrame) {
+    *aGotFrame = true;
+  }
 }
 
 #ifdef MOZ_WIDGET_ANDROID
