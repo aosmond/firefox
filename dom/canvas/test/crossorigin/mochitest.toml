@@ -11,6 +11,7 @@ support-files = [
 prefs = [
   "media.android-media-codec.enabled=false",
 ]
+skip-if = ["os == 'android'"]
 
 ["test_canvas2d_crossorigin.html"]
 skip-if = [

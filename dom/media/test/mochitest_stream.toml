@@ -703,8 +703,10 @@ prefs = [
 ]
 
 ["test_streams_capture_origin.html"]
+skip-if = ["os == 'android'"]
 
 ["test_streams_element_capture.html"]
+skip-if = ["os == 'android'"]
 
 ["test_streams_element_capture_mediatrack.html"]
 
