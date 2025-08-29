@@ -184,6 +184,10 @@ void RenderAndroidSurfaceTextureHost::NotifyForUse() {
     // PrepareForUse with a GPUVideoTextureHost when the content process
     // attempts to use said texture host before the decoding process has setup
     // the underlying SurfaceTextureHost. See bug 1986472.
+    MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+            ("%p RenderAndroidSurfaceTextureHost::NotifyForUse: "
+             "status is none, force PrepareForUse",
+             this));
     PrepareForUse();
   }
 
