@@ -74,7 +74,7 @@ parent:
 
   async DeallocateSurfaceDescriptorGPUVideo(SurfaceDescriptorGPUVideo sd);
 
-  async OnSetCurrent(SurfaceDescriptorGPUVideo sd);
+  sync OnSetCurrent(SurfaceDescriptorGPUVideo sd);
 };
 
 } // namespace mozilla
