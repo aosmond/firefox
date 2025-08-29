@@ -1483,7 +1483,7 @@ void FFmpegVideoDecoder<LIBAV_VER>::RecordFrame(const MediaRawData* aSample,
 }
 
 #ifdef MOZ_WIDGET_ANDROID
-void FFmpegVideoDecoder<LIBAV_VER>::ResumeDrain() {
+void FFmpegVideoDecoder<LIBAV_VER>::ResumeDrain(bool aExpired) {
   MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
 
   if (mDrainPromise.IsEmpty()) {
@@ -1493,16 +1493,30 @@ void FFmpegVideoDecoder<LIBAV_VER>::ResumeDrain() {
 
   FFMPEG_LOGV("Resume drain");
   mShouldResumeDrain = true;
+
+  if (mDrainTimer) {
+    mDrainTimer->Cancel();
+    mDrainTimer = nullptr;
+  }
+
   ProcessDrain();
+
+  if (aExpired && !mDrainPromise.IsEmpty()) {
+    mShouldResumeDrain = false;
+    mDrainPromise.Reject(
+        MediaResult(NS_ERROR_DOM_MEDIA_FATAL_ERR, "Timed out waiting for EOS"),
+        __func__);
+  }
 }
 
-void FFmpegVideoDecoder<LIBAV_VER>::QueueResumeDrain() {
+void FFmpegVideoDecoder<LIBAV_VER>::QueueResumeDrain(bool aExpired) {
   if (!mShouldResumeDrain.exchange(false)) {
     return;
   }
 
   MOZ_ALWAYS_SUCCEEDS(mTaskQueue->Dispatch(NS_NewRunnableFunction(
-      __func__, [self = RefPtr{this}] { self->ResumeDrain(); })));
+      __func__,
+      [self = RefPtr{this}, aExpired] { self->ResumeDrain(aExpired); })));
 }
 #endif
 
@@ -1512,6 +1526,17 @@ bool FFmpegVideoDecoder<LIBAV_VER>::MaybeQueueDrain(
   if (aData.IsEmpty() && mMediaCodecDeviceContext &&
       !mLib->moz_avcodec_mediacodec_is_eos(mCodecContext)) {
     FFMPEG_LOGV("Schedule drain");
+
+    if (mDrainTimer) {
+      mDrainTimer->Cancel();
+    }
+
+    mDrainTimer = MakeRefPtr<MediaTimer<TimeStamp>>(/* aFuzzy */ true);
+    mDrainTimer->WaitFor(TimeDuration::FromMilliseconds(10000), __func__)
+        ->Then(GetCurrentSerialEventTarget(), __func__, [self = RefPtr{this}] {
+          self->QueueResumeDrain(/* aExpired */ true);
+        });
+
     return true;
   }
   mShouldResumeDrain = false;
@@ -2014,6 +2039,12 @@ void FFmpegVideoDecoder<LIBAV_VER>::ProcessShutdown() {
     d3d11vactx->device = nullptr;
     mLib->av_buffer_unref(&mD3D11VADeviceContext);
     mD3D11VADeviceContext = nullptr;
+  }
+#endif
+#ifdef MOZ_WIDGET_ANDROID
+  if (mDrainTimer) {
+    mDrainTimer->Cancel();
+    mDrainTimer = nullptr;
   }
 #endif
   FFmpegDataDecoder<LIBAV_VER>::ProcessShutdown();
@@ -2532,7 +2563,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::CreateImageMediaCodec(
         }
       }
       mDecoder->mLib->av_frame_free(&mFrame);
-      mDecoder->QueueResumeDrain();
+      mDecoder->QueueResumeDrain(/* aExpired */ false);
       mDecoder = nullptr;
     }
 
