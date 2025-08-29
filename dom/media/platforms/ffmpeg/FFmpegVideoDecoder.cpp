@@ -1246,8 +1246,8 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
       FFMPEG_LOG("avcodec_send_packet error: %s", errStr);
       nsresult rv;
       if (res == int(AVERROR_EOF)) {
-        rv = MaybeQueueDrain(aResults) ? NS_ERROR_DOM_MEDIA_END_OF_STREAM
-                                       : NS_ERROR_NOT_AVAILABLE;
+        rv = MaybeQueueDrain(aResults) ? NS_ERROR_NOT_AVAILABLE
+                                       : NS_ERROR_DOM_MEDIA_END_OF_STREAM;
       } else {
         rv = NS_ERROR_DOM_MEDIA_DECODE_ERR;
       }
