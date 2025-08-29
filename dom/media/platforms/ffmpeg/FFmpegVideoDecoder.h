@@ -29,6 +29,7 @@
 #endif
 
 #ifdef MOZ_WIDGET_ANDROID
+#  include "MediaTimer.h"
 #  include "mozilla/java/GeckoSurfaceWrappers.h"
 #endif
 
@@ -373,9 +374,10 @@ class FFmpegVideoDecoder<LIBAV_VER>
 
   bool MaybeQueueDrain(const MediaDataDecoder::DecodedData& aData);
 #ifdef MOZ_WIDGET_ANDROID
-  void QueueResumeDrain();
-  void ResumeDrain();
+  void QueueResumeDrain(bool aExpired);
+  void ResumeDrain(bool aExpired);
 
+  RefPtr<MediaTimer<TimeStamp>> mDrainTimer;
   Atomic<bool> mShouldResumeDrain{false};
 #endif
 
