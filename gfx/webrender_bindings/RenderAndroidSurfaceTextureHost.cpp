@@ -31,6 +31,11 @@ RenderAndroidSurfaceTextureHost::RenderAndroidSurfaceTextureHost(
       mAttachedToGLContext(false),
       mIsRemoteTexture(aIsRemoteTexture) {
   MOZ_COUNT_CTOR_INHERITED(RenderAndroidSurfaceTextureHost, RenderTextureHost);
+  MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+          ("%p RenderAndroidSurfaceTextureHost: contUpdate %d surfTex %d "
+           "(singleBuffer=%d), mIsRemoteTexture=%d",
+           this, mContinuousUpdate, !!mSurfTex,
+           mSurfTex ? mSurfTex->IsSingleBuffer() : false, mIsRemoteTexture));
 
   if (mSurfTex) {
     mSurfTex->IncrementUse();
@@ -38,6 +43,8 @@ RenderAndroidSurfaceTextureHost::RenderAndroidSurfaceTextureHost(
 }
 
 RenderAndroidSurfaceTextureHost::~RenderAndroidSurfaceTextureHost() {
+  MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+          ("%p ~RenderAndroidSurfaceTextureHost", this));
   MOZ_ASSERT(RenderThread::IsInRenderThread());
   MOZ_COUNT_DTOR_INHERITED(RenderAndroidSurfaceTextureHost, RenderTextureHost);
   // The SurfaceTexture gets destroyed when its use count reaches zero.
@@ -49,10 +56,8 @@ RenderAndroidSurfaceTextureHost::~RenderAndroidSurfaceTextureHost() {
 wr::WrExternalImage RenderAndroidSurfaceTextureHost::Lock(uint8_t aChannelIndex,
                                                           gl::GLContext* aGL) {
   MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
-          ("RenderAndroidSurfaceTextureHost::Lock: mPrepareStatus=%d, "
-           "singleBuffer=%d, mIsRemoteTexture=%d",
-           int(mPrepareStatus), mSurfTex ? mSurfTex->IsSingleBuffer() : false,
-           mIsRemoteTexture));
+          ("%p RenderAndroidSurfaceTextureHost::Lock: mPrepareStatus=%d", this,
+           int(mPrepareStatus)));
   MOZ_ASSERT(aChannelIndex == 0);
   MOZ_ASSERT((mPrepareStatus == STATUS_PREPARED) ||
              (!mSurfTex->IsSingleBuffer() &&
@@ -140,36 +145,39 @@ void RenderAndroidSurfaceTextureHost::PrepareForUse() {
   // than once, it causes hang on puglish side. And UpdateTexImage needs to
   // be called on render thread, since the SurfaceTexture is consumed on render
   // thread.
-  MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
-          ("RenderAndroidSurfaceTextureHost::PrepareForUse: mPrepareStatus=%d, "
-           "singleBuffer=%d, mIsRemoteTexture=%d",
-           int(mPrepareStatus), mSurfTex ? mSurfTex->IsSingleBuffer() : false,
-           mIsRemoteTexture));
   MOZ_ASSERT(RenderThread::IsInRenderThread());
   MOZ_ASSERT(mPrepareStatus == STATUS_NONE);
 
   if (mContinuousUpdate || !mSurfTex) {
+    MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+            ("%p RenderAndroidSurfaceTextureHost::PrepareForUse: cont update "
+             "or no surf tex",
+             this));
     return;
   }
 
-  mPrepareStatus = STATUS_MIGHT_BE_USED_BY_WR;
-
   if (mSurfTex->IsSingleBuffer()) {
+    MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+            ("%p RenderAndroidSurfaceTextureHost::PrepareForUse: "
+             "mPrepareStatus=%d to prepared",
+             this, int(mPrepareStatus)));
+    mPrepareStatus = STATUS_MIGHT_BE_USED_BY_WR;
     EnsureAttachedToGLContext();
     // When SurfaceTexture is single buffer mode, it is OK to call
     // UpdateTexImage() here.
     mSurfTex->UpdateTexImage();
     mPrepareStatus = STATUS_PREPARED;
+  } else {
+    MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+            ("%p RenderAndroidSurfaceTextureHost::PrepareForUse: "
+             "mPrepareStatus=%d to might be",
+             this, int(mPrepareStatus)));
+    mPrepareStatus = STATUS_MIGHT_BE_USED_BY_WR;
   }
 }
 
 void RenderAndroidSurfaceTextureHost::NotifyForUse() {
   MOZ_ASSERT(RenderThread::IsInRenderThread());
-  MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
-          ("RenderAndroidSurfaceTextureHost::NotifyForUse: mPrepareStatus=%d, "
-           "singleBuffer=%d, mIsRemoteTexture=%d",
-           int(mPrepareStatus), mSurfTex ? mSurfTex->IsSingleBuffer() : false,
-           mIsRemoteTexture));
 
   if (mPrepareStatus == STATUS_NONE) {
     // This happens either for RemoteTextureHost or when we lose a race to call
@@ -187,21 +195,33 @@ void RenderAndroidSurfaceTextureHost::NotifyForUse() {
     // rendering.
     MOZ_ASSERT(!mSurfTex->IsSingleBuffer());
     if (!EnsureAttachedToGLContext()) {
+      MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+              ("%p RenderAndroidSurfaceTextureHost::NotifyForUse: "
+               "mPrepareStatus=%d attach fail",
+               this, int(mPrepareStatus)));
       return;
     }
+    MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+            ("%p RenderAndroidSurfaceTextureHost::NotifyForUse: "
+             "mPrepareStatus=%d to update needed",
+             this, int(mPrepareStatus)));
     mPrepareStatus = STATUS_UPDATE_TEX_IMAGE_NEEDED;
+  } else {
+    MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+            ("%p RenderAndroidSurfaceTextureHost::NotifyForUse: "
+             "mPrepareStatus=%d nothing",
+             this, int(mPrepareStatus)));
   }
 }
 
 void RenderAndroidSurfaceTextureHost::NotifyNotUsed() {
   MOZ_ASSERT(RenderThread::IsInRenderThread());
-  MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
-          ("RenderAndroidSurfaceTextureHost::NotifyNotUsed: mPrepareStatus=%d, "
-           "singleBuffer=%d, mIsRemoteTexture=%d",
-           int(mPrepareStatus), mSurfTex ? mSurfTex->IsSingleBuffer() : false,
-           mIsRemoteTexture));
 
   if (!mSurfTex) {
+    MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+            ("%p RenderAndroidSurfaceTextureHost::NotifyNotUsed: "
+             "mPrepareStatus=%d no surf tex",
+             this, int(mPrepareStatus)));
     MOZ_ASSERT(mPrepareStatus == STATUS_NONE);
     return;
   }
@@ -211,16 +231,29 @@ void RenderAndroidSurfaceTextureHost::NotifyNotUsed() {
   }
 
   if (mSurfTex->IsSingleBuffer()) {
+    MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+            ("%p RenderAndroidSurfaceTextureHost::NotifyNotUsed: "
+             "mPrepareStatus=%d single buf to none",
+             this, int(mPrepareStatus)));
     MOZ_ASSERT(mPrepareStatus == STATUS_PREPARED);
     MOZ_ASSERT(mAttachedToGLContext);
     // Release SurfaceTexture's buffer to client side.
     mGL->MakeCurrent();
     mSurfTex->ReleaseTexImage();
   } else if (mPrepareStatus == STATUS_UPDATE_TEX_IMAGE_NEEDED) {
+    MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+            ("%p RenderAndroidSurfaceTextureHost::NotifyNotUsed: "
+             "mPrepareStatus=%d update to none",
+             this, int(mPrepareStatus)));
     MOZ_ASSERT(mAttachedToGLContext);
     // This could happen when video frame was skipped. UpdateTexImage() neeeds
     // to be called for adjusting SurfaceTexture's buffer status.
     mSurfTex->UpdateTexImage();
+  } else {
+    MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+            ("%p RenderAndroidSurfaceTextureHost::NotifyNotUsed: "
+             "mPrepareStatus=%d unknown to none",
+             this, int(mPrepareStatus)));
   }
 
   mPrepareStatus = STATUS_NONE;
@@ -228,14 +261,26 @@ void RenderAndroidSurfaceTextureHost::NotifyNotUsed() {
 
 void RenderAndroidSurfaceTextureHost::UpdateTexImageIfNecessary() {
   if (mIsRemoteTexture) {
+    MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+            ("%p RenderAndroidSurfaceTextureHost::UpdateTexImageIfNecessary: "
+             "mPrepareStatus=%d remote",
+             this, int(mPrepareStatus)));
     EnsureAttachedToGLContext();
     NotifyForUse();
   }
 
   if (mContinuousUpdate) {
+    MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+            ("%p RenderAndroidSurfaceTextureHost::UpdateTexImageIfNecessary: "
+             "mPrepareStatus=%d continuous",
+             this, int(mPrepareStatus)));
     MOZ_ASSERT(!mSurfTex->IsSingleBuffer());
     mSurfTex->UpdateTexImage();
   } else if (mPrepareStatus == STATUS_UPDATE_TEX_IMAGE_NEEDED) {
+    MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+            ("%p RenderAndroidSurfaceTextureHost::UpdateTexImageIfNecessary: "
+             "update tex to prepared",
+             this));
     MOZ_ASSERT(!mSurfTex->IsSingleBuffer());
     // When SurfaceTexture is not single buffer mode, call UpdateTexImage() once
     // just before rendering. During playing video, one SurfaceTexture is used
