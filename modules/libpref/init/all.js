@@ -4139,3 +4139,4 @@ pref("logging.HTMLMediaElement", 5);
 pref("logging.HTMLMediaElementEvents", 5);
 pref("logging.MediaDrmProxySupport", 5);
 pref("logging.MediaCapabilities", 5);
+pref("logging.RenderAndroid", 5);

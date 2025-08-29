@@ -8,9 +8,12 @@
 
 #include "GLReadTexImageHelper.h"
 #include "mozilla/gfx/Logging.h"
+#include "mozilla/Logging.h"
 #include "mozilla/webrender/RenderThread.h"
 #include "GLContext.h"
 #include "AndroidSurfaceTexture.h"
+
+static mozilla::LazyLogModule sRenderAndroidLog("RenderAndroid");
 
 namespace mozilla {
 namespace wr {
@@ -45,6 +48,11 @@ RenderAndroidSurfaceTextureHost::~RenderAndroidSurfaceTextureHost() {
 
 wr::WrExternalImage RenderAndroidSurfaceTextureHost::Lock(uint8_t aChannelIndex,
                                                           gl::GLContext* aGL) {
+  MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+          ("RenderAndroidSurfaceTextureHost::Lock: mPrepareStatus=%d, "
+           "singleBuffer=%d, mIsRemoteTexture=%d",
+           int(mPrepareStatus), mSurfTex ? mSurfTex->IsSingleBuffer() : false,
+           mIsRemoteTexture));
   MOZ_ASSERT(aChannelIndex == 0);
   MOZ_ASSERT((mPrepareStatus == STATUS_PREPARED) ||
              (!mSurfTex->IsSingleBuffer() &&
@@ -132,6 +140,11 @@ void RenderAndroidSurfaceTextureHost::PrepareForUse() {
   // than once, it causes hang on puglish side. And UpdateTexImage needs to
   // be called on render thread, since the SurfaceTexture is consumed on render
   // thread.
+  MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+          ("RenderAndroidSurfaceTextureHost::PrepareForUse: mPrepareStatus=%d, "
+           "singleBuffer=%d, mIsRemoteTexture=%d",
+           int(mPrepareStatus), mSurfTex ? mSurfTex->IsSingleBuffer() : false,
+           mIsRemoteTexture));
   MOZ_ASSERT(RenderThread::IsInRenderThread());
   MOZ_ASSERT(mPrepareStatus == STATUS_NONE);
 
@@ -152,6 +165,11 @@ void RenderAndroidSurfaceTextureHost::PrepareForUse() {
 
 void RenderAndroidSurfaceTextureHost::NotifyForUse() {
   MOZ_ASSERT(RenderThread::IsInRenderThread());
+  MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+          ("RenderAndroidSurfaceTextureHost::NotifyForUse: mPrepareStatus=%d, "
+           "singleBuffer=%d, mIsRemoteTexture=%d",
+           int(mPrepareStatus), mSurfTex ? mSurfTex->IsSingleBuffer() : false,
+           mIsRemoteTexture));
 
   if (mPrepareStatus == STATUS_NONE) {
     // This happens either for RemoteTextureHost or when we lose a race to call
@@ -177,6 +195,11 @@ void RenderAndroidSurfaceTextureHost::NotifyForUse() {
 
 void RenderAndroidSurfaceTextureHost::NotifyNotUsed() {
   MOZ_ASSERT(RenderThread::IsInRenderThread());
+  MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+          ("RenderAndroidSurfaceTextureHost::NotifyNotUsed: mPrepareStatus=%d, "
+           "singleBuffer=%d, mIsRemoteTexture=%d",
+           int(mPrepareStatus), mSurfTex ? mSurfTex->IsSingleBuffer() : false,
+           mIsRemoteTexture));
 
   if (!mSurfTex) {
     MOZ_ASSERT(mPrepareStatus == STATUS_NONE);
