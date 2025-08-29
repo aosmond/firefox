@@ -1232,8 +1232,8 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
       FFMPEG_LOG("avcodec_send_packet error: %s", errStr);
       nsresult rv;
       if (res == int(AVERROR_EOF)) {
-        rv = MaybeQueueDrain(aResults) ? NS_ERROR_DOM_MEDIA_END_OF_STREAM
-                                       : NS_ERROR_NOT_AVAILABLE;
+        rv = MaybeQueueDrain(aResults) ? NS_ERROR_NOT_AVAILABLE
+                                       : NS_ERROR_DOM_MEDIA_END_OF_STREAM;
       } else {
         rv = NS_ERROR_DOM_MEDIA_DECODE_ERR;
       }
@@ -1472,8 +1472,10 @@ void FFmpegVideoDecoder<LIBAV_VER>::QueueResumeDrain() {
     return;
   }
 
-  MOZ_ALWAYS_SUCCEEDS(mTaskQueue->Dispatch(NS_NewRunnableFunction(
-      __func__, [self = RefPtr{this}] { self->ResumeDrain(); })));
+  // We don't check the return code here because the decoder might have shutdown
+  // while we raced against the resume.
+  Unused << mTaskQueue->Dispatch(NS_NewRunnableFunction(
+      __func__, [self = RefPtr{this}] { self->ResumeDrain(); }));
 }
 #endif
 
