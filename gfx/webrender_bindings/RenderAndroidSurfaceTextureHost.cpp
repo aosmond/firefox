@@ -179,6 +179,14 @@ void RenderAndroidSurfaceTextureHost::PrepareForUse() {
 void RenderAndroidSurfaceTextureHost::NotifyForUse() {
   MOZ_ASSERT(RenderThread::IsInRenderThread());
 
+  if (mPrepareStatus == STATUS_NONE) {
+    MOZ_LOG(sRenderAndroidLog, mozilla::LogLevel::Debug,
+            ("%p RenderAndroidSurfaceTextureHost::NotifyForUse: "
+             "status is none, force PrepareForUse",
+             this));
+    PrepareForUse();
+  }
+
   if (mPrepareStatus == STATUS_MIGHT_BE_USED_BY_WR) {
     // This happens when SurfaceTexture of video is rendered on WebRender.
     // There is a case that SurfaceTexture is not rendered on WebRender, instead
