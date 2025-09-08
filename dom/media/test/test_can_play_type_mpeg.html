@@ -156,8 +156,7 @@ check_mp4(document.getElementById('v'), haveMp4);
 var haveMp3 =
   getPref("media.wmf.enabled") ||
   (IsLinux() && getPref("media.ffmpeg.enabled")) ||
-  (IsSupportedAndroid() &&
-    ((IsJellyBeanOrLater() && getPref("media.android-media-codec.enabled")))) ||
+  (IsSupportedAndroid() && IsJellyBeanOrLater()) ||
   IsMacOS();
 
 check_mp3(document.getElementById('v'), haveMp3);
