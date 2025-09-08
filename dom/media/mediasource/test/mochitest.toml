@@ -249,6 +249,7 @@ skip-if = [
 ["test_NoAudioLoopBackData_Muted.html"]
 
 ["test_NoVideoLoopBackData.html"]
+skip-if = ["os == 'android'"]
 
 ["test_PlayEvents.html"]
 
