@@ -11,6 +11,7 @@
 #include "GPUProcessHost.h"
 #include "GPUProcessListener.h"
 #include "mozilla/AppShutdown.h"
+#include "mozilla/Logging.h"
 #include "mozilla/MemoryReportingProcess.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Sprintf.h"
@@ -71,6 +72,7 @@ namespace gfx {
 
 using namespace mozilla::layers;
 
+static LazyLogModule sGPUProcessLog("GPUProcessManager");
 static StaticAutoPtr<GPUProcessManager> sSingleton;
 
 GPUProcessManager* GPUProcessManager::Get() { return sSingleton; }
@@ -213,6 +215,8 @@ void GPUProcessManager::ResetProcessStable() {
   mTotalProcessAttempts++;
   mProcessStable = false;
   mProcessAttemptLastTime = TimeStamp::Now();
+  MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug, "ResetProcessStable: total={}",
+              mTotalProcessAttempts);
 }
 
 bool GPUProcessManager::IsProcessStable(const TimeStamp& aNow) {
@@ -238,10 +242,12 @@ bool GPUProcessManager::IsProcessStable(const TimeStamp& aNow) {
 
 bool GPUProcessManager::LaunchGPUProcess() {
   if (mProcess) {
+    MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug, "LaunchGPUProcess: already exists");
     return true;
   }
 
   if (AppShutdown::IsInOrBeyond(ShutdownPhase::XPCOMShutdown)) {
+    MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug, "LaunchGPUProcess: in shutdown");
     return false;
   }
 
@@ -274,7 +280,13 @@ bool GPUProcessManager::LaunchGPUProcess() {
   // The subprocess is launched asynchronously, so we wait for a callback to
   // acquire the IPDL actor.
   mProcess = new GPUProcessHost(this);
-  if (!mProcess->Launch(std::move(extraArgs))) {
+
+  MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug,
+              "LaunchGPUProcess: launching, attempts total={}",
+              mTotalProcessAttempts);
+  if (mProcess->Launch(std::move(extraArgs))) {
+    MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug, "LaunchGPUProcess: launched");
+  } else {
     DisableGPUProcess("Failed to launch GPU process");
   }
 
@@ -293,6 +305,8 @@ void GPUProcessManager::DisableGPUProcess(const char* aMessage) {
 bool GPUProcessManager::MaybeDisableGPUProcess(const char* aMessage,
                                                bool aAllowRestart) {
   if (!gfxConfig::IsEnabled(Feature::GPU_PROCESS)) {
+    MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug,
+                "MaybeDisableGPUProcess: already disabled");
     return true;
   }
 
@@ -319,6 +333,8 @@ bool GPUProcessManager::MaybeDisableGPUProcess(const char* aMessage,
     }
     if (aAllowRestart && wantRestart) {
       // The fallback method can make use of the GPU process.
+      MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug,
+                  "MaybeDisableGPUProcess: fallback with restart");
       return false;
     }
 
@@ -333,6 +349,9 @@ bool GPUProcessManager::MaybeDisableGPUProcess(const char* aMessage,
     gfxCriticalNote << aMessage;
 
     gfxPlatform::DisableGPUProcess();
+
+    MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug,
+                "MaybeDisableGPUProcess: disabled");
   }
 
   mozilla::glean::gpu_process::feature_status.Set(
@@ -377,20 +396,28 @@ nsresult GPUProcessManager::EnsureGPUReady(
     // yet.
     if (!mProcess && gfxConfig::IsEnabled(Feature::GPU_PROCESS)) {
       if (NS_WARN_IF(inShutdown)) {
+        MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug,
+                    "EnsureGPUReady: in shutdown");
         return NS_ERROR_ILLEGAL_DURING_SHUTDOWN;
       }
 
       if (!LaunchGPUProcess()) {
+        MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug,
+                    "EnsureGPUReady: launch failed");
         return NS_ERROR_FAILURE;
       }
     }
 
     if (mProcess && !mProcess->IsConnected()) {
       if (NS_WARN_IF(inShutdown)) {
+        MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug,
+                    "EnsureGPUReady: in shutdown (2)");
         return NS_ERROR_ILLEGAL_DURING_SHUTDOWN;
       }
 
       if (!mProcess->WaitForLaunch()) {
+        MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug,
+                    "EnsureGPUReady: wait for launch failed");
         // If this fails, we should have fired OnProcessLaunchComplete and
         // removed the process. The algorithm either allows us another attempt
         // or it will have disabled the GPU process.
@@ -398,19 +425,26 @@ nsresult GPUProcessManager::EnsureGPUReady(
         MOZ_ASSERT(!mGPUChild);
         continue;
       }
+
+      MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug,
+                  "EnsureGPUReady: wait for launch success");
     }
 
     // If we don't have a connected process by this stage, we must have
     // explicitly disabled the GPU process.
     if (!mGPUChild) {
       MOZ_DIAGNOSTIC_ASSERT(!gfxConfig::IsEnabled(Feature::GPU_PROCESS));
+      MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug,
+                  "EnsureGPUReady: abort, GPU process disabled");
       break;
     }
 
     if (mGPUChild->EnsureGPUReady()) {
+      MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug, "EnsureGPUReady: ready");
       return NS_OK;
     }
 
+    MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug, "EnsureGPUReady: not ready");
     // If the initialization above fails, we likely have a GPU process teardown
     // waiting in our message queue (or will soon). OnProcessUnexpectedShutdown
     // will explicitly teardown the process and prevent any pending events from
@@ -424,6 +458,8 @@ nsresult GPUProcessManager::EnsureGPUReady(
     // in this loop (if still enabled). Otherwise we return to the caller to
     // allow them to reconfigure first.
     if (!aRetryAfterFallback) {
+      MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug,
+                  "EnsureGPUReady: not ready, cannot retry");
       return NS_ERROR_NOT_AVAILABLE;
     }
   }
@@ -431,10 +467,13 @@ nsresult GPUProcessManager::EnsureGPUReady(
   // This is the first time we are trying to use the in-process compositor.
   if (mTotalProcessAttempts == 0) {
     if (NS_WARN_IF(inShutdown)) {
+      MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug,
+                  "EnsureGPUReady: in shutdown (3)");
       return NS_ERROR_ILLEGAL_DURING_SHUTDOWN;
     }
     ResetProcessStable();
   }
+  MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug, "EnsureGPUReady: abort");
   return NS_ERROR_FAILURE;
 }
 
@@ -933,6 +972,8 @@ void GPUProcessManager::OnProcessUnexpectedShutdown(GPUProcessHost* aHost) {
     MOZ_CRASH("GPU process crashed and pref is set to crash the browser.");
   }
 
+  MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug,
+              "OnProcessUnexpectedShutdown: process lost");
   CompositorManagerChild::OnGPUProcessLost(aHost->GetProcessToken());
   DestroyProcess(/* aUnexpectedShutdown */ true);
 
@@ -940,7 +981,13 @@ void GPUProcessManager::OnProcessUnexpectedShutdown(GPUProcessHost* aHost) {
   // counter so that we don't end up in a restart loop. If the process did live
   // long enough, reset the counter so that we don't disable the process too
   // eagerly.
-  if (IsProcessStable(TimeStamp::Now())) {
+  const bool stable = IsProcessStable(TimeStamp::Now());
+  MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug,
+              "OnProcessUnexpectedShutdown: process was {}stable, attempts "
+              "unstable={} total={}",
+              stable ? "" : "un", mUnstableProcessAttempts + 1,
+              mTotalProcessAttempts);
+  if (stable) {
     mUnstableProcessAttempts = 0;
   } else {
     mUnstableProcessAttempts++;
@@ -1176,9 +1223,12 @@ void GPUProcessManager::CrashProcess() {
 
 void GPUProcessManager::DestroyProcess(bool aUnexpectedShutdown) {
   if (!mProcess) {
+    MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug, "DestroyProcess: no process");
     return;
   }
 
+  MOZ_LOG_FMT(sGPUProcessLog, LogLevel::Debug,
+              "DestroyProcess: shutdown, unexpected={}", aUnexpectedShutdown);
   mProcess->Shutdown(aUnexpectedShutdown);
   mProcessToken = 0;
   mProcess = nullptr;
