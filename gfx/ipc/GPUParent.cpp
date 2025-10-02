@@ -159,14 +159,17 @@ GPUParent* GPUParent::GetSingleton() {
 
 bool GPUParent::Init(mozilla::ipc::UntypedEndpoint&& aEndpoint,
                      const char* aParentBuildID) {
+  NS_WARNING("GPUParent::Init -- enter");
   // Initialize the thread manager before starting IPC. Otherwise, messages
   // may be posted to the main thread and we won't be able to process them.
   if (NS_WARN_IF(NS_FAILED(nsThreadManager::get().Init()))) {
+    NS_WARNING("GPUParent::Init -- exit, no thread manager");
     return false;
   }
 
   // Now it's safe to start IPC.
   if (NS_WARN_IF(!aEndpoint.Bind(this))) {
+    NS_WARNING("GPUParent::Init -- exit, bad endpoint");
     return false;
   }
 
@@ -183,6 +186,7 @@ bool GPUParent::Init(mozilla::ipc::UntypedEndpoint&& aEndpoint,
   }
 
   if (NS_FAILED(NS_InitMinimalXPCOM())) {
+    NS_WARNING("GPUParent::Init -- exit, bad XPCOM");
     return false;
   }
 
@@ -230,6 +234,7 @@ bool GPUParent::Init(mozilla::ipc::UntypedEndpoint&& aEndpoint,
   mozilla::ipc::SetThisProcessName("GPU Process");
 #endif  // XP_MACOSX && MOZ_SANDBOX
 
+  NS_WARNING("GPUParent::Init -- exit");
   return true;
 }
 
@@ -296,6 +301,7 @@ mozilla::ipc::IPCResult GPUParent::RecvInit(
     nsTArray<GfxVarUpdate>&& vars, const DevicePrefs& devicePrefs,
     nsTArray<LayerTreeIdMapping>&& aMappings,
     nsTArray<GfxInfoFeatureStatus>&& aFeatures, uint32_t aWrNamespace) {
+  NS_WARNING("GPUParent::RecvInit");
   gfxVars::ApplyUpdate(vars);
 
   // Inherit device preferences.
@@ -437,6 +443,7 @@ mozilla::ipc::IPCResult GPUParent::RecvInit(
 
   glean::gpu_process::initialization_time.AccumulateRawDuration(
       TimeStamp::Now() - mLaunchTime);
+  NS_WARNING("GPUParent::RecvInit -- exit");
   return IPC_OK();
 }
 
@@ -731,6 +738,8 @@ mozilla::ipc::IPCResult GPUParent::RecvCrashProcess() {
 }
 
 void GPUParent::ActorDestroy(ActorDestroyReason aWhy) {
+  NS_WARNING("GPUParent::ActorDestroy");
+
   if (AbnormalShutdown == aWhy) {
     NS_WARNING("Shutting down GPU process early due to a crash!");
     ProcessChild::QuickExit();

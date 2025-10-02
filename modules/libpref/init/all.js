@@ -4129,3 +4129,4 @@ pref("captchadetection.actor.enabled", true);
 pref("general.smoothScroll", true, sticky);
 
 pref("logging.GPUProcessManager", 5);
+pref("logging.GPUProcessImpl", 5);
