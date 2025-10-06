@@ -64,3 +64,7 @@ user_pref("nimbus.profilesdatastoreservice.read.enabled", false);
 // Turn off semantic history search as it triggers network connections to
 // download ML models.
 user_pref("places.semanticHistory.featureGate", false);
+
+// Disable relaunching the GPU process due to Android test failures.
+// See bug 1844829.
+user_pref("layers.gpu-process.max_launch_attempts", 0);

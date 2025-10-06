@@ -8,3 +8,7 @@
 
 // Turn off update
 user_pref("app.update.disabledForTesting", true);
+
+// Disable relaunching the GPU process due to Android test failures.
+// See bug 1844829.
+user_pref("layers.gpu-process.max_launch_attempts", 0);
