@@ -2918,7 +2918,7 @@ bool ContentParent::InitInternal(ProcessPriority aInitialPriority) {
                                  mChildID, &namespaces)) {
     // This can fail if we've already started shutting down the compositor
     // thread. See Bug 1562763 comment 8.
-    MOZ_ASSERT(AppShutdown::IsInOrBeyond(ShutdownPhase::AppShutdown));
+    gpm->AssertInShutdownOrBackground();
     return false;
   }
 
@@ -3102,7 +3102,7 @@ void ContentParent::OnCompositorUnexpectedShutdown() {
   if (!gpm->CreateContentBridges(OtherEndpointProcInfo(), &compositor,
                                  &imageBridge, &vrBridge, &videoManager,
                                  mChildID, &namespaces)) {
-    MOZ_ASSERT(AppShutdown::IsInOrBeyond(ShutdownPhase::AppShutdown));
+    gpm->AssertInShutdownOrBackground();
     return;
   }
 

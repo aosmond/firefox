@@ -374,11 +374,21 @@ bool GPUProcessManager::MaybeDisableGPUProcess(const char* aMessage,
   return true;
 }
 
+#ifdef DEBUG
+void GPUProcessManager::AssertInShutdownOrBackground() {
+  // The only reason we should ever fail to neither launch a GPU process, nor to
+  // fallback to the parent process, is because we are in the background or in
+  // shutdown.
+  MOZ_ASSERT(!mAppInForeground ||
+             AppShutdown::IsInOrBeyond(ShutdownPhase::XPCOMShutdown));
+}
+#endif
+
 nsresult GPUProcessManager::EnsureGPUReady(
     bool aRetryAfterFallback /* = true */) {
   MOZ_ASSERT(NS_IsMainThread());
 
-  // We only wait to fail with NS_ERROR_ILLEGAL_DURING_SHUTDOWN if we would
+  // We only wait to fail with NS_ERROR_ABORT if we would
   // cause a state change or if we are in the middle of relaunching the GPU
   // process.
   bool inShutdown = AppShutdown::IsInOrBeyond(ShutdownPhase::XPCOMShutdown);
@@ -387,8 +397,18 @@ nsresult GPUProcessManager::EnsureGPUReady(
     // Launch the GPU process if it is enabled but hasn't been (re-)launched
     // yet.
     if (!mProcess && gfxConfig::IsEnabled(Feature::GPU_PROCESS)) {
+#ifdef MOZ_WIDGET_ANDROID
+      // If we don't have a GPU process active, but we are in the background,
+      // then we should just abort. The higher levels will fail to create the
+      // content process, but all of this should get recreated when the app
+      // comes back into the foreground.
+      if (!mAppInForeground) {
+        return NS_ERROR_ABORT;
+      }
+#endif
+
       if (NS_WARN_IF(inShutdown)) {
-        return NS_ERROR_ILLEGAL_DURING_SHUTDOWN;
+        return NS_ERROR_ABORT;
       }
 
       if (!LaunchGPUProcess()) {
@@ -398,7 +418,7 @@ nsresult GPUProcessManager::EnsureGPUReady(
 
     if (mProcess && !mProcess->IsConnected()) {
       if (NS_WARN_IF(inShutdown)) {
-        return NS_ERROR_ILLEGAL_DURING_SHUTDOWN;
+        return NS_ERROR_ABORT;
       }
 
       if (!mProcess->WaitForLaunch()) {
@@ -442,7 +462,7 @@ nsresult GPUProcessManager::EnsureGPUReady(
   // This is the first time we are trying to use the in-process compositor.
   if (mTotalProcessAttempts == 0) {
     if (NS_WARN_IF(inShutdown)) {
-      return NS_ERROR_ILLEGAL_DURING_SHUTDOWN;
+      return NS_ERROR_ABORT;
     }
     ResetProcessStable();
   }
@@ -456,7 +476,7 @@ bool GPUProcessManager::EnsureProtocolsReady() {
 
 bool GPUProcessManager::EnsureCompositorManagerChild() {
   nsresult rv = EnsureGPUReady();
-  if (NS_WARN_IF(rv == NS_ERROR_ILLEGAL_DURING_SHUTDOWN)) {
+  if (NS_WARN_IF(rv == NS_ERROR_ABORT)) {
     return false;
   }
 
@@ -492,7 +512,7 @@ bool GPUProcessManager::EnsureImageBridgeChild() {
   }
 
   nsresult rv = EnsureGPUReady();
-  if (NS_WARN_IF(rv == NS_ERROR_ILLEGAL_DURING_SHUTDOWN)) {
+  if (NS_WARN_IF(rv == NS_ERROR_ABORT)) {
     return false;
   }
 
@@ -523,7 +543,7 @@ bool GPUProcessManager::EnsureVRManager() {
   }
 
   nsresult rv = EnsureGPUReady();
-  if (NS_WARN_IF(rv == NS_ERROR_ILLEGAL_DURING_SHUTDOWN)) {
+  if (NS_WARN_IF(rv == NS_ERROR_ABORT)) {
     return false;
   }
 
@@ -554,7 +574,7 @@ GPUProcessManager::CreateUiCompositorController(nsBaseWidget* aWidget,
   RefPtr<UiCompositorControllerChild> result;
 
   nsresult rv = EnsureGPUReady();
-  if (NS_WARN_IF(rv == NS_ERROR_ILLEGAL_DURING_SHUTDOWN)) {
+  if (NS_WARN_IF(rv == NS_ERROR_ABORT)) {
     return nullptr;
   }
 
@@ -1220,7 +1240,7 @@ already_AddRefed<CompositorSession> GPUProcessManager::CreateTopLevelCompositor(
   RefPtr<CompositorSession> session;
 
   nsresult rv = EnsureGPUReady(/* aRetryAfterFallback */ false);
-  if (NS_WARN_IF(rv == NS_ERROR_ILLEGAL_DURING_SHUTDOWN)) {
+  if (NS_WARN_IF(rv == NS_ERROR_ABORT)) {
     *aRetryOut = false;
     return nullptr;
   }
@@ -1376,7 +1396,7 @@ bool GPUProcessManager::CreateContentCompositorManager(
   ipc::Endpoint<PCompositorManagerChild> childPipe;
 
   nsresult rv = EnsureGPUReady();
-  if (NS_WARN_IF(rv == NS_ERROR_ILLEGAL_DURING_SHUTDOWN)) {
+  if (NS_WARN_IF(rv == NS_ERROR_ABORT)) {
     return false;
   }
 
@@ -1413,7 +1433,7 @@ bool GPUProcessManager::CreateContentImageBridge(
   }
 
   nsresult rv = EnsureGPUReady();
-  if (NS_WARN_IF(rv == NS_ERROR_ILLEGAL_DURING_SHUTDOWN)) {
+  if (NS_WARN_IF(rv == NS_ERROR_ABORT)) {
     return false;
   }
 
@@ -1462,7 +1482,7 @@ bool GPUProcessManager::CreateContentVRManager(
   }
 
   nsresult rv = EnsureGPUReady();
-  if (NS_WARN_IF(rv == NS_ERROR_ILLEGAL_DURING_SHUTDOWN)) {
+  if (NS_WARN_IF(rv == NS_ERROR_ABORT)) {
     return false;
   }
 
@@ -1496,7 +1516,7 @@ void GPUProcessManager::CreateContentRemoteMediaManager(
     ipc::EndpointProcInfo aOtherProcess, dom::ContentParentId aChildId,
     ipc::Endpoint<PRemoteMediaManagerChild>* aOutEndpoint) {
   nsresult rv = EnsureGPUReady();
-  if (NS_WARN_IF(rv == NS_ERROR_ILLEGAL_DURING_SHUTDOWN)) {
+  if (NS_WARN_IF(rv == NS_ERROR_ABORT)) {
     return;
   }
 
@@ -1526,7 +1546,7 @@ void GPUProcessManager::InitVideoBridge(
     ipc::Endpoint<PVideoBridgeParent>&& aVideoBridge,
     layers::VideoBridgeSource aSource) {
   nsresult rv = EnsureGPUReady();
-  if (NS_WARN_IF(rv == NS_ERROR_ILLEGAL_DURING_SHUTDOWN)) {
+  if (NS_WARN_IF(rv == NS_ERROR_ABORT)) {
     return;
   }
 
@@ -1538,7 +1558,7 @@ void GPUProcessManager::InitVideoBridge(
 void GPUProcessManager::MapLayerTreeId(LayersId aLayersId,
                                        base::ProcessId aOwningId) {
   nsresult rv = EnsureGPUReady();
-  if (NS_WARN_IF(rv == NS_ERROR_ILLEGAL_DURING_SHUTDOWN)) {
+  if (NS_WARN_IF(rv == NS_ERROR_ABORT)) {
     return;
   }
 
@@ -1558,7 +1578,7 @@ void GPUProcessManager::UnmapLayerTreeId(LayersId aLayersId,
   // Only call EnsureGPUReady() if we have already launched the process, to
   // avoid launching a new process unnecesarily. (eg if we are backgrounded)
   nsresult rv = mProcess ? EnsureGPUReady() : NS_ERROR_NOT_AVAILABLE;
-  if (NS_WARN_IF(rv == NS_ERROR_ILLEGAL_DURING_SHUTDOWN)) {
+  if (NS_WARN_IF(rv == NS_ERROR_ABORT)) {
     return;
   }
 
@@ -1757,6 +1777,11 @@ void GPUProcessManager::SetAppInForeground(bool aInForeground) {
   mAppInForeground = aInForeground;
 #if defined(XP_WIN)
   SetProcessIsForeground();
+#elif defined(ANDROID)
+  // Moving between the foreground and background can cause temporary
+  // instability, so we reset the attempt counts here to account for that.
+  mLaunchProcessAttempts = 0;
+  mUnstableProcessAttempts = 0;
 #endif
 }
 

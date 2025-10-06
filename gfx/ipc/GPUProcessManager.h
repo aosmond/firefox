@@ -91,6 +91,14 @@ class GPUProcessManager final : public GPUProcessHost::Listener {
   bool LaunchGPUProcess();
   bool IsGPUProcessLaunching();
 
+  void AssertInShutdownOrBackground()
+#ifdef DEBUG
+      ;
+#else
+  {
+  }
+#endif
+
   // Ensure that GPU-bound methods can be used. If no GPU process is being
   // used, or one is launched and ready, this function returns immediately.
   // Otherwise it blocks until the GPU process has finished launching.
