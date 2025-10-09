@@ -103,3 +103,6 @@ user_pref("widget.gtk.overlay-scrollbars.enabled", false);
 user_pref("idle.lastDailyNotification", -1);
 // Honor logging prefs set for certain test suites.
 user_pref("logging.config.clear_on_startup", false);
+// Disable relaunching the GPU process due to Android test failures.
+// See bug 1844829.
+user_pref("layers.gpu-process.max_launch_attempts", 0);

@@ -41,3 +41,4 @@ user_pref("places.history.floodingPrevention.enabled", false);
 // permission, and we can open it and wait for the user to give permission, then
 // don't do that.
 user_pref("geo.prompt.open_system_prefs", false);
+user_pref("layers.gpu-process.max_launch_attempts", 2);

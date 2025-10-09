@@ -113,3 +113,4 @@ user_pref("font.name.monospace.x-western", "DejaVu Sans Mono");
 user_pref("font.name.serif.x-unicode", "DejaVu Serif");
 user_pref("font.name.sans-serif.x-unicode", "DejaVu Sans");
 user_pref("font.name.monospace.x-unicode", "DejaVu Sans Mono");
+user_pref("layers.gpu-process.max_launch_attempts", 2);

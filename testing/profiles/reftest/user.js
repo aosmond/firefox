@@ -124,3 +124,4 @@ user_pref("layout.css.prefers-color-scheme.content-override", 1);
 user_pref("app.update.disabledForTesting", true);
 // Disable pixel alignment
 user_pref("layout.disable-pixel-alignment", true);
+user_pref("layers.gpu-process.max_launch_attempts", 2);
