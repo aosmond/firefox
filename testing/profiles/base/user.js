@@ -18,3 +18,7 @@ user_pref("app.update.disabledForTesting", true);
 // Browser restarts can cause the session restore suggestion to be shown when reusing a
 // profile across a set of tests. Avoid showing this infobar by default.
 user_pref("browser.startup.couldRestoreSession.count", -1);
+
+// Disable relaunching the GPU process due to Android test failures.
+// See bug 1844829.
+user_pref("layers.gpu-process.max_launch_attempts", 0);
