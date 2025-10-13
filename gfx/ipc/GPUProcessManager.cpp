@@ -469,7 +469,7 @@ bool GPUProcessManager::EnsureProtocolsReady() {
   }
 
   return EnsureCompositorManagerChild() && EnsureImageBridgeChild() &&
-         EnsureVRManager();
+         EnsureVideoBridge() && EnsureVRManager();
 }
 
 bool GPUProcessManager::EnsureCompositorManagerChild() {
@@ -526,6 +526,59 @@ bool GPUProcessManager::EnsureImageBridgeChild() {
   mGPUChild->SendInitImageBridge(std::move(parentPipe));
   ImageBridgeChild::InitWithGPUProcess(std::move(childPipe),
                                        AllocateNamespace());
+  return true;
+}
+
+bool GPUProcessManager::EnsureRddVideoBridge(const ContentDeviceData& aData) {
+  MOZ_ASSERT(IsGPUReady());
+
+  auto* rddpm = RDDProcessManager::Get();
+  if (!rddpm) {
+    return true;
+  }
+
+  auto* rddChild = rddpm->GetRDDChild();
+  if (!rddChild) {
+    return true;
+  }
+
+  ContentDeviceData contentDeviceData;
+  gfxPlatform::GetPlatform()->BuildContentDeviceData(&contentDeviceData);
+
+  ipc::EndpointProcInfo gpuInfo =
+      mGPUChild
+          ? mGPUChild->OtherEndpointProcInfo()
+          : ipc::EndpointProcInfo::Current();
+
+  ipc::Endpoint<PVideoBridgeParent> parentPipe;
+  ipc::Endpoint<PVideoBridgeChild> childPipe;
+  nsresult rv = PVideoBridge::CreateEndpoints(gpuInfo, rddChild->OtherEndpointProcInfo(),
+                                              &parentPipe, &childPipe);
+  if (NS_FAILED(rv)) {
+    return false;
+  }
+
+  rddChild->SendInitVideoBridge(std::move(childPipe),
+                                mNumUnexpectedCrashes == 0, contentDeviceData);
+  if (mGPUChild) {
+    mGPUChild->SendInitVideoBridge(std::move(parentPipe), VideoBridgeSource::RddProcess);
+  } else {
+    VideoBridgeParent::Open(std::move(parentPipe),
+                            VideoBridgeSource::RddProcess);
+  }
+
+  return true;
+}
+
+bool GPUProcessManager::EnsureUtilityVideoBridge(const ContentDeviceData& aData) {
+  MOZ_ASSERT(IsGPUReady());
+
+#ifdef MOZ_WMF_MEDIA_ENGINE
+  if (auto* utilpm = UtilityMediaServiceChild::GetSingleton(SandboxingKind::MF_MEDIA_ENGINE_CDM, /* aCreate */ false)) {
+    return utilpm->CreateVideoBridge(mGPUChild ? mGPUChild->OtherEndpointProcInfo() : ipc::EndpointProcInfo::Current());
+  }
+#endif
+
   return true;
 }
 
