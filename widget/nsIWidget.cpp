@@ -1688,6 +1688,7 @@ WindowRenderer* nsIWidget::GetWindowRenderer() {
 }
 
 WindowRenderer* nsIWidget::CreateFallbackRenderer() {
+  MOZ_CRASH("No fallback renderer allowed!");
   return new FallbackRenderer;
 }
 
