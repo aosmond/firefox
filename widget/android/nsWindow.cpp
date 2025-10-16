@@ -133,8 +133,6 @@ static mozilla::LazyLogModule sGVSupportLog("GeckoViewSupport");
 // one.
 MOZ_RUNINIT static nsTArray<nsWindow*> gTopLevelWindows;
 
-static bool sFailedToCreateGLContext = false;
-
 static const double kTouchResampleVsyncAdjustMs = 5.0;
 
 static const int32_t INPUT_RESULT_UNHANDLED =
@@ -2701,15 +2699,10 @@ void nsWindow::CreateLayerManager() {
 
       return;
     }
-
-    // If we get here, then off main thread compositing failed to initialize.
-    sFailedToCreateGLContext = true;
   }
 
-  if (!ComputeShouldAccelerate() || sFailedToCreateGLContext) {
-    printf_stderr(" -- creating basic, not accelerated\n");
-    mWindowRenderer = CreateFallbackRenderer();
-  }
+  printf_stderr(" -- creating basic, not accelerated\n");
+  mWindowRenderer = CreateFallbackRenderer();
 }
 
 void nsWindow::NotifyCompositorSessionLost(
