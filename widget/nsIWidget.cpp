@@ -1492,7 +1492,8 @@ nsIWidget::GetCompositorVsyncDispatcher() {
 already_AddRefed<WebRenderLayerManager> nsIWidget::CreateCompositorSession(
     int aWidth, int aHeight, CompositorOptions* aOptionsOut) {
   MOZ_ASSERT(aOptionsOut);
-
+  return nullptr;
+#if 0
   do {
     CreateCompositorVsyncDispatcher();
 
@@ -1578,6 +1579,7 @@ already_AddRefed<WebRenderLayerManager> nsIWidget::CreateCompositorSession(
       return lm.forget();
     }
   } while (true);
+#endif
 }
 
 void nsIWidget::CreateCompositor(int aWidth, int aHeight) {
@@ -1688,7 +1690,7 @@ WindowRenderer* nsIWidget::GetWindowRenderer() {
 }
 
 WindowRenderer* nsIWidget::CreateFallbackRenderer() {
-  MOZ_CRASH("No fallback renderer allowed!");
+  //MOZ_CRASH("No fallback renderer allowed!");
   return new FallbackRenderer;
 }
 

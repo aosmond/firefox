@@ -532,7 +532,6 @@ WindowRenderer* PuppetWidget::GetWindowRenderer() {
     if (XRE_IsParentProcess()) {
       // On the parent process there is no CompositorBridgeChild which confuses
       // some layers code, so we use basic layers instead. Note that we create
-      MOZ_CRASH("No fallback rendrerer for puppet!");
       mWindowRenderer = new FallbackRenderer;
       return mWindowRenderer;
     }
@@ -551,6 +550,8 @@ WindowRenderer* PuppetWidget::GetWindowRenderer() {
 
 bool PuppetWidget::CreateRemoteLayerManager(
     const std::function<bool(WebRenderLayerManager*)>& aInitializeFunc) {
+  return false;
+#if 0
   RefPtr<WebRenderLayerManager> lm = new WebRenderLayerManager(this);
   MOZ_ASSERT(mBrowserChild);
 
@@ -565,6 +566,7 @@ bool PuppetWidget::CreateRemoteLayerManager(
   DestroyLayerManager();
   mWindowRenderer = std::move(lm);
   return true;
+#endif
 }
 
 nsresult PuppetWidget::RequestIMEToCommitComposition(bool aCancel) {
