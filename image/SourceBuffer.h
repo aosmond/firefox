@@ -325,6 +325,9 @@ class SourceBuffer final {
   /// Append the data available on the provided nsIInputStream to the buffer.
   nsresult AppendFromInputStream(nsIInputStream* aInputStream, uint32_t aCount);
 
+  /// Take ownership of provided data and append it without copying.
+  nsresult AdoptData(char* aData, size_t aLength);
+
   /**
    * Mark the buffer complete, with a status that will be available to
    * consumers. Further calls to Append() are forbidden after Complete().
@@ -382,6 +385,10 @@ class SourceBuffer final {
       MOZ_ASSERT(aCapacity > 0, "Creating zero-capacity chunk");
       mData = static_cast<char*>(malloc(mCapacity));
     }
+
+    /// Create an "adopted" chunk taking ownership of the provided data
+    Chunk(char* aData, size_t aLength)
+        : mCapacity(aLength), mLength(aLength), mData(aData) {}
 
     ~Chunk() { free(mData); }
 

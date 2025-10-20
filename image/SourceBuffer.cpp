@@ -441,6 +441,13 @@ nsresult SourceBuffer::Append(const char* aData, size_t aLength) {
   return NS_OK;
 }
 
+nsresult SourceBuffer::AdoptData(char* aData, size_t aLength) {
+  MOZ_ASSERT(aData, "Should have a buffer");
+  MOZ_ASSERT(aLength > 0, "Writing a zero-sized chunk");
+  MutexAutoLock lock(mMutex);
+  return AppendChunk(Some(Chunk(aData, aLength)));
+}
+
 static nsresult AppendToSourceBuffer(nsIInputStream*, void* aClosure,
                                      const char* aFromRawSegment, uint32_t,
                                      uint32_t aCount, uint32_t* aWriteCount) {
