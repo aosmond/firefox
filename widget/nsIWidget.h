@@ -20,6 +20,7 @@
 #include "mozilla/RefPtr.h"
 #include "mozilla/TimeStamp.h"
 #include "mozilla/UniquePtr.h"
+#include "mozilla/gfx/GPUProcessListener.h"
 #include "mozilla/gfx/Matrix.h"
 #include "mozilla/gfx/Rect.h"
 #include "mozilla/layers/LayersTypes.h"
@@ -392,7 +393,8 @@ class MOZ_RAII AutoSynthesizedEventCallbackNotifier final {
  * The base class for all the widgets. It provides the interface for
  * all basic and necessary functionality.
  */
-class nsIWidget : public nsSupportsWeakReference {
+class nsIWidget : public nsSupportsWeakReference,
+                  public mozilla::gfx::GPUProcessListener {
  public:
   template <class EventType, class InputType>
   friend class DispatchEventOnMainThread;
@@ -1898,6 +1900,9 @@ class nsIWidget : public nsSupportsWeakReference {
   // function could deallocate the widget if it is unparented.
   virtual void NotifyCompositorSessionLost(
       mozilla::layers::CompositorSession* aSession);
+
+  // The GPU process has been restarted, or we have fallen back to the parent.
+  void OnCompositorUnexpectedShutdown() override;
 
   already_AddRefed<mozilla::CompositorVsyncDispatcher>
   GetCompositorVsyncDispatcher();

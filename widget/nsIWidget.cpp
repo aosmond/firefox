@@ -412,6 +412,10 @@ void nsIWidget::FreeShutdownObserver() {
     mShutdownObserver->Unregister();
   }
   mShutdownObserver = nullptr;
+
+  if (auto* gpm = gfx::GPUProcessManager::Get()) {
+    gpm->RemoveListener(this);
+  }
 }
 
 void nsIWidget::EnsureLocalesChangedObserver() {
@@ -1478,14 +1482,21 @@ already_AddRefed<WebRenderLayerManager> nsIWidget::CreateCompositorSession(
     int aWidth, int aHeight, CompositorOptions* aOptionsOut) {
   MOZ_ASSERT(aOptionsOut);
 
+  // Make sure GPU process is ready for use.
+  // If it failed to connect to GPU process, GPU process usage is disabled in
+  // EnsureGPUReady(). It could update gfxVars and gfxConfigs.
+  gfx::GPUProcessManager* gpm = gfx::GPUProcessManager::Get();
+  if (NS_WARN_IF(!gpm)) {
+    return nullptr;
+  }
+
+  gpm->RemoveListener(this);
+
   do {
     CreateCompositorVsyncDispatcher();
 
-    // Make sure GPU process is ready for use.
-    // If it failed to connect to GPU process, GPU process usage is disabled in
-    // EnsureGPUReady(). It could update gfxVars and gfxConfigs.
-    gfx::GPUProcessManager* gpm = gfx::GPUProcessManager::Get();
-    if (NS_WARN_IF(!gpm || NS_FAILED(gpm->EnsureGPUReady()))) {
+    if (NS_WARN_IF(NS_FAILED(gpm->EnsureGPUReady()))) {
+      gpm->AddListener(this);
       return nullptr;
     }
 
@@ -1648,6 +1659,15 @@ void nsIWidget::CreateCompositor(int aWidth, int aHeight) {
 void nsIWidget::NotifyCompositorSessionLost(CompositorSession* aSession) {
   MOZ_ASSERT(aSession == mCompositorSession);
   DestroyLayerManager();
+}
+
+void nsIWidget::OnCompositorUnexpectedShutdown() {
+  // If we created a fallback renderer while the GPU process was down, destroy
+  // it so that we can recreate it now that either the GPU process is ready, or
+  // we have fallen back to the parent process for compositing.
+  if (mWindowRenderer && !!mWindowRenderer->AsFallback()) {
+    DestroyLayerManager();
+  }
 }
 
 bool nsIWidget::ShouldUseOffMainThreadCompositing() {
