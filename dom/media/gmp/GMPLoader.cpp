@@ -10,7 +10,6 @@
 
 #include "gmp-entrypoints.h"
 #include "mozilla/Attributes.h"
-#include "nsExceptionHandler.h"
 #include "prenv.h"
 #include "prerror.h"
 #include "prlink.h"
@@ -87,10 +86,6 @@ class PassThroughGMPAdapter : public GMPAdapter {
 
 bool GMPLoader::Load(const char* aUTF8LibPath, uint32_t aUTF8LibPathLen,
                      const GMPPlatformAPI* aPlatformAPI, GMPAdapter* aAdapter) {
-  CrashReporter::AutoRecordAnnotation autoLibPath(
-      CrashReporter::Annotation::GMPLibraryPath,
-      nsDependentCString(aUTF8LibPath));
-
   if (!getenv("MOZ_DISABLE_GMP_SANDBOX") && mSandboxStarter &&
       !mSandboxStarter->Start(aUTF8LibPath)) {
     MOZ_CRASH("Cannot start sandbox!");

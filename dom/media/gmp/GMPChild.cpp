@@ -513,17 +513,21 @@ mozilla::ipc::IPCResult GMPChild::RecvStartPlugin(const nsString& aAdapter) {
   GMP_CHILD_LOG_DEBUG("%s", __FUNCTION__);
 
   nsAutoCString libPath;
-  if (!GetUTF8LibPath(libPath)) {
-    CrashReporter::RecordAnnotationNSCString(
+  {
+    CrashReporter::AutoRecordAnnotation autoLibPath(
         CrashReporter::Annotation::GMPLibraryPath,
         NS_ConvertUTF16toUTF8(mPluginPath));
-
+    if (!GetUTF8LibPath(libPath)) {
 #ifdef XP_WIN
-    GMP_CHILD_LOG(LogLevel::Error, "Failed to get lib path with error(%lu).",
-                  GetLastError());
+      GMP_CHILD_LOG(LogLevel::Error, "Failed to get lib path with error(%lu).",
+                    GetLastError());
 #endif
-    return IPC_FAIL(this, "Failed to get lib path.");
+      return IPC_FAIL(this, "Failed to get lib path.");
+    }
   }
+
+  CrashReporter::AutoRecordAnnotation autoLibPath(
+      CrashReporter::Annotation::GMPLibraryPath, libPath);
 
   auto platformAPI = new GMPPlatformAPI();
   InitPlatformAPI(*platformAPI, this);
