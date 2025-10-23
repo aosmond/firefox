@@ -220,6 +220,7 @@ CompositorBridgeParent::CompositorBridgeParent(
 
 void CompositorBridgeParent::InitSameProcess(widget::CompositorWidget* aWidget,
                                              const LayersId& aLayerTreeId) {
+  printf_stderr("InitSameProcess -- layer %lx\n", aLayerTreeId.mId);
   MOZ_ASSERT(XRE_IsParentProcess());
   MOZ_ASSERT(NS_IsMainThread());
 
@@ -257,6 +258,7 @@ mozilla::ipc::IPCResult CompositorBridgeParent::RecvInitialize(
 }
 
 void CompositorBridgeParent::Initialize() {
+  printf_stderr("Initialize -- layer %lx\n", mRootLayerTreeID.mId);
   MOZ_ASSERT(CompositorThread(),
              "The compositor thread must be Initialized before instanciating a "
              "CompositorBridgeParent.");
@@ -886,6 +888,7 @@ void CompositorBridgeParent::ScheduleForcedComposition(
 
 mozilla::ipc::IPCResult CompositorBridgeParent::RecvNotifyChildCreated(
     const LayersId& child, CompositorOptions* aOptions) {
+  printf_stderr("RecvNotifyChildCreated -- layer %lx\n", child.mId);
   StaticMonitorAutoLock lock(sIndirectLayerTreesLock);
   NotifyChildCreated(child);
   *aOptions = mOptions;
@@ -894,6 +897,7 @@ mozilla::ipc::IPCResult CompositorBridgeParent::RecvNotifyChildCreated(
 
 mozilla::ipc::IPCResult CompositorBridgeParent::RecvNotifyChildRecreated(
     const LayersId& aChild, CompositorOptions* aOptions) {
+  printf_stderr("RecvNotifyChildRecreated -- layer %lx\n", aChild.mId);
   StaticMonitorAutoLock lock(sIndirectLayerTreesLock);
 
   if (sIndirectLayerTrees.find(aChild) != sIndirectLayerTrees.end()) {
@@ -914,6 +918,7 @@ void CompositorBridgeParent::NotifyChildCreated(LayersId aChild) {
 mozilla::ipc::IPCResult CompositorBridgeParent::RecvMapAndNotifyChildCreated(
     const LayersId& aChild, const base::ProcessId& aOwnerPid,
     CompositorOptions* aOptions) {
+  printf_stderr("RecvMapAndNotifyChildCreated -- layer %lx\n", aChild.mId);
   // We only use this message when the remote compositor is in the GPU process.
   // It is harmless to call it, though.
   MOZ_ASSERT(XRE_IsGPUProcess());
@@ -945,6 +950,7 @@ static CompositorOptionsChangeKind ClassifyCompositorOptionsChange(
 
 mozilla::ipc::IPCResult CompositorBridgeParent::RecvAdoptChild(
     const LayersId& child) {
+  printf_stderr("RecvAdoptChild -- layer %lx\n", child.mId);
   RefPtr<APZUpdater> oldApzUpdater;
   APZCTreeManagerParent* parent;
   bool apzEnablementChanged = false;

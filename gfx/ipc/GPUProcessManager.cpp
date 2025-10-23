@@ -1246,6 +1246,8 @@ already_AddRefed<CompositorSession> GPUProcessManager::CreateTopLevelCompositor(
   }
 
   LayersId layerTreeId = AllocateLayerTreeId();
+  printf_stderr("[AO] CreateTopLevelCompositor -- layer %lx, mGPUChild %p\n",
+                layerTreeId.mId, mGPUChild);
   RefPtr<CompositorSession> session;
   if (mGPUChild) {
     session = CreateRemoteSession(aWidget, aLayerManager, layerTreeId, aScale,
@@ -1661,7 +1663,13 @@ bool GPUProcessManager::AllocateAndConnectLayerTreeId(
   LayersId layersId = AllocateLayerTreeId();
   *aOutLayersId = layersId;
 
+  printf_stderr(
+      "[AO] AllocateAndConnectLayerTreeId -- layer %lx, mGPUChild %p, "
+      "aCompositorBridge %p\n",
+      layersId.mId, mGPUChild, aCompositorBridge);
+
   if (NS_WARN_IF(NS_FAILED(EnsureGPUReady()))) {
+    printf_stderr("[AO] AllocateAndConnectLayerTreeId -- not ready\n");
     return false;
   }
 
@@ -1671,10 +1679,12 @@ bool GPUProcessManager::AllocateAndConnectLayerTreeId(
   // messages.
   if (aCompositorBridge) {
     if (mGPUChild) {
+      printf_stderr("[AO] AllocateAndConnectLayerTreeId -- GC + CB\n");
       return aCompositorBridge->SendMapAndNotifyChildCreated(
           layersId, aOtherPid, aOutCompositorOptions);
     }
 
+    printf_stderr("[AO] AllocateAndConnectLayerTreeId -- no GC + CB\n");
     LayerTreeOwnerTracker::Get()->Map(layersId, aOtherPid);
     return aCompositorBridge->SendNotifyChildCreated(layersId,
                                                      aOutCompositorOptions);
@@ -1683,10 +1693,12 @@ bool GPUProcessManager::AllocateAndConnectLayerTreeId(
   // If we don't have a CompositorBridgeChild, we just need to call
   // LayerTreeOwnerTracker::Map in the compositing process.
   if (mGPUChild) {
+    printf_stderr("[AO] AllocateAndConnectLayerTreeId -- GC + no CB\n");
     return mGPUChild->SendAddLayerTreeIdMapping(
         LayerTreeIdMapping(layersId, aOtherPid));
   }
 
+  printf_stderr("[AO] AllocateAndConnectLayerTreeId -- no GC + no CB\n");
   LayerTreeOwnerTracker::Get()->Map(layersId, aOtherPid);
   return true;
 }

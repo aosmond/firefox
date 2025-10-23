@@ -138,6 +138,8 @@ ContentCompositorBridgeParent::AllocPWebRenderBridgeParent(
     const wr::PipelineId& aPipelineId, const LayoutDeviceIntSize& aSize,
     const WindowKind& aWindowKind) {
   LayersId layersId = wr::AsLayersId(aPipelineId);
+
+  printf_stderr("AllocPWebRenderBridgeParent -- layer %lx\n", layersId.mId);
   // Check to see if this child process has access to this layer tree.
   if (!LayerTreeOwnerTracker::Get()->IsMapped(layersId, OtherPid())) {
     NS_ERROR(
