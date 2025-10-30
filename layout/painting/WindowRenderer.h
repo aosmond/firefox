@@ -10,6 +10,7 @@
 #include "gfxContext.h"
 #include "mozilla/ScrollPositionUpdate.h"  // for ScrollPositionUpdate
 #include "mozilla/dom/Animation.h"         // for Animation
+#include "mozilla/gfx/GPUProcessListener.h"
 #include "mozilla/layers/LayersTypes.h"
 #include "mozilla/layers/ScrollableLayerGuid.h"  // for ScrollableLayerGuid, ScrollableLayerGuid::ViewID
 #include "mozilla/webrender/webrender_ffi.h"
@@ -97,7 +98,7 @@ class FrameRecorder {
  * cleanup can be done once that happens.
  */
 class WindowRenderer : public FrameRecorder {
-  NS_INLINE_DECL_REFCOUNTING(WindowRenderer)
+  NS_INLINE_DECL_PURE_VIRTUAL_REFCOUNTING
 
  public:
   // Cast to implementation types.
@@ -239,9 +240,18 @@ class WindowRenderer : public FrameRecorder {
  * EndTransaction if a composite is requested (no END_NO_COMPOSITE flag
  * provided)
  */
-class FallbackRenderer : public WindowRenderer {
+class FallbackRenderer final : public WindowRenderer,
+                               public gfx::GPUProcessListener {
+  NS_INLINE_DECL_REFCOUNTING(WindowRenderer, final)
+
  public:
+  explicit FallbackRenderer(nsIWidget* aWidget);
+
   FallbackRenderer* AsFallback() override { return this; }
+
+  void Destroy() override;
+
+  void OnCompositorDestroyBackgrounded() override;
 
   void SetTarget(gfxContext* aContext);
 
@@ -267,6 +277,11 @@ class FallbackRenderer : public WindowRenderer {
                               EndTransactionFlags aFlags);
 
   gfxContext* mTarget = nullptr;
+
+ private:
+  ~FallbackRenderer() override;
+
+  nsIWidget* mWidget = nullptr;
 };
 
 }  // namespace mozilla
