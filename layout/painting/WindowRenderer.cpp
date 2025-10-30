@@ -10,6 +10,7 @@
 #include "mozilla/EffectSet.h"
 #include "mozilla/dom/Animation.h"  // for Animation
 #include "mozilla/dom/AnimationEffect.h"
+#include "mozilla/gfx/GPUProcessManager.h"
 #include "mozilla/layers/PersistentBufferProvider.h"  // for PersistentBufferProviderBasic, PersistentBufferProvider (ptr only)
 #include "nsDisplayList.h"
 
@@ -175,6 +176,37 @@ void WindowRenderer::UpdatePartialPrerenderedAnimations(
     if (mPartialPrerenderedAnimations.Remove(id, getter_AddRefs(animation))) {
       animation->UpdatePartialPrerendered();
     }
+  }
+}
+
+FallbackRenderer::FallbackRenderer(nsIWidget* aWidget) : mWidget(aWidget) {
+  if (!mWidget) {
+    return;
+  }
+
+  if (auto* gpm = gfx::GPUProcessManager::Get()) {
+    gpm->AddListener(this);
+  }
+}
+
+FallbackRenderer::~FallbackRenderer() { Destroy(); }
+
+void FallbackRenderer::Destroy() {
+  if (!mWidget) {
+    return;
+  }
+
+  if (auto* gpm = gfx::GPUProcessManager::Get()) {
+    gpm->RemoveListener(this);
+  }
+
+  mWidget = nullptr;
+}
+
+void FallbackRenderer::OnCompositorUnexpectedShutdown() {
+  // We may get freed after this but the caller has a strong reference.
+  if (RefPtr<nsIWidget> widget = mWidget) {
+    widget->NotifyCompositorSessionLost(/* aSession */ nullptr);
   }
 }
 

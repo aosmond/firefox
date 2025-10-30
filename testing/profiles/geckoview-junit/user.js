@@ -8,3 +8,7 @@
 
 // Turn off update
 user_pref("app.update.disabledForTesting", true);
+
+// Allow the GPU process to be launched in the background, for which
+// many tests run in but still require compositing.
+user_pref("layers.gpu-process.launch-in-background", true);

@@ -173,12 +173,9 @@ void GPUProcessManager::NotifyObserve(const char* aTopic,
   } else if (!strcmp(aTopic, "nsPref:changed")) {
     OnPreferenceChange(aData);
   } else if (!strcmp(aTopic, "application-foreground")) {
-    mAppInForeground = true;
-    if (!mProcess && gfxConfig::IsEnabled(Feature::GPU_PROCESS)) {
-      (void)LaunchGPUProcess();
-    }
+    SetAppInForeground(true);
   } else if (!strcmp(aTopic, "application-background")) {
-    mAppInForeground = false;
+    SetAppInForeground(false);
   } else if (!strcmp(aTopic, "screen-information-changed")) {
     ScreenInformationChanged();
   }
@@ -258,6 +255,11 @@ bool GPUProcessManager::IsProcessStable(const TimeStamp& aNow) {
     }
   }
   return mProcessStable;
+}
+
+bool GPUProcessManager::MayLaunchGPUProcess() const {
+  return mAppInForeground ||
+         StaticPrefs::layers_gpu_process_launch_in_background();
 }
 
 nsresult GPUProcessManager::LaunchGPUProcess() {
@@ -384,6 +386,16 @@ bool GPUProcessManager::MaybeDisableGPUProcess(const char* aMessage,
   return true;
 }
 
+#ifdef DEBUG
+void GPUProcessManager::AssertInShutdownOrBackground() {
+  // The only reason we should ever fail to neither launch a GPU process, nor to
+  // fallback to the parent process, is because we are in the background or in
+  // shutdown.
+  MOZ_ASSERT(!MayLaunchGPUProcess() ||
+             AppShutdown::IsInOrBeyond(ShutdownPhase::XPCOMShutdown));
+}
+#endif
+
 bool GPUProcessManager::IsGPUReady() const {
   // If we have disabled the GPU process, then we know we are always ready.
   if (!gfxConfig::IsEnabled(Feature::GPU_PROCESS)) {
@@ -421,7 +433,15 @@ nsresult GPUProcessManager::EnsureGPUReady() {
     return NS_ERROR_ILLEGAL_DURING_SHUTDOWN;
   }
 
-  do {
+  // If we don't have a GPU process active, but we are in the background, then
+  // we should just abort. The higher levels will fail to create the content
+  // process, but all of this should get recreated when the app comes back into
+  // the foreground.
+  if (!mProcess && !MayLaunchGPUProcess()) {
+    return NS_ERROR_ABORT;
+  }
+
+  while (true) {
     // Launch the GPU process if it is enabled but hasn't been (re-)launched
     // yet, and wait for it to complete the handshake. As part of WaitForLaunch,
     // we know that OnProcessLaunchComplete has been called. If it succeeds,
@@ -431,13 +451,24 @@ nsresult GPUProcessManager::EnsureGPUReady() {
     nsresult rv = LaunchGPUProcess();
     if (NS_SUCCEEDED(rv) && mProcess->WaitForLaunch() && mGPUChild) {
       MOZ_DIAGNOSTIC_ASSERT(mGPUChild->IsGPUReady());
-      return NS_OK;
+      break;
     }
 
     MOZ_RELEASE_ASSERT(rv != NS_ERROR_ILLEGAL_DURING_SHUTDOWN);
     MOZ_RELEASE_ASSERT(!mProcess);
     MOZ_RELEASE_ASSERT(!mGPUChild);
-  } while (gfxConfig::IsEnabled(Feature::GPU_PROCESS));
+
+    if (!gfxConfig::IsEnabled(Feature::GPU_PROCESS)) {
+      break;
+    }
+
+    // If we tried waiting for the GPU process while in the background because
+    // we had already launched one, but failed, we should just abort now instead
+    // of retrying right away.
+    if (!MayLaunchGPUProcess()) {
+      return NS_ERROR_ABORT;
+    }
+  }
 
   return NS_OK;
 }
@@ -571,7 +602,8 @@ void GPUProcessManager::OnProcessLaunchComplete(GPUProcessHost* aHost) {
   // we did not get to the point where we are using the features, we should just
   // follow the same fallback procedure.
   auto* gpuChild = mProcess->GetActor();
-  if (!mProcess->IsConnected() || !gpuChild || !gpuChild->EnsureGPUReady()) {
+  if (NS_WARN_IF(!mProcess->IsConnected()) || NS_WARN_IF(!gpuChild) ||
+      NS_WARN_IF(!gpuChild->EnsureGPUReady())) {
     ++mLaunchProcessAttempts;
     if (mLaunchProcessAttempts >
         uint32_t(StaticPrefs::layers_gpu_process_max_launch_attempts())) {
@@ -908,7 +940,9 @@ void GPUProcessManager::OnRemoteProcessDeviceReset(
 }
 
 void GPUProcessManager::NotifyListenersOnCompositeDeviceReset() {
-  for (const auto& listener : mListeners) {
+  nsTArray<RefPtr<GPUProcessListener>> listeners;
+  listeners.AppendElements(mListeners);
+  for (const auto& listener : listeners) {
     listener->OnCompositorDeviceReset();
   }
 }
@@ -1072,7 +1106,9 @@ void GPUProcessManager::ReinitializeRendering() {
   // Notify content. This will ensure that each content process re-establishes
   // a connection to the compositor thread (whether it's in-process or in a
   // newly launched GPU process).
-  for (const auto& listener : mListeners) {
+  nsTArray<RefPtr<GPUProcessListener>> listeners;
+  listeners.AppendElements(mListeners);
+  for (const auto& listener : listeners) {
     listener->OnCompositorUnexpectedShutdown();
   }
 
@@ -1782,7 +1818,19 @@ void GPUProcessManager::SetAppInForeground(bool aInForeground) {
   mAppInForeground = aInForeground;
 #if defined(XP_WIN)
   SetProcessIsForeground();
+#elif defined(ANDROID)
+  // Moving between the foreground and background can cause temporary
+  // instability, so we reset the attempt counts here to account for that.
+  mLaunchProcessAttempts = 0;
+  mUnstableProcessAttempts = 0;
 #endif
+
+  // If we moved into the foreground, then we need to make sure the GPU process
+  // completes its launch. Otherwise listeners may be left dangling from
+  // previous calls that returned NS_ERROR_ABORT due to being in the background.
+  if (aInForeground && gfxConfig::IsEnabled(Feature::GPU_PROCESS)) {
+    (void)LaunchGPUProcess();
+  }
 }
 
 #if defined(XP_WIN)
