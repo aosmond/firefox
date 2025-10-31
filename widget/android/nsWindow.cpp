@@ -81,6 +81,7 @@
 #include "mozilla/dom/MouseEventBinding.h"
 #include "mozilla/gfx/2D.h"
 #include "mozilla/gfx/DataSurfaceHelpers.h"
+#include "mozilla/gfx/GPUProcessManager.h"
 #include "mozilla/gfx/Logging.h"
 #include "mozilla/gfx/Swizzle.h"
 #include "mozilla/gfx/Types.h"
@@ -1155,7 +1156,11 @@ class LayerViewSupport final
 #endif  // defined(DEBUG)
   }
 
-  ~LayerViewSupport() {}
+  virtual ~LayerViewSupport() {
+    if (!mCompositorPaused) {
+      RemoveCompositorRef();
+    }
+  }
 
   using Base::AttachNative;
   using Base::DisposeNative;
@@ -1266,6 +1271,26 @@ class LayerViewSupport final
   java::sdk::Surface::Param GetSurface() { return mSurface; }
 
  private:
+  void AddCompositorRef() const {
+    MOZ_ASSERT(!mCompositorPaused);
+    NS_DispatchToMainThread(
+        NS_NewRunnableFunction("LayerViewSupport::AddCompositorRef", []() {
+          if (auto* gpm = gfx::GPUProcessManager::Get()) {
+            gpm->AddCompositorRef();
+          }
+        }));
+  }
+
+  void RemoveCompositorRef() const {
+    MOZ_ASSERT(mCompositorPaused);
+    NS_DispatchToMainThread(
+        NS_NewRunnableFunction("LayerViewSupport::RemoveCompositorRef", []() {
+          if (auto* gpm = gfx::GPUProcessManager::Get()) {
+            gpm->RemoveCompositorRef();
+          }
+        }));
+  }
+
   already_AddRefed<DataSourceSurface> FlipScreenPixels(
       Shmem& aMem, const ScreenIntSize& aInSize, const ScreenRect& aInRegion,
       const IntSize& aOutSize) {
@@ -1411,7 +1436,10 @@ class LayerViewSupport final
     // Set this true prior to attempting to pause the compositor, so that if
     // pausing fails the subsequent recovery knows to initialize the compositor
     // in a paused state.
-    mCompositorPaused = true;
+    if (!mCompositorPaused) {
+      mCompositorPaused = true;
+      RemoveCompositorRef();
+    }
 
     if (mUiCompositorControllerChild) {
       mUiCompositorControllerChild->Pause();
@@ -1448,7 +1476,10 @@ class LayerViewSupport final
     // Set this false prior to attempting to resume the compositor, so that if
     // resumption fails the subsequent recovery knows to initialize the
     // compositor in a resumed state.
-    mCompositorPaused = false;
+    if (mCompositorPaused) {
+      mCompositorPaused = false;
+      AddCompositorRef();
+    }
 
     if (mUiCompositorControllerChild) {
       bool resumed = mUiCompositorControllerChild->Resume();
@@ -1469,7 +1500,10 @@ class LayerViewSupport final
     // Set this false prior to attempting to resume the compositor, so that if
     // resumption fails the subsequent recovery knows to initialize the
     // compositor in a resumed state.
-    mCompositorPaused = false;
+    if (mCompositorPaused) {
+      mCompositorPaused = false;
+      AddCompositorRef();
+    }
 
     mX = aX;
     mY = aY;

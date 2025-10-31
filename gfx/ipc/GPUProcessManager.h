@@ -244,6 +244,11 @@ class GPUProcessManager final : public GPUProcessHost::Listener {
   // of the GPU process accordingly.
   void SetAppInForeground(bool aInForeground);
 
+#ifdef MOZ_WIDGET_ANDROID
+  void AddCompositorRef();
+  void RemoveCompositorRef();
+#endif
+
   /*
    * ** Test-only Method **
    *
@@ -422,6 +427,9 @@ class GPUProcessManager final : public GPUProcessHost::Listener {
   // Fields that are associated with the current GPU process.
   GPUProcessHost* mProcess;
   uint64_t mProcessToken;
+#ifdef MOZ_WIDGET_ANDROID
+  uint32_t mCompositorRefCount = 0;
+#endif
   bool mProcessStable;
   bool mProcessStableOnce = false;
   Maybe<wr::WebRenderError> mLastError;

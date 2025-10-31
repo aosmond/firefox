@@ -259,6 +259,9 @@ bool GPUProcessManager::IsProcessStable(const TimeStamp& aNow) {
 
 bool GPUProcessManager::MayLaunchGPUProcess() const {
   return mAppInForeground ||
+#ifdef MOZ_WIDGET_ANDROID
+         mCompositorRefCount > 0 ||
+#endif
          StaticPrefs::layers_gpu_process_launch_in_background();
 }
 
@@ -1809,6 +1812,25 @@ RefPtr<MemoryReportingProcess> GPUProcessManager::GetProcessMemoryReporter() {
   }
   return MakeRefPtr<GPUMemoryReporter>();
 }
+
+#ifdef MOZ_WIDGET_ANDROID
+void GPUProcessManager::AddCompositorRef() {
+  ++mCompositorRefCount;
+
+  if (gfxConfig::IsEnabled(Feature::GPU_PROCESS)) {
+    (void)LaunchGPUProcess();
+  }
+}
+
+void GPUProcessManager::RemoveCompositorRef() {
+  MOZ_DIAGNOSTIC_ASSERT(mCompositorRefCount > 0);
+  if (mCompositorRefCount > 0) {
+    --mCompositorRefCount;
+  } else {
+    MOZ_DIAGNOSTIC_CRASH("mCompositorRefCount already zero!");
+  }
+}
+#endif
 
 void GPUProcessManager::SetAppInForeground(bool aInForeground) {
   if (mAppInForeground == aInForeground) {
