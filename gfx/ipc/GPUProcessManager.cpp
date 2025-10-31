@@ -274,6 +274,8 @@ nsresult GPUProcessManager::LaunchGPUProcess() {
     return NS_ERROR_ILLEGAL_DURING_SHUTDOWN;
   }
 
+  NS_WARNING("GPUProcessManager::LaunchGPUProcess -- launch");
+
   // Start listening for pref changes so we can
   // forward them to the process once it is running.
   if (!mObserver) {
@@ -1218,6 +1220,8 @@ void GPUProcessManager::DestroyProcess(bool aUnexpectedShutdown) {
     return;
   }
 
+  NS_WARNING("GPUProcessManager::DestroyProcess -- destroy");
+
   mProcess->Shutdown(aUnexpectedShutdown);
   mProcessToken = 0;
   mProcess = nullptr;
@@ -1816,6 +1820,11 @@ RefPtr<MemoryReportingProcess> GPUProcessManager::GetProcessMemoryReporter() {
 #ifdef MOZ_WIDGET_ANDROID
 void GPUProcessManager::AddCompositorRef() {
   ++mCompositorRefCount;
+  if (mCompositorRefCount == 1) {
+    NS_WARNING("GPUProcessManager::AddCompositorRef -- first ref");
+  } else {
+    NS_WARNING("GPUProcessManager::AddCompositorRef -- subsequent ref");
+  }
 
   if (gfxConfig::IsEnabled(Feature::GPU_PROCESS)) {
     (void)LaunchGPUProcess();
@@ -1826,6 +1835,11 @@ void GPUProcessManager::RemoveCompositorRef() {
   MOZ_DIAGNOSTIC_ASSERT(mCompositorRefCount > 0);
   if (mCompositorRefCount > 0) {
     --mCompositorRefCount;
+    if (mCompositorRefCount == 0) {
+      NS_WARNING("GPUProcessManager::RemoveCompositorRef -- last ref");
+    } else {
+      NS_WARNING("GPUProcessManager::RemoveCompositorRef -- refs remaining");
+    }
   } else {
     MOZ_DIAGNOSTIC_CRASH("mCompositorRefCount already zero!");
   }
@@ -1834,9 +1848,19 @@ void GPUProcessManager::RemoveCompositorRef() {
 
 void GPUProcessManager::SetAppInForeground(bool aInForeground) {
   if (mAppInForeground == aInForeground) {
+    if (aInForeground) {
+      NS_WARNING("GPUProcessManager::SetAppInForeground -- already in foreground");
+    } else {
+      NS_WARNING("GPUProcessManager::SetAppInForeground -- already in background");
+    }
     return;
   }
 
+  if (aInForeground) {
+    NS_WARNING("GPUProcessManager::SetAppInForeground -- now in foreground");
+  } else {
+    NS_WARNING("GPUProcessManager::SetAppInForeground -- now in background");
+  }
   mAppInForeground = aInForeground;
 #if defined(XP_WIN)
   SetProcessIsForeground();
