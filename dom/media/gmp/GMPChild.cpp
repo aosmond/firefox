@@ -240,6 +240,9 @@ mozilla::ipc::IPCResult GMPChild::RecvPreloadLibs(const nsCString& aLibs) {
 }
 
 bool GMPChild::GetUTF8LibPath(nsACString& aOutLibPath) {
+#ifdef MOZ_WIDGET_ANDROID
+  aOutLibPath = "lib"_ns + NS_ConvertUTF16toUTF8(mPluginPath) + ".so"_ns;
+#else
   nsCOMPtr<nsIFile> libFile;
 
 #define GMP_PATH_CRASH(explain)                           \
@@ -304,10 +307,14 @@ bool GMPChild::GetUTF8LibPath(nsACString& aOutLibPath) {
   }
 
   CopyUTF16toUTF8(path, aOutLibPath);
+#endif
   return true;
 }
 
 bool GMPChild::GetPluginName(nsACString& aPluginName) const {
+#ifdef MOZ_WIDGET_ANDROID
+  aPluginName = NS_ConvertUTF16toUTF8(mPluginPath);
+#else
   // Extract the plugin directory name if possible.
   nsCOMPtr<nsIFile> libFile;
   nsresult rv = NS_NewLocalFile(mPluginPath, getter_AddRefs(libFile));
@@ -322,6 +329,7 @@ bool GMPChild::GetPluginName(nsACString& aPluginName) const {
   NS_ENSURE_SUCCESS(rv, false);
 
   aPluginName.Assign(NS_ConvertUTF16toUTF8(parentLeafName));
+#endif
   return true;
 }
 
