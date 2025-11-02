@@ -306,18 +306,21 @@ GeckoMediaPluginServiceChild::HasPluginForAPI(const nsACString& aAPI,
                                               bool* aHasPlugin) {
   StaticMutexAutoLock lock(sGMPCapabilitiesMutex);
   if (!sGMPCapabilities) {
+    GMP_LOG_DEBUG("%s::%s no capabilities", __CLASS__, __FUNCTION__);
     *aHasPlugin = false;
     return NS_OK;
   }
 
   nsCString api(aAPI);
   for (const GMPCapabilityAndVersion& plugin : *sGMPCapabilities) {
+    GMP_LOG_DEBUG("%s::%s check capability {%s}", __CLASS__, __FUNCTION__, plugin.ToString().get());
     if (GMPCapability::Supports(plugin.mCapabilities, api, aTags)) {
       *aHasPlugin = true;
       return NS_OK;
     }
   }
 
+  GMP_LOG_DEBUG("%s::%s no matching capabilities", __CLASS__, __FUNCTION__);
   *aHasPlugin = false;
   return NS_OK;
 }

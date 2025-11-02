@@ -743,8 +743,10 @@ bool GMPCapability::Supports(const nsTArray<GMPCapability>& aCapabilities,
                              const nsTArray<nsCString>& aTags) {
   for (const nsCString& tag : aTags) {
     if (!GMPCapability::Supports(aCapabilities, aAPI, tag)) {
+      GMP_LOG_DEBUG("GMPCapability::Supports -- no support for api %s tag %s", aAPI.Data(), tag.Data());
       return false;
     }
+    GMP_LOG_DEBUG("GMPCapability::Supports -- supports api %s tag %s", aAPI.Data(), tag.Data());
   }
   return true;
 }
@@ -754,6 +756,7 @@ bool GMPCapability::Supports(const nsTArray<GMPCapability>& aCapabilities,
                              const nsACString& aAPI, const nsCString& aTag) {
   for (const GMPCapability& capabilities : aCapabilities) {
     if (!capabilities.mAPIName.Equals(aAPI)) {
+      GMP_LOG_DEBUG("GMPCapability::Supports -- api %s mismatch %s, continue", aAPI.Data(), capabilities.mAPIName.Data());
       continue;
     }
     for (const nsCString& tag : capabilities.mAPITags) {
@@ -773,6 +776,8 @@ bool GMPCapability::Supports(const nsTArray<GMPCapability>& aCapabilities,
         }
 #endif
         return true;
+      } else {
+        GMP_LOG_DEBUG("GMPCapability::Supports -- tag %s mismatch %s, continue", aTag.Data(), tag.Data());
       }
     }
   }
