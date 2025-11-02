@@ -4,7 +4,7 @@
 # to ensure no hardware decoding can be executed.
 
 [DEFAULT]
-subsuite = "media"
+subsuite = "mediaskip"
 tags = "media-gpu"
 prefs = [
   "media.hardware-video-decoding.enabled=false",

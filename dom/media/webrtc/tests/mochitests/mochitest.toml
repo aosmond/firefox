@@ -1,6 +1,6 @@
 [DEFAULT]
 tags = "mtg webrtc"
-subsuite = "media"
+subsuite = "mediaskip"
 scheme = "https"
 support-files = [
   "head.js",

@@ -22,8 +22,8 @@
 # do ok(true, "Type not supported") and stop the test.
 
 [DEFAULT]
-skip-if = ["isolated_process"] # Bug 1709948
-subsuite = "media"
+skip-if = ["isolated_process"] # Bug 170994
+subsuite = "mediaskip"
 tags = "media-gpu"
 prefs = [
   "gfx.core-animation.low-power-telemetry-frames=60", # only for test_video_low_power_telemetry.html

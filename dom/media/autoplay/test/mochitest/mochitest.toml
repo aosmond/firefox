@@ -1,5 +1,5 @@
 [DEFAULT]
-subsuite = "media"
+subsuite = "mediaskip"
 tags = "autoplay"
 support-files = [
   "../../../test/1967133.mp4",

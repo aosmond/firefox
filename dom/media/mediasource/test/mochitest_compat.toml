@@ -1,6 +1,6 @@
 [DEFAULT]
 skip-if = ["isolated_process"] # Bug 1709948
-subsuite = "media"
+subsuite = "mediaskip"
 tags = "media-engine-compatible media-gpu"
 prefs = ["media.hevc.enabled=1"] # for test_MediaSource_hevc_mp4
 support-files = [

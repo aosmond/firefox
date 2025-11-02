@@ -1,5 +1,5 @@
 [DEFAULT]
-subsuite = "media"
+subsuite = "mediaskip"
 tags = "webcodecs"
 prefs = [
   "dom.media.webcodecs.enabled=true",

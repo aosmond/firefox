@@ -1,5 +1,5 @@
 [DEFAULT]
-subsuite = "media"
+subsuite = "mediaskip"
 skip-if = ["os == 'linux' && !debug"]
 support-files = [
   "/.well-known/idp-proxy/idp.js",

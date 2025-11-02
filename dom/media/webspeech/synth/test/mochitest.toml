@@ -1,6 +1,6 @@
 [DEFAULT]
 tags = "mtg"
-subsuite = "media"
+subsuite = "mediaskip"
 support-files = [
   "common.js",
   "file_bfcache_page1.html",

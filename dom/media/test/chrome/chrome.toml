@@ -1,5 +1,5 @@
 [DEFAULT]
-subsuite = "media"
+subsuite = "mediaskip"
 support-files = [
   "../gizmo.mp4",
   "../gizmo_av1_10bit_420.webm",

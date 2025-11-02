@@ -1,6 +1,6 @@
 [DEFAULT]
 tags = "mtg webaudio"
-subsuite = "media"
+subsuite = "mediaskip"
 support-files = [
   "audio-expected.wav",
   "audio-mono-expected-2.wav",

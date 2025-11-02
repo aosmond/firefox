@@ -1,5 +1,5 @@
 [DEFAULT]
-subsuite = "media"
+subsuite = "mediaskip"
 tags = "media-engine-compatible"
 skip-if = ["!wmfme"]
 

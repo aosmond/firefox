@@ -1,6 +1,6 @@
 [DEFAULT]
 tags = "mtg"
-subsuite = "media"
+subsuite = "mediaskip"
 support-files = [
   "head.js",
   "hello.ogg",

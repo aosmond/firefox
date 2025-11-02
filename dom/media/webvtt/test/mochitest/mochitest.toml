@@ -1,6 +1,6 @@
 [DEFAULT]
 skip-if = ["isolated_process"] # Bug 1709948
-subsuite = "media"
+subsuite = "mediaskip"
 tags = "webvtt"
 support-files = [
   "../../../test/gizmo.mp4",

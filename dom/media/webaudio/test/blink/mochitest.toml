@@ -1,6 +1,6 @@
 [DEFAULT]
 tags = "mtg webaudio"
-subsuite = "media"
+subsuite = "mediaskip"
 support-files = [
   "biquad-filters.js",
   "biquad-testing.js",
