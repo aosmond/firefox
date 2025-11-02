@@ -551,8 +551,12 @@ RefPtr<GenericPromise> GeckoMediaPluginServiceParent::LoadPlugins() {
   if (RefPtr<GMPParent> clearkeyGmp = CreateGMPParent()) {
     clearkeyGmp->InitForClearkey(this);
 
-    MutexAutoLock lock(mMutex);
-    mPlugins.AppendElement(std::move(clearkeyGmp));
+    {
+      MutexAutoLock lock(mMutex);
+      mPlugins.AppendElement(std::move(clearkeyGmp));
+    }
+
+    UpdateContentProcessGMPCapabilities();
   }
 #endif
 
