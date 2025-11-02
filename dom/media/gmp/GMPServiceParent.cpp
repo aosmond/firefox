@@ -64,6 +64,21 @@ namespace mozilla::gmp {
 
 static const uint32_t NodeIdSaltLength = 32;
 
+static already_AddRefed<GMPParent> CreateGMPParent() {
+  // Should run on the GMP thread.
+#if defined(XP_LINUX) && defined(MOZ_SANDBOX)
+  if (!SandboxInfo::Get().CanSandboxMedia()) {
+    if (!StaticPrefs::media_gmp_insecure_allow()) {
+      NS_WARNING("Denying media plugin load due to lack of sandboxing.");
+      return nullptr;
+    }
+    NS_WARNING("Loading media plugin despite lack of sandboxing.");
+  }
+#endif
+  RefPtr<GMPParent> gmpParent = new GMPParent();
+  return gmpParent.forget();
+}
+
 already_AddRefed<GeckoMediaPluginServiceParent>
 GeckoMediaPluginServiceParent::GetSingleton() {
   MOZ_ASSERT(XRE_IsParentProcess());
@@ -452,7 +467,7 @@ void GeckoMediaPluginServiceParent::InitializePlugins(
   RefPtr<GeckoMediaPluginServiceParent> self(this);
   RefPtr<GenericPromise> p = mInitPromise.Ensure(__func__);
   InvokeAsync(aGMPThread, this, __func__,
-              &GeckoMediaPluginServiceParent::LoadFromEnvironment)
+              &GeckoMediaPluginServiceParent::LoadPlugins)
       ->Then(
           aGMPThread, __func__,
           [self]() -> void {
@@ -525,40 +540,24 @@ void GeckoMediaPluginServiceParent::CrashPlugins() {
   }
 }
 
-RefPtr<GenericPromise> GeckoMediaPluginServiceParent::LoadFromEnvironment() {
+RefPtr<GenericPromise> GeckoMediaPluginServiceParent::LoadPlugins() {
   AssertOnGMPThread();
   nsCOMPtr<nsISerialEventTarget> thread(GetGMPThread());
   if (!thread) {
     return GenericPromise::CreateAndReject(NS_ERROR_FAILURE, __func__);
   }
 
-  const char* env = PR_GetEnv("MOZ_GMP_PATH");
-  if (!env || !*env) {
-    return GenericPromise::CreateAndResolve(true, __func__);
-  }
+#ifdef MOZ_WIDGET_ANDROID
+  if (RefPtr<GMPParent> clearkeyGmp = CreateGMPParent()) {
+    clearkeyGmp->InitForClearkey(this);
 
-  nsString allpaths;
-  if (NS_WARN_IF(NS_FAILED(
-          NS_CopyNativeToUnicode(nsDependentCString(env), allpaths)))) {
-    return GenericPromise::CreateAndReject(NS_ERROR_FAILURE, __func__);
+    MutexAutoLock lock(mMutex);
+    mPlugins.AppendElement(std::move(clearkeyGmp));
   }
+#endif
 
   nsTArray<RefPtr<GenericPromise>> promises;
-  uint32_t pos = 0;
-  while (pos < allpaths.Length()) {
-    // Loop over multiple path entries separated by colons (*nix) or
-    // semicolons (Windows)
-    int32_t next = allpaths.FindChar(XPCOM_ENV_PATH_SEPARATOR[0], pos);
-    if (next == -1) {
-      promises.AppendElement(
-          AddOnGMPThread(nsString(Substring(allpaths, pos))));
-      break;
-    } else {
-      promises.AppendElement(
-          AddOnGMPThread(nsString(Substring(allpaths, pos, next - pos))));
-      pos = next + 1;
-    }
-  }
+  LoadFromEnvironment(promises);
 
   mScannedPluginOnDisk = true;
   return GenericPromise::All(thread, promises)
@@ -568,6 +567,36 @@ RefPtr<GenericPromise> GeckoMediaPluginServiceParent::LoadFromEnvironment() {
           []() {
             return GenericPromise::CreateAndReject(NS_ERROR_FAILURE, __func__);
           });
+}
+
+void GeckoMediaPluginServiceParent::LoadFromEnvironment(
+    nsTArray<RefPtr<GenericPromise>>& aPromises) {
+  const char* env = PR_GetEnv("MOZ_GMP_PATH");
+  if (!env || !*env) {
+    return;
+  }
+
+  nsString allpaths;
+  if (NS_WARN_IF(NS_FAILED(
+          NS_CopyNativeToUnicode(nsDependentCString(env), allpaths)))) {
+    return;
+  }
+
+  uint32_t pos = 0;
+  while (pos < allpaths.Length()) {
+    // Loop over multiple path entries separated by colons (*nix) or
+    // semicolons (Windows)
+    int32_t next = allpaths.FindChar(XPCOM_ENV_PATH_SEPARATOR[0], pos);
+    if (next == -1) {
+      aPromises.AppendElement(
+          AddOnGMPThread(nsString(Substring(allpaths, pos))));
+      break;
+    } else {
+      aPromises.AppendElement(
+          AddOnGMPThread(nsString(Substring(allpaths, pos, next - pos))));
+      pos = next + 1;
+    }
+  }
 }
 
 class NotifyObserversTask final : public mozilla::Runnable {
@@ -642,8 +671,11 @@ void GeckoMediaPluginServiceParent::UpdateContentProcessGMPCapabilities(
       }
 #ifdef MOZ_WMF_CDM
       if (name.Equals("gmp-widevinecdm-l1")) {
-        nsCOMPtr<nsIFile> pluginFile = gmp->GetDirectory();
-        MFCDMService::UpdateWidevineL1Path(pluginFile);
+        if (nsCOMPtr<nsIFile> pluginFile = gmp->GetDirectory()) {
+          MFCDMService::UpdateWidevineL1Path(pluginFile);
+        } else {
+          MOZ_ASSERT_UNREACHABLE("Missing directory for Widevine L1 plugin!");
+        }
       }
 #endif
       caps.AppendElement(std::move(x));
@@ -916,8 +948,12 @@ GeckoMediaPluginServiceParent::FindPluginDirectoryForAPI(
     size_t index = 0;
     RefPtr<GMPParent> gmp = FindPluginForAPIFrom(index, api, aTags, &index);
     if (gmp) {
-      nsCOMPtr<nsIFile> dir = gmp->GetDirectory();
-      dir.forget(aDirectory);
+      if (nsCOMPtr<nsIFile> dir = gmp->GetDirectory()) {
+        dir.forget(aDirectory);
+      } else {
+        NS_WARNING("Found plugin but missing directory.");
+        return NS_ERROR_FAILURE;
+      }
     }
   }
 
@@ -1015,21 +1051,6 @@ already_AddRefed<GMPParent> GeckoMediaPluginServiceParent::SelectPluginForAPI(
   return nullptr;
 }
 
-static already_AddRefed<GMPParent> CreateGMPParent() {
-  // Should run on the GMP thread.
-#if defined(XP_LINUX) && defined(MOZ_SANDBOX)
-  if (!SandboxInfo::Get().CanSandboxMedia()) {
-    if (!StaticPrefs::media_gmp_insecure_allow()) {
-      NS_WARNING("Denying media plugin load due to lack of sandboxing.");
-      return nullptr;
-    }
-    NS_WARNING("Loading media plugin despite lack of sandboxing.");
-  }
-#endif
-  RefPtr<GMPParent> gmpParent = new GMPParent();
-  return gmpParent.forget();
-}
-
 already_AddRefed<GMPParent> GeckoMediaPluginServiceParent::ClonePlugin(
     const GMPParent* aOriginal) {
   AssertOnGMPThread();
@@ -1122,7 +1143,8 @@ void GeckoMediaPluginServiceParent::RemoveOnGMPThread(
   for (size_t i = mPlugins.Length(); i-- > 0;) {
     nsCOMPtr<nsIFile> pluginpath = mPlugins[i]->GetDirectory();
     bool equals;
-    if (NS_FAILED(directory->Equals(pluginpath, &equals)) || !equals) {
+    if (!pluginpath || NS_FAILED(directory->Equals(pluginpath, &equals)) ||
+        !equals) {
       continue;
     }
 
@@ -1181,11 +1203,14 @@ void GeckoMediaPluginServiceParent::PluginTerminated(
 
   if (aPlugin->IsMarkedForDeletion()) {
     nsString path;
-    RefPtr<nsIFile> dir = aPlugin->GetDirectory();
-    nsresult rv = dir->GetPath(path);
-    NS_ENSURE_SUCCESS_VOID(rv);
-    if (mPluginsWaitingForDeletion.Contains(path)) {
-      RemoveOnGMPThread(path, true /* delete */, true /* can defer */);
+    if (RefPtr<nsIFile> dir = aPlugin->GetDirectory()) {
+      nsresult rv = dir->GetPath(path);
+      NS_ENSURE_SUCCESS_VOID(rv);
+      if (mPluginsWaitingForDeletion.Contains(path)) {
+        RemoveOnGMPThread(path, true /* delete */, true /* can defer */);
+      } else {
+        MOZ_ASSERT_UNREACHABLE("Plugin without directory marked for deletion?");
+      }
     }
   }
 }

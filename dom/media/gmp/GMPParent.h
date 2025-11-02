@@ -66,6 +66,10 @@ class GMPParent final : public PGMPParent,
 
   GMPParent();
 
+#ifdef MOZ_WIDGET_ANDROID
+  void InitForClearkey(GeckoMediaPluginServiceParent* aService);
+#endif
+
   RefPtr<GenericPromise> Init(GeckoMediaPluginServiceParent* aService,
                               nsIFile* aPluginDir);
   void CloneFrom(const GMPParent* aOther);
@@ -209,6 +213,8 @@ class GMPParent final : public PGMPParent,
 
   Atomic<GMPState> mState;
   nsCOMPtr<nsIFile> mDirectory;  // plugin directory on disk
+  nsCOMPtr<nsIFile> mManifestFile;
+  nsCOMPtr<nsIFile> mLibFile;
   nsString mName;  // base name of plugin on disk, UTF-16 because used for paths
   nsCString mDisplayName;  // name of plugin displayed to users
   nsCString mDescription;  // description of plugin for display to users

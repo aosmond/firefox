@@ -25,6 +25,12 @@
 
 [lib destdir="lib/@ANDROID_CPU_ARCH@"]
 
+; media
+; @BINPATH@/gmp-clearkey/0.1/@DLL_PREFIX@clearkey@DLL_SUFFIX@
+@BINPATH@/manifest.json
+@BINPATH@/libclearkey.manifest.json.so
+@BINPATH@/@DLL_PREFIX@clearkey@DLL_SUFFIX@
+
 #ifdef MOZ_CLANG_RT_ASAN_LIB
 @BINPATH@/@MOZ_CLANG_RT_ASAN_LIB@
 #endif
