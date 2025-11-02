@@ -22,7 +22,7 @@
 # do ok(true, "Type not supported") and stop the test.
 
 [DEFAULT]
-subsuite = "media"
+subsuite = "media-eme"
 tags = "media-engine-compatible"
 skip-if = ["os == 'linux' && (asan || debug)"] # Bug 1476870: common fatal error (shutdown hang) on asan/debug
 support-files = [

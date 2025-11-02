@@ -4149,3 +4149,25 @@ pref("captchadetection.actor.enabled", true);
 // Make general.smoothScroll sticky to avoid being clobbered by
 // preferes-reduced-motion system setting.
 pref("general.smoothScroll", true, sticky);
+
+pref("logging.HTMLMediaElement", 4);
+pref("logging.HTMLMediaElementEvents", 4);
+pref("logging.cubeb", 5);
+pref("logging.PlatformDecoderModule", 5);
+pref("logging.AudioSink", 5);
+pref("logging.AudioSinkWrapper", 5);
+pref("logging.MediaDecoderStateMachine", 4);
+pref("logging.MediaDecoder", 4);
+pref("logging.MediaFormatReader", 5);
+pref("logging.GMP", 5);
+pref("logging.EME", 5);
+pref("logging.MediaSource", 5);
+pref("logging.MediaSourceSamples", 5);
+pref("logging.Autoplay", 5);
+pref("logging.GVAutoplay", 5);
+pref("logging.MFMediaEngine", 5);
+pref("logging.FFmpegVideo", 5);
+pref("logging.FFmpegAudio", 5);
+pref("logging.FFmpegLib", 4);
+pref("logging.VideoFrameContainer", 5);
+pref("logging.CompositableTextureParent", 5);

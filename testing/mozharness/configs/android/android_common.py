@@ -122,7 +122,7 @@ config = {
                 "--log-tbpl-level=%(log_tbpl_level)s",
                 "--screenshot-on-fail",
                 "--chunk-by-runtime",
-                "--subsuite=media",
+                "--subsuite=media-eme",
                 "--deviceSerial=%(device_serial)s",
             ],
         },
