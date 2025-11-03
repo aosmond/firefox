@@ -242,13 +242,21 @@ void GPUParent::NotifyDeviceReset(DeviceResetReason aReason,
   }
 
   // Reset and reinitialize the compositor devices
+  bool resetting = false;
+  if (auto* renderThread = wr::RenderThread::Get()) {
+    resetting = renderThread->IsHandlingDeviceReset();
+  }
+
 #ifdef XP_WIN
-  if (!DeviceManagerDx::Get()->MaybeResetAndReacquireDevices()) {
+  resetting =
+      DeviceManagerDx::Get()->MaybeResetAndReacquireDevices() || resetting;
+#endif
+
+  if (!resetting) {
     // If the device doesn't need to be reset then the device
     // has already been reset by a previous NotifyDeviceReset message.
     return;
   }
-#endif
 
   // Notify the main process that there's been a device reset
   // and that they should reset their compositors and repaint

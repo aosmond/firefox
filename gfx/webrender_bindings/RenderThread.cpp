@@ -90,7 +90,6 @@ RenderThread::RenderThread(RefPtr<nsIThread> aThread)
       mWindowInfos("RenderThread.mWindowInfos"),
       mRenderTextureMapLock("RenderThread.mRenderTextureMapLock"),
       mHasShutdown(false),
-      mHandlingDeviceReset(false),
       mHandlingWebRenderError(false) {}
 
 RenderThread::~RenderThread() {
@@ -366,10 +365,9 @@ void RenderThread::RemoveRenderer(wr::WindowId aWindowId) {
   sRendererCount = mRenderers.size();
 
   if (mRenderers.empty()) {
-    if (mHandlingDeviceReset) {
+    if (mHandlingDeviceReset.exchange(false)) {
       ClearSingletonGL();
     }
-    mHandlingDeviceReset = false;
     mHandlingWebRenderError = false;
   }
 
@@ -1319,11 +1317,9 @@ void RenderThread::HandleDeviceReset(gfx::DeviceResetDetectPlace aPlace,
                                      gfx::DeviceResetReason aReason) {
   MOZ_ASSERT(IsInRenderThread());
 
-  if (mHandlingDeviceReset) {
+  if (mHandlingDeviceReset.exchange(true)) {
     return;
   }
-
-  mHandlingDeviceReset = true;
 
 #ifndef XP_WIN
   // On Windows, see DeviceManagerDx::MaybeResetAndReacquireDevices.
@@ -1339,11 +1335,6 @@ void RenderThread::HandleDeviceReset(gfx::DeviceResetDetectPlace aPlace,
   }
 
   gfx::GPUProcessManager::GPUProcessManager::NotifyDeviceReset(aReason, aPlace);
-}
-
-bool RenderThread::IsHandlingDeviceReset() {
-  MOZ_ASSERT(IsInRenderThread());
-  return mHandlingDeviceReset;
 }
 
 void RenderThread::SimulateDeviceReset() {

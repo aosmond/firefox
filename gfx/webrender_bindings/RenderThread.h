@@ -14,6 +14,7 @@
 #include "GLTypes.h"  // for GLenum
 #include "nsISupportsImpl.h"
 #include "mozilla/gfx/Point.h"
+#include "mozilla/Atomics.h"
 #include "mozilla/Hal.h"
 #include "mozilla/MozPromise.h"
 #include "mozilla/DataMutex.h"
@@ -326,7 +327,7 @@ class RenderThread final {
   void HandleDeviceReset(gfx::DeviceResetDetectPlace aPlace,
                          gfx::DeviceResetReason aReason);
   /// Can only be called from the render thread.
-  bool IsHandlingDeviceReset();
+  bool IsHandlingDeviceReset() const { return mHandlingDeviceReset; }
   /// Can be called from any thread.
   void SimulateDeviceReset();
 
@@ -559,7 +560,7 @@ class RenderThread final {
   bool mHasShutdown;
 
   // Only accessed from the RenderThread
-  bool mHandlingDeviceReset;
+  Atomic<bool> mHandlingDeviceReset{false};
   bool mHandlingWebRenderError;
 };
 
