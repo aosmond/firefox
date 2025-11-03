@@ -233,14 +233,6 @@ bool GPUParent::Init(mozilla::ipc::UntypedEndpoint&& aEndpoint,
 
 void GPUParent::NotifyDeviceReset(DeviceResetReason aReason,
                                   DeviceResetDetectPlace aPlace) {
-  if (!NS_IsMainThread()) {
-    NS_DispatchToMainThread(NS_NewRunnableFunction(
-        "gfx::GPUParent::NotifyDeviceReset", [aReason, aPlace]() -> void {
-          GPUParent::GetSingleton()->NotifyDeviceReset(aReason, aPlace);
-        }));
-    return;
-  }
-
   // Reset and reinitialize the compositor devices
   bool resetting = false;
   if (auto* renderThread = wr::RenderThread::Get()) {
