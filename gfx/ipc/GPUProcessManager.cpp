@@ -430,15 +430,18 @@ nsresult GPUProcessManager::EnsureGPUReady() {
     // destroyed and/or disabled.
     nsresult rv = LaunchGPUProcess();
     if (NS_SUCCEEDED(rv) && mProcess->WaitForLaunch() && mGPUChild) {
+      gfxCriticalNote << "EnsureGPUReady launched";
       MOZ_DIAGNOSTIC_ASSERT(mGPUChild->IsGPUReady());
       return NS_OK;
     }
 
+    gfxCriticalNote << "EnsureGPUReady launch failed";
     MOZ_RELEASE_ASSERT(rv != NS_ERROR_ILLEGAL_DURING_SHUTDOWN);
     MOZ_RELEASE_ASSERT(!mProcess);
     MOZ_RELEASE_ASSERT(!mGPUChild);
   } while (gfxConfig::IsEnabled(Feature::GPU_PROCESS));
 
+  gfxCriticalNote << "EnsureGPUReady lost GPU process";
   return NS_OK;
 }
 
@@ -575,17 +578,20 @@ void GPUProcessManager::OnProcessLaunchComplete(GPUProcessHost* aHost) {
     ++mLaunchProcessAttempts;
     if (mLaunchProcessAttempts >
         uint32_t(StaticPrefs::layers_gpu_process_max_launch_attempts())) {
+      gfxCriticalNote << "OnProcessLaunchComplete failed attempts " << mLaunchProcessAttempts << ", disable gpu process";
       char disableMessage[64];
       SprintfLiteral(disableMessage,
                      "Failed to launch GPU process after %d attempts",
                      mLaunchProcessAttempts);
       DisableGPUProcess(disableMessage);
     } else {
+      gfxCriticalNote << "OnProcessLaunchComplete failed attempts " << mLaunchProcessAttempts << ", destroy gpu process";
       DestroyProcess(/* aUnexpectedShutdown */ true);
     }
     return;
   }
 
+  gfxCriticalNote << "OnProcessLaunchComplete success attempts " << mLaunchProcessAttempts;
   mLaunchProcessAttempts = 0;
   mGPUChild = gpuChild;
   mProcessToken = mProcess->GetProcessToken();
@@ -628,7 +634,10 @@ void GPUProcessManager::OnProcessLaunchComplete(GPUProcessHost* aHost) {
   ReinitializeRendering();
 }
 
-void GPUProcessManager::OnProcessDeclaredStable() { mProcessStable = true; }
+void GPUProcessManager::OnProcessDeclaredStable() {
+  gfxCriticalNote << "OnProcessDeclaredStable";
+  mProcessStable = true;
+}
 
 static bool ShouldLimitDeviceResets(uint32_t count, int32_t deltaMilliseconds) {
   // We decide to limit by comparing the amount of resets that have happened
@@ -722,8 +731,10 @@ bool GPUProcessManager::DisableWebRenderConfig(wr::WebRenderError aError,
   // hopefully alleviate the situation.
   if (IsProcessStable(TimeStamp::Now()) || (kIsAndroid && !mAppInForeground)) {
     if (mProcess) {
+      gfxCriticalNote << "DisableWebRenderConfig kill process";
       mProcess->KillProcess(/* aGenerateMinidump */ false);
     } else {
+      gfxCriticalNote << "DisableWebRenderConfig device reset";
       SimulateDeviceReset();
     }
 
@@ -752,6 +763,7 @@ bool GPUProcessManager::DisableWebRenderConfig(wr::WebRenderError aError,
   // for the update to be processed before creating new compositor sessions.
   // Otherwise we risk them being out of sync with the content/parent processes.
   if (wantRestart && mProcess && mGPUChild) {
+    gfxCriticalNote << "DisableWebRenderConfig sync gfx vars";
     mUnstableProcessAttempts = 1;
     mGPUChild->EnsureGPUReady(/* aForceSync */ true);
   }
@@ -928,9 +940,11 @@ void GPUProcessManager::OnProcessUnexpectedShutdown(GPUProcessHost* aHost) {
   // long enough, reset the counter so that we don't disable the process too
   // eagerly.
   if (IsProcessStable(TimeStamp::Now())) {
+    gfxCriticalNote << "OnProcessUnexpectedShutdown stable attempts " << mUnstableProcessAttempts;
     mProcessStableOnce = true;
     mUnstableProcessAttempts = 0;
   } else if (kIsAndroid && !mAppInForeground) {
+    gfxCriticalNote << "OnProcessUnexpectedShutdown android background attempts " << mUnstableProcessAttempts;
     // On Android if the process is lost whilst in the background it was
     // probably killed by the OS, and it may never have had a chance to have
     // been declared stable prior to being killed. We don't want this happening
@@ -938,6 +952,7 @@ void GPUProcessManager::OnProcessUnexpectedShutdown(GPUProcessHost* aHost) {
     // process lost whilst in the background as stable.
     mUnstableProcessAttempts = 0;
   } else {
+    gfxCriticalNote << "OnProcessUnexpectedShutdown unstable attempts " << mUnstableProcessAttempts;
     mUnstableProcessAttempts++;
     mozilla::glean::gpu_process::unstable_launch_attempts.Set(
         mUnstableProcessAttempts);
@@ -972,6 +987,7 @@ void GPUProcessManager::OnProcessUnexpectedShutdown(GPUProcessHost* aHost) {
 
 void GPUProcessManager::HandleProcessLost() {
   MOZ_ASSERT(NS_IsMainThread());
+  gfxCriticalNote << "HandleProcessLost";
 
   // The shutdown and restart sequence for the GPU process is as follows:
   //
@@ -1176,9 +1192,11 @@ void GPUProcessManager::CrashProcess() {
 
 void GPUProcessManager::DestroyProcess(bool aUnexpectedShutdown) {
   if (!mProcess) {
+    gfxCriticalNote << "DestroyProcess but no process";
     return;
   }
 
+  gfxCriticalNote << "DestroyProcess";
   mProcess->Shutdown(aUnexpectedShutdown);
   mProcessToken = 0;
   mProcess = nullptr;
