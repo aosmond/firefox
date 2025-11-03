@@ -85,12 +85,12 @@ void GPUChild::OnVarChanged(const nsTArray<GfxVarUpdate>& aVar) {
   SendUpdateVar(aVar);
 }
 
-bool GPUChild::EnsureGPUReady(bool aForceSync /* = false */) {
+bool GPUChild::EnsureGPUReady() {
   // On our initial process launch, we want to block on the GetDeviceStatus
   // message. Additionally, we may have updated our compositor configuration
   // through the gfxVars after fallback, in which case we want to ensure the
   // GPU process has handled any updates before creating compositor sessions.
-  if (mGPUReady && !aForceSync) {
+  if (mGPUReady && !mWaitForVarUpdate) {
     return true;
   }
 
@@ -107,6 +107,7 @@ bool GPUChild::EnsureGPUReady(bool aForceSync /* = false */) {
     mGPUReady = true;
   }
 
+  mWaitForVarUpdate = false;
   return true;
 }
 
