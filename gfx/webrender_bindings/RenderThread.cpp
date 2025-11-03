@@ -1319,26 +1319,6 @@ void RenderThread::HandleDeviceReset(gfx::DeviceResetDetectPlace aPlace,
                                      gfx::DeviceResetReason aReason) {
   MOZ_ASSERT(IsInRenderThread());
 
-  // This happens only on simulate device reset.
-  if (aReason == gfx::DeviceResetReason::FORCED_RESET) {
-    if (!mHandlingDeviceReset) {
-      mHandlingDeviceReset = true;
-
-      MutexAutoLock lock(mRenderTextureMapLock);
-      mRenderTexturesDeferred.clear();
-      for (const auto& entry : mRenderTextures) {
-        entry.second->ClearCachedResources();
-      }
-
-      // All RenderCompositors will be destroyed by the GPUProcessManager in
-      // either OnRemoteProcessDeviceReset via the GPUChild, or
-      // OnInProcessDeviceReset here directly.
-      gfx::GPUProcessManager::GPUProcessManager::NotifyDeviceReset(
-          gfx::DeviceResetReason::FORCED_RESET, aPlace);
-    }
-    return;
-  }
-
   if (mHandlingDeviceReset) {
     return;
   }
@@ -1358,21 +1338,7 @@ void RenderThread::HandleDeviceReset(gfx::DeviceResetDetectPlace aPlace,
     }
   }
 
-  // All RenderCompositors will be destroyed by the GPUProcessManager in
-  // either OnRemoteProcessDeviceReset via the GPUChild, or
-  // OnInProcessDeviceReset here directly.
-  // On Windows, device will be re-created before sessions re-creation.
-  if (XRE_IsGPUProcess()) {
-    gfx::GPUProcessManager::GPUProcessManager::NotifyDeviceReset(aReason,
-                                                                 aPlace);
-  } else {
-#ifndef XP_WIN
-    // FIXME(aosmond): Do we need to do this on Windows? nsWindow::OnPaint
-    // seems to do its own detection for the parent process.
-    gfx::GPUProcessManager::GPUProcessManager::NotifyDeviceReset(aReason,
-                                                                 aPlace);
-#endif
-  }
+  gfx::GPUProcessManager::GPUProcessManager::NotifyDeviceReset(aReason, aPlace);
 }
 
 bool RenderThread::IsHandlingDeviceReset() {
