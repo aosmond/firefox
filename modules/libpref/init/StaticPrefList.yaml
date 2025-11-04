@@ -11137,7 +11137,7 @@
 # - A VP9 HW decoder is present.
 - name: media.mediasource.vp9.enabled
   type: RelaxedAtomicBool
-  value: @IS_NOT_MOBILE@
+  value: true
   mirror: always
 
 # Whether to enable MediaSource v2 support.

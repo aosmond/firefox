@@ -78,12 +78,7 @@ static bool IsVP9Forced(DecoderDoctorDiagnostics* aDiagnostics) {
   bool mp4supported = MP4Decoder::IsSupportedType(
       MediaContainerType(MEDIAMIMETYPE(VIDEO_MP4)), aDiagnostics);
   bool hwsupported = gfx::gfxVars::CanUseHardwareVideoDecoding();
-#ifdef MOZ_WIDGET_ANDROID
-  return !mp4supported || !hwsupported ||
-         java::HardwareCodecCapabilityUtils::HasHWVP9(false /* aIsEncoder */);
-#else
   return !mp4supported || !hwsupported;
-#endif
 }
 
 namespace dom {
