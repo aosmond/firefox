@@ -672,6 +672,8 @@ void GPUProcessManager::ResetCompositors() {
 }
 
 void GPUProcessManager::SimulateDeviceReset() {
+  ResetProcessStable();
+
   // Make sure we rebuild environment and configuration for accelerated
   // features.
   gfxPlatform::GetPlatform()->CompositorUpdated();
