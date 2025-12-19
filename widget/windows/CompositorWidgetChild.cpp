@@ -11,9 +11,12 @@
 #include "VsyncDispatcher.h"
 #include "gfxPlatform.h"
 #include "RemoteBackbuffer.h"
+#include "mozilla/Logging.h"
 
 namespace mozilla {
 namespace widget {
+
+static LazyLogModule sWidgetLog("CompositorWidgetChild");
 
 CompositorWidgetChild::CompositorWidgetChild(
     RefPtr<CompositorVsyncDispatcher> aVsyncDispatcher,
@@ -24,24 +27,30 @@ CompositorWidgetChild::CompositorWidgetChild(
       mCompositorWnd(nullptr),
       mWnd(reinterpret_cast<HWND>(
           aInitData.get_WinCompositorWidgetInitData().hWnd())) {
+  MOZ_LOG(sWidgetLog, LogLevel::Debug, ("[%p] CompositorWidgetChild::CompositorWidgetChild", this));
   MOZ_ASSERT(XRE_IsParentProcess());
   MOZ_ASSERT(!gfxPlatform::IsHeadless());
   MOZ_ASSERT(mWnd && ::IsWindow(mWnd));
 }
 
-CompositorWidgetChild::~CompositorWidgetChild() {}
+CompositorWidgetChild::~CompositorWidgetChild() {
+  MOZ_LOG(sWidgetLog, LogLevel::Debug, ("[%p] CompositorWidgetChild::~CompositorWidgetChild", this));
+}
 
 bool CompositorWidgetChild::Initialize() {
   mRemoteBackbufferProvider = std::make_unique<remote_backbuffer::Provider>();
   if (!mRemoteBackbufferProvider->Initialize(mWnd, OtherPid())) {
+    MOZ_LOG(sWidgetLog, LogLevel::Debug, ("[%p] CompositorWidgetChild::Initialize -- no rbbp", this));
     return false;
   }
 
   auto maybeRemoteHandles = mRemoteBackbufferProvider->CreateRemoteHandles();
   if (!maybeRemoteHandles) {
+    MOZ_LOG(sWidgetLog, LogLevel::Debug, ("[%p] CompositorWidgetChild::Initialize -- no rbbp handles", this));
     return false;
   }
 
+  MOZ_LOG(sWidgetLog, LogLevel::Debug, ("[%p] CompositorWidgetChild::Initialize -- success", this));
   (void)SendInitialize(*maybeRemoteHandles);
 
   return true;
