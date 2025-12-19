@@ -240,6 +240,7 @@ bool CompositorBridgeParent::IsPaused() {
 
 mozilla::ipc::IPCResult CompositorBridgeParent::RecvInitialize(
     const LayersId& aRootLayerTreeId) {
+  MOZ_CRASH("test");
   MOZ_ASSERT(XRE_IsGPUProcess());
 
   mRootLayerTreeID = aRootLayerTreeId;
