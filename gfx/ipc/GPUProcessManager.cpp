@@ -954,11 +954,18 @@ void GPUProcessManager::NotifyListenersOnCompositeDeviceReset() {
 }
 
 void GPUProcessManager::OnProcessUnexpectedShutdown(GPUProcessHost* aHost) {
-  MOZ_ASSERT(mProcess && mProcess == aHost);
+  MOZ_ASSERT(mProcess);
+  MOZ_ASSERT(mProcess == aHost);
+  MOZ_ASSERT(mProcessToken);
+  MOZ_ASSERT(mProcessToken == mProcess->GetProcessToken());
 
   if (StaticPrefs::layers_gpu_process_crash_also_crashes_browser()) {
     MOZ_CRASH("GPU process crashed and pref is set to crash the browser.");
   }
+
+  // Clear the process token first so that we cannot re-enter due to another
+  // protocol shutdown descended from CompositorManagerChild.
+  mProcessToken = 0;
 
   CompositorManagerChild::OnGPUProcessLost(aHost->GetProcessToken());
   DestroyProcess(/* aUnexpectedShutdown */ true);

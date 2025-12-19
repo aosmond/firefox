@@ -62,8 +62,7 @@ class CompositorBridgeChild final : public PCompositorBridgeChild,
    */
   void InitForContent(uint32_t aNamespace);
 
-  void InitForWidget(uint64_t aProcessToken,
-                     WebRenderLayerManager* aLayerManager, uint32_t aNamespace);
+  void InitForWidget(WebRenderLayerManager* aLayerManager, uint32_t aNamespace);
 
   void Destroy();
 
@@ -239,8 +238,6 @@ class CompositorBridgeChild final : public PCompositorBridgeChild,
       mTexturesWaitingNotifyNotUsed;
 
   nsCOMPtr<nsISerialEventTarget> mThread;
-
-  uint64_t mProcessToken;
 
   FixedSizeSmallShmemSectionAllocator* mSectionAllocator;
 
