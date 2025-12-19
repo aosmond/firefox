@@ -65,7 +65,6 @@ void CompositorManagerChild::InitSameProcess(uint32_t aNamespace,
     MOZ_DIAGNOSTIC_CRASH("Failed to open same process protocol");
     return;
   }
-  child->mCanSend = true;
   child->SetReplyTimeout();
 
   parent->BindComplete(/* aIsRoot */ true);
@@ -88,7 +87,6 @@ bool CompositorManagerChild::Init(Endpoint<PCompositorManagerChild>&& aEndpoint,
   if (NS_WARN_IF(!aEndpoint.Bind(child))) {
     return false;
   }
-  child->mCanSend = true;
   child->SetReplyTimeout();
 
   sInstance = std::move(child);
@@ -110,9 +108,8 @@ void CompositorManagerChild::Shutdown() {
     return;
   }
 
+  // Note that when we call close, sInstance will be cleared in ActorDestroy.
   sInstance->Close();
-  sInstance = nullptr;
-  SetCompositorProcInfo(ipc::EndpointProcInfo::Invalid());
 }
 
 /* static */
@@ -120,12 +117,18 @@ void CompositorManagerChild::OnGPUProcessLost(uint64_t aProcessToken) {
   MOZ_ASSERT(NS_IsMainThread());
 
   // Since GPUChild and CompositorManagerChild will race on ActorDestroy, we
-  // cannot know if the CompositorManagerChild is about to be released but has
-  // yet to be. As such, we want to pre-emptively set mCanSend to false.
-  if (sInstance && sInstance->mProcessToken == aProcessToken) {
-    sInstance->mCanSend = false;
-    SetCompositorProcInfo(ipc::EndpointProcInfo::Invalid());
+  // must check if the CompositorManagerChild has already been shutdown.
+  if (!sInstance || sInstance->mProcessToken != aProcessToken) {
+    return;
   }
+
+  // Note that when we call close, sInstance will be cleared in ActorDestroy.
+  // We also need to clear mProcessToken so that we don't call back into
+  // GPUProcessManager.
+  MOZ_ASSERT(sInstance->CanSend());
+  sInstance->mProcessToken = 0;
+  sInstance->GetIPCChannel()->InduceConnectionError();
+  sInstance->Close();
 }
 
 /* static */
@@ -174,7 +177,7 @@ CompositorManagerChild::CreateWidgetCompositorBridge(
     return nullptr;
   }
 
-  bridge->InitForWidget(aProcessToken, aLayerManager, aNamespace);
+  bridge->InitForWidget(aLayerManager, aNamespace);
   return bridge.forget();
 }
 
@@ -196,7 +199,7 @@ CompositorManagerChild::CreateSameProcessWidgetCompositorBridge(
     return nullptr;
   }
 
-  bridge->InitForWidget(1, aLayerManager, aNamespace);
+  bridge->InitForWidget(aLayerManager, aNamespace);
   return bridge.forget();
 }
 
@@ -206,14 +209,29 @@ CompositorManagerChild::CompositorManagerChild(uint64_t aProcessToken,
     : mProcessToken(aProcessToken),
       mNamespace(aNamespace),
       mResourceId(0),
-      mCanSend(false),
       mSameProcess(aSameProcess),
       mFwdTransactionCounter(this) {}
 
 void CompositorManagerChild::ActorDestroy(ActorDestroyReason aReason) {
-  mCanSend = false;
-  if (sInstance == this) {
-    sInstance = nullptr;
+  if (sInstance != this) {
+    return;
+  }
+
+  if (aReason == AbnormalShutdown) {
+    // If the parent side runs into a problem then the actor will be destroyed.
+    // There is nothing we can do in the child side, here sets mCanSend as
+    // false.
+    gfxCriticalNote << "CompositorManagerChild receives IPC close with "
+                       "reason=AbnormalShutdown";
+  }
+
+  SetCompositorProcInfo(ipc::EndpointProcInfo::Invalid());
+  sInstance = nullptr;
+
+  if (mProcessToken && XRE_IsParentProcess()) {
+    if (auto* gpm = GPUProcessManager::Get()) {
+      gpm->NotifyRemoteActorDestroyed(mProcessToken);
+    }
   }
 }
 
@@ -232,10 +250,15 @@ void CompositorManagerChild::ProcessingError(Result aCode,
 void CompositorManagerChild::SetReplyTimeout() {
 #ifndef DEBUG
   // Add a timeout for release builds to kill GPU process when it hangs.
-  if (XRE_IsParentProcess() && GPUProcessManager::Get()->GetGPUChild()) {
-    int32_t timeout =
-        StaticPrefs::layers_gpu_process_ipc_reply_timeout_ms_AtStartup();
-    SetReplyTimeoutMs(timeout);
+  if (!XRE_IsParentProcess()) {
+    return;
+  }
+  if (auto* gpm = GPUProcessManager::Get()) {
+    if (gpm->GetGPUChild()) {
+      int32_t timeout =
+          StaticPrefs::layers_gpu_process_ipc_reply_timeout_ms_AtStartup();
+      SetReplyTimeoutMs(timeout);
+    }
   }
 #endif
 }
@@ -243,24 +266,27 @@ void CompositorManagerChild::SetReplyTimeout() {
 bool CompositorManagerChild::ShouldContinueFromReplyTimeout() {
   MOZ_ASSERT_IF(mSyncIPCStartTimeStamp.isSome(), XRE_IsParentProcess());
 
-  if (XRE_IsParentProcess()) {
+  if (!XRE_IsParentProcess()) {
+    return false;
+  }
 #ifndef DEBUG
-    // Extend sync IPC reply timeout
-    if (mSyncIPCStartTimeStamp.isSome()) {
-      const int32_t maxDurationMs = StaticPrefs::
-          layers_gpu_process_extend_ipc_reply_timeout_ms_AtStartup();
-      const auto now = TimeStamp::Now();
-      const auto durationMs = static_cast<int32_t>(
-          (now - mSyncIPCStartTimeStamp.ref()).ToMilliseconds());
+  // Extend sync IPC reply timeout
+  if (mSyncIPCStartTimeStamp.isSome()) {
+    const int32_t maxDurationMs =
+        StaticPrefs::layers_gpu_process_extend_ipc_reply_timeout_ms_AtStartup();
+    const auto now = TimeStamp::Now();
+    const auto durationMs = static_cast<int32_t>(
+        (now - mSyncIPCStartTimeStamp.ref()).ToMilliseconds());
 
-      if (durationMs < maxDurationMs) {
-        return true;
-      }
+    if (durationMs < maxDurationMs) {
+      return true;
     }
+  }
 #endif
-    gfxCriticalNote << "Killing GPU process due to IPC reply timeout";
-    MOZ_DIAGNOSTIC_ASSERT(GPUProcessManager::Get()->GetGPUChild());
-    GPUProcessManager::Get()->KillProcess(/* aGenerateMinidump */ true);
+  gfxCriticalNote << "Killing GPU process due to IPC reply timeout";
+  if (auto* gpm = GPUProcessManager::Get()) {
+    MOZ_DIAGNOSTIC_ASSERT(gpm->GetGPUChild());
+    gpm->KillProcess(/* aGenerateMinidump */ true);
   }
   return false;
 }
@@ -269,7 +295,9 @@ mozilla::ipc::IPCResult CompositorManagerChild::RecvNotifyWebRenderError(
     const WebRenderError&& aError) {
   MOZ_ASSERT(XRE_IsParentProcess());
   MOZ_ASSERT(NS_IsMainThread());
-  GPUProcessManager::Get()->NotifyWebRenderError(aError);
+  if (auto* gpm = GPUProcessManager::Get()) {
+    gpm->NotifyWebRenderError(aError);
+  }
   return IPC_OK();
 }
 

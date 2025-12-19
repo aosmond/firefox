@@ -20,7 +20,7 @@ class CompositorBridgeChild;
 class CompositorManagerParent;
 class WebRenderLayerManager;
 
-class CompositorManagerChild : public PCompositorManagerChild {
+class CompositorManagerChild final : public PCompositorManagerChild {
   NS_INLINE_DECL_THREADSAFE_REFCOUNTING(CompositorManagerChild, override)
 
  public:
@@ -51,11 +51,6 @@ class CompositorManagerChild : public PCompositorManagerChild {
   // Threadsafe way to snapshot the current compositor process info from another
   // thread.
   static mozilla::ipc::EndpointProcInfo GetCompositorProcInfo();
-
-  bool CanSend() const {
-    MOZ_ASSERT(NS_IsMainThread());
-    return mCanSend;
-  }
 
   bool SameProcess() const {
     MOZ_ASSERT(NS_IsMainThread());
@@ -111,7 +106,6 @@ class CompositorManagerChild : public PCompositorManagerChild {
   uint64_t mProcessToken;
   uint32_t mNamespace;
   uint32_t mResourceId;
-  bool mCanSend;
   bool mSameProcess;
   FwdTransactionCounter mFwdTransactionCounter;
   // Used to extend sync IPC reply timeout

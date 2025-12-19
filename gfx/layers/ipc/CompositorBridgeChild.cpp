@@ -77,7 +77,6 @@ CompositorBridgeChild::CompositorBridgeChild(CompositorManagerChild* aManager)
       mPaused(false),
       mForceSyncFlushRendering(false),
       mThread(NS_GetCurrentThread()),
-      mProcessToken(0),
       mSectionAllocator(nullptr) {
   MOZ_ASSERT(NS_IsMainThread());
 }
@@ -180,9 +179,6 @@ void CompositorBridgeChild::Destroy() {
   SendWillClose();
   mCanSend = false;
 
-  // We no longer care about unexpected shutdowns, in the remote process case.
-  mProcessToken = 0;
-
   // The call just made to SendWillClose can result in IPC from the
   // CompositorBridgeParent to the CompositorBridgeChild (e.g. caused by the
   // destruction of shared memory). We need to ensure this gets processed by the
@@ -224,16 +220,13 @@ void CompositorBridgeChild::InitForContent(uint32_t aNamespace) {
   sCompositorBridge = this;
 }
 
-void CompositorBridgeChild::InitForWidget(uint64_t aProcessToken,
-                                          WebRenderLayerManager* aLayerManager,
+void CompositorBridgeChild::InitForWidget(WebRenderLayerManager* aLayerManager,
                                           uint32_t aNamespace) {
   MOZ_ASSERT(NS_IsMainThread());
-  MOZ_ASSERT(aProcessToken);
   MOZ_ASSERT(aLayerManager);
   MOZ_ASSERT(aNamespace);
 
   mCanSend = true;
-  mProcessToken = aProcessToken;
   mLayerManager = aLayerManager;
   mIdNamespace = aNamespace;
 }
@@ -292,20 +285,8 @@ mozilla::ipc::IPCResult CompositorBridgeChild::RecvNotifyFrameStats(
 }
 
 void CompositorBridgeChild::ActorDestroy(ActorDestroyReason aWhy) {
-  if (aWhy == AbnormalShutdown) {
-    // If the parent side runs into a problem then the actor will be destroyed.
-    // There is nothing we can do in the child side, here sets mCanSend as
-    // false.
-    gfxCriticalNote << "CompositorBridgeChild receives IPC close with "
-                       "reason=AbnormalShutdown";
-  }
-
   mCanSend = false;
   mActorDestroyed = true;
-
-  if (mProcessToken && XRE_IsParentProcess()) {
-    GPUProcessManager::Get()->NotifyRemoteActorDestroyed(mProcessToken);
-  }
 }
 
 bool CompositorBridgeChild::SendWillClose() {
