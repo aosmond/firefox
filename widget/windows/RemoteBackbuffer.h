@@ -9,7 +9,10 @@
 #include "nsIWidget.h"
 #include "mozilla/widget/PCompositorWidgetParent.h"
 #include "mozilla/Maybe.h"
+#include "mozilla/Mutex.h"
+#include "mozilla/StaticPtr.h"
 #include "mozilla/gfx/2D.h"
+#include "nsTArray.h"
 #include "prthread.h"
 #include <windows.h>
 
@@ -24,6 +27,27 @@ struct PresentRequestData;
 struct PresentResponseData;
 class SharedImage;
 class PresentableSharedImage;
+class Provider;
+
+class ProviderSharedThread {
+ public:
+  static bool Add(Provider* aProvider);
+
+ private:
+  ProviderSharedThread() = default;
+  ~ProviderSharedThread();
+
+  bool Start();
+  void ThreadMain();
+
+  static StaticAutoPtr<ProviderSharedThread> sInstance;
+
+  Mutex mMutex{"remote_backbuffer::ProviderSharedThread"};
+  nsTArray<Provider*> mPendingProviders MOZ_GUARDED_BY(mMutex);
+  PRThread* mServiceThread = nullptr;
+  HANDLE mControlEvent = INVALID_HANDLE_VALUE;
+  bool mStopServiceThread = false;
+};
 
 class Provider {
  public:
@@ -40,8 +64,10 @@ class Provider {
   Provider& operator=(Provider&&) = delete;
 
  private:
-  void ThreadMain();
+  friend class ProviderSharedThread;
 
+  void ThreadMain();
+  void HandleRequest();
   void HandleBorrowRequest(BorrowResponseData* aResponseData,
                            bool aAllowSameBuffer);
   void HandlePresentRequest(const PresentRequestData& aRequestData,

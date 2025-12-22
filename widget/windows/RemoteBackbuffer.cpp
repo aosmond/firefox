@@ -6,7 +6,9 @@
 #include "RemoteBackbuffer.h"
 #include "GeckoProfiler.h"
 #include "nsThreadUtils.h"
+#include "mozilla/ClearOnShutdown.h"
 #include "mozilla/Span.h"
+#include "mozilla/StaticPrefs_gfx.h"
 #include "mozilla/gfx/Point.h"
 #include "WinUtils.h"
 #include <algorithm>
@@ -18,6 +20,12 @@ namespace remote_backbuffer {
 
 // This number can be adjusted as a time-memory tradeoff
 constexpr uint8_t kMaxDirtyRects = 8;
+
+// This matches the stack size used by the SwComposite thread. If we are
+// compositing in the parent process, it would perform the same operations
+// done on RemoteBackBuffer thread, so it should be sufficient. This is likely
+// rounded up to 64kB on Windows, but much smaller than the default.
+static constexpr PRUint32 kRemoteBackbufferStackSize = 40 * 1024;
 
 struct IpcSafeRect {
   explicit IpcSafeRect(const gfx::IntRect& aRect)
@@ -311,6 +319,118 @@ class PresentableSharedImage {
   HGDIOBJ mSavedObject;
 };
 
+/* static */ StaticAutoPtr<ProviderSharedThread>
+    ProviderSharedThread::sInstance;
+
+/* static */ bool ProviderSharedThread::Add(Provider* aProvider) {
+  MOZ_ASSERT(NS_IsMainThread());
+  if (!sInstance) {
+    sInstance = new ProviderSharedThread();
+    if (!sInstance->Start()) {
+      sInstance = nullptr;
+      return false;
+    }
+
+    ClearOnShutdown(&sInstance, ShutdownPhase::XPCOMShutdownThreads);
+  }
+
+  MutexAutoLock lock(sInstance->mMutex);
+  sInstance->mPendingProviders.AppendElement(aProvider);
+  MOZ_ALWAYS_TRUE(::SetEvent(sInstance->mControlEvent));
+  return true;
+}
+
+ProviderSharedThread::~ProviderSharedThread() {
+  if (mServiceThread) {
+    mStopServiceThread = true;
+    MOZ_ALWAYS_TRUE(::SetEvent(mControlEvent));
+    MOZ_ALWAYS_TRUE(PR_JoinThread(mServiceThread) == PR_SUCCESS);
+  }
+
+  if (mControlEvent) {
+    MOZ_ALWAYS_TRUE(::CloseHandle(mControlEvent));
+  }
+}
+
+bool ProviderSharedThread::Start() {
+  mControlEvent = ::CreateEventW(nullptr /*secattr*/, FALSE /*manualReset*/,
+                                 FALSE /*initialState*/, nullptr /*name*/);
+  if (!mControlEvent) {
+    return false;
+  }
+
+  mServiceThread = PR_CreateThread(
+      PR_USER_THREAD,
+      [](void* p) { static_cast<ProviderSharedThread*>(p)->ThreadMain(); },
+      this PR_PRIORITY_URGENT, PR_GLOBAL_THREAD, PR_JOINABLE_THREAD,
+      kRemoteBackbufferStackSize);
+  if (!mServiceThread) {
+    return false;
+  }
+
+  return true;
+}
+
+void ProviderSharedThread::ThreadMain() {
+  AUTO_PROFILER_REGISTER_THREAD("RemoteBackbuffer");
+  NS_SetCurrentThreadName("RemoteBackbuffer");
+
+  AutoTArray<Provider*, 8> providers;
+  AutoTArray<HANDLE, 8> requestReadyEvents;
+
+  // The first entry is just a placeholder so that the first handle in
+  // requestReadyEvents can be for control events, such as exit the thread or
+  // add new providers.
+  providers.AppendElement(nullptr);
+
+  {
+    MutexAutoLock lock(mMutex);
+    requestReadyEvents.AppendElement(mControlEvent);
+    for (const auto* provider : mPendingProviders) {
+      requestReadyEvents.AppendElement(provider->mRequestReadyEvent);
+    }
+    providers.AppendElements(std::move(mPendingProviders));
+  }
+
+  while (true) {
+    DWORD index;
+    DWORD length = requestReadyEvents.Length();
+    {
+      AUTO_PROFILER_THREAD_SLEEP;
+      index = ::WaitForMultipleObjects(length, requestReadyEvents.Elements(),
+                                       FALSE /*bWaitAll*/, INFINITE);
+    }
+
+    MOZ_RELEASE_ASSERT(index >= WAIT_OBJECT_0 && index < WAIT_OBJECT_0 + length,
+                       "WaitForMultipleObjects failed for remote_backbuffer!");
+    index -= WAIT_OBJECT_0;
+    if (index == 0) {
+      MutexAutoLock lock(mMutex);
+      if (mStopServiceThread) {
+        MOZ_DIAGNOSTIC_ASSERT(requestReadyEvents.Length() == 1,
+                              "Shutdown thread while still pending consumers "
+                              "of remote_backbuffer!");
+        break;
+      }
+
+      for (const auto* provider : mPendingProviders) {
+        requestReadyEvents.AppendElement(provider->mRequestReadyEvent);
+      }
+      providers.AppendElements(std::move(mPendingProviders));
+    } else if (auto* provider = providers[index]) {
+      if (provider->mStopServiceThread) {
+        providers.RemoveElementAt(index);
+        requestReadyEvents.RemoveElementAt(index);
+        MOZ_ALWAYS_TRUE(::SetEvent(provider->mResponseReadyEvent));
+      } else {
+        provider->HandleRequest();
+      }
+    } else {
+      MOZ_DIAGNOSTIC_CRASH("Invalid provider for remote_backbuffer!");
+    }
+  }
+}
+
 Provider::Provider()
     : mWindowHandle(nullptr),
       mTargetProcess(nullptr),
@@ -324,6 +444,14 @@ Provider::Provider()
 
 Provider::~Provider() {
   mBackbuffer.reset();
+
+  if (StaticPrefs::
+          gfx_webrender_software_shared_remotebackbuffer_thread_AtStartup()) {
+    mStopServiceThread = true;
+    MOZ_ALWAYS_TRUE(::SetEvent(mRequestReadyEvent));
+    MOZ_ALWAYS_TRUE(::WaitForSingleObject(mResponseReadyEvent, INFINITE) ==
+                    WAIT_OBJECT_0);
+  }
 
   if (mServiceThread) {
     mStopServiceThread = true;
@@ -396,11 +524,13 @@ bool Provider::Initialize(HWND aWindowHandle, DWORD aTargetProcessId) {
 
   mStopServiceThread = false;
 
-  // This matches the stack size used by the SwComposite thread. If we are
-  // compositing in the parent process, it would perform the same operations
-  // done on RemoteBackBuffer thread, so it should be sufficient. This is likely
-  // rounded up to 64kB on Windows, but much smaller than the default.
-  static constexpr PRUint32 kRemoteBackbufferStackSize = 40 * 1024;
+  // Check if we are using a single thread for RemoteBackbuffer.
+  if (StaticPrefs::
+          gfx_webrender_software_shared_remotebackbuffer_thread_AtStartup()) {
+    if (!ProviderSharedThread::Add(this)) {
+      return false;
+    }
+  }
 
   // Use a raw NSPR OS-level thread here instead of nsThread because we are
   // performing low-level synchronization across processes using Win32 Events,
@@ -435,39 +565,43 @@ void Provider::ThreadMain() {
       break;
     }
 
-    switch (mSharedDataPtr->dataType) {
-      case SharedDataType::BorrowRequest:
-      case SharedDataType::BorrowRequestAllowSameBuffer: {
-        BorrowResponseData responseData = {};
-
-        HandleBorrowRequest(&responseData,
-                            mSharedDataPtr->dataType ==
-                                SharedDataType::BorrowRequestAllowSameBuffer);
-
-        mSharedDataPtr->dataType = SharedDataType::BorrowResponse;
-        mSharedDataPtr->data.borrowResponse = responseData;
-
-        MOZ_ALWAYS_TRUE(::SetEvent(mResponseReadyEvent));
-
-        break;
-      }
-      case SharedDataType::PresentRequest: {
-        PresentRequestData requestData = mSharedDataPtr->data.presentRequest;
-        PresentResponseData responseData = {};
-
-        HandlePresentRequest(requestData, &responseData);
-
-        mSharedDataPtr->dataType = SharedDataType::PresentResponse;
-        mSharedDataPtr->data.presentResponse = responseData;
-
-        MOZ_ALWAYS_TRUE(::SetEvent(mResponseReadyEvent));
-
-        break;
-      }
-      default:
-        break;
-    };
+    HandleRequest();
   }
+}
+
+void Provider::HandleRequest() {
+  switch (mSharedDataPtr->dataType) {
+    case SharedDataType::BorrowRequest:
+    case SharedDataType::BorrowRequestAllowSameBuffer: {
+      BorrowResponseData responseData = {};
+
+      HandleBorrowRequest(&responseData,
+                          mSharedDataPtr->dataType ==
+                              SharedDataType::BorrowRequestAllowSameBuffer);
+
+      mSharedDataPtr->dataType = SharedDataType::BorrowResponse;
+      mSharedDataPtr->data.borrowResponse = responseData;
+
+      MOZ_ALWAYS_TRUE(::SetEvent(mResponseReadyEvent));
+
+      break;
+    }
+    case SharedDataType::PresentRequest: {
+      PresentRequestData requestData = mSharedDataPtr->data.presentRequest;
+      PresentResponseData responseData = {};
+
+      HandlePresentRequest(requestData, &responseData);
+
+      mSharedDataPtr->dataType = SharedDataType::PresentResponse;
+      mSharedDataPtr->data.presentResponse = responseData;
+
+      MOZ_ALWAYS_TRUE(::SetEvent(mResponseReadyEvent));
+
+      break;
+    }
+    default:
+      break;
+  };
 }
 
 void Provider::HandleBorrowRequest(BorrowResponseData* aResponseData,

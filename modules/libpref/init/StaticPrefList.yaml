@@ -8074,6 +8074,13 @@
   type: RelaxedAtomicInt32
   value: 4
   mirror: always
+
+# Whether to use a shared thread for all remote backbuffer operations instead of
+# one per widget.
+- name: gfx.webrender.software.shared_remotebackbuffer_thread
+  type: bool
+  value: false
+  mirror: once
 #endif
 
 #if defined(MOZ_WIDGET_ANDROID) || defined(MOZ_WIDGET_GTK)
