@@ -12634,11 +12634,7 @@
 # for platform implemented codecs in the RDD or GPU process.
 - name: media.use-remote-encoder.video.platform
   type: RelaxedAtomicBool
-#ifdef NIGHTLY_BUILD
-  value: @IS_NOT_ANDROID@
-#else
-  value: false
-#endif
+  value: true
   mirror: always
 
 # Specifies whether the PEMFactory can create PEMs for remote video encoding
@@ -12668,13 +12664,7 @@
 
 - name: media.ffvpx-hw.enabled
   type: RelaxedAtomicBool
-#if defined(MOZ_WIDGET_GTK)
   value: true
-#elif defined(XP_WIN)
-  value: @IS_NIGHTLY_BUILD@
-#else
-  value: false
-#endif
   mirror: always
 
 # Provide minimal HW support for codecs that are otherwise unavailable on
@@ -12699,7 +12689,9 @@
   value: true
 #elif defined(XP_MACOSX)
   value: true
-#elif defined(XP_LINUX) && !defined(ANDROID)
+#elif defined(ANDROID)
+  value: true
+#elif defined(XP_LINUX)
   value: true
 #elif defined(XP_FREEBSD)
   value: true
@@ -12743,7 +12735,9 @@
   value: true
 #elif defined(XP_MACOSX)
   value: true
-#elif defined(XP_LINUX) && !defined(ANDROID)
+#elif defined(ANDROID)
+  value: true
+#elif defined(XP_LINUX)
   value: true
 #elif defined(XP_FREEBSD)
   value: true
@@ -12776,7 +12770,9 @@
   value: true
 #elif defined(XP_MACOSX)
   value: true
-#elif defined(XP_LINUX) && !defined(ANDROID)
+#elif defined(ANDROID)
+  value: true
+#elif defined(XP_LINUX)
   value: true
 #elif defined(XP_FREEBSD)
   value: true
@@ -12795,7 +12791,9 @@
   value: true
 #elif defined(XP_MACOSX)
   value: true
-#elif defined(XP_LINUX) && !defined(ANDROID)
+#elif defined(ANDROID)
+  value: true
+#elif defined(XP_LINUX)
   value: true
 #elif defined(XP_FREEBSD)
   value: true
@@ -12814,7 +12812,9 @@
   value: true
 #elif defined(XP_MACOSX)
   value: true
-#elif defined(XP_LINUX) && !defined(ANDROID)
+#elif defined(ANDROID)
+  value: true
+#elif defined(XP_LINUX)
   value: true
 #elif defined(XP_FREEBSD)
   value: true
@@ -12833,7 +12833,9 @@
   value: true
 #elif defined(XP_MACOSX)
   value: true
-#elif defined(XP_LINUX) && !defined(ANDROID)
+#elif defined(ANDROID)
+  value: true
+#elif defined(XP_LINUX)
   value: true
 #elif defined(XP_FREEBSD)
   value: true
@@ -12885,7 +12887,7 @@
   # Enable the MediaCodec PlatformDecoderModule by default.
 -   name: media.android-media-codec.enabled
     type: RelaxedAtomicBool
-    value: true
+    value: false
     mirror: always
 
   # Bug 1771196
@@ -12897,7 +12899,7 @@
 
 -   name: media.android-media-codec.preferred
     type: RelaxedAtomicBool
-    value: true
+    value: false
     mirror: always
 #endif  # ANDROID
 
@@ -12940,11 +12942,7 @@
 # Allow using ffmpeg encoder
 -   name: media.ffmpeg.encoder.enabled
     type: RelaxedAtomicBool
-#if !defined(MOZ_WIDGET_ANDROID)
     value: true
-#else
-    value: false
-#endif
     mirror: always
 
 # A high quantizer value allows the encoder to use higher compression, but
