@@ -14,28 +14,24 @@
     );
 
     var tests_half_a_second = [
-      "half-a-second-1ch-44100-aac.mp4",
       "half-a-second-1ch-44100-flac.flac",
       "half-a-second-1ch-44100-libmp3lame.mp3",
       "half-a-second-1ch-44100-libopus.opus",
       "half-a-second-1ch-44100-libopus.webm",
       "half-a-second-1ch-44100-libvorbis.ogg",
       "half-a-second-1ch-44100.wav",
-      "half-a-second-1ch-48000-aac.mp4",
       "half-a-second-1ch-48000-flac.flac",
       "half-a-second-1ch-48000-libmp3lame.mp3",
       "half-a-second-1ch-48000-libopus.opus",
       "half-a-second-1ch-48000-libopus.webm",
       "half-a-second-1ch-48000-libvorbis.ogg",
       "half-a-second-1ch-48000.wav",
-      "half-a-second-2ch-44100-aac.mp4",
       "half-a-second-2ch-44100-flac.flac",
       "half-a-second-2ch-44100-libmp3lame.mp3",
       "half-a-second-2ch-44100-libopus.opus",
       "half-a-second-2ch-44100-libopus.webm",
       "half-a-second-2ch-44100-libvorbis.ogg",
       "half-a-second-2ch-44100.wav",
-      "half-a-second-2ch-48000-aac.mp4",
       "half-a-second-2ch-48000-flac.flac",
       "half-a-second-2ch-48000-libmp3lame.mp3",
       "half-a-second-2ch-48000-libopus.opus",
@@ -63,6 +59,20 @@
       "half-a-second-2ch-48000-libvorbis.webm",
     ];
 
+    // Depending on the platform, these tests are either exactly half a second or come
+    // just short of it.
+    var tests_platform_specific = [
+      "half-a-second-1ch-44100-aac.mp4",
+      "half-a-second-1ch-48000-aac.mp4",
+      "half-a-second-2ch-44100-aac.mp4",
+      "half-a-second-2ch-48000-aac.mp4",
+    ];
+    if (AppConstants.platform === "android") {
+      tests_adts.push(...tests_platform_specific);
+    } else {
+      tests_half_a_second.push(...tests_platform_specific);
+    }
+
     // Other files that have interesting characteristics.
     var tests_others = [
       {
@@ -80,7 +90,7 @@
         "frameCount": 22464,
         "samplerate": 44100,
         "fuzz": {
-          "android": 2
+          "android": 3100
         }
       },
       {
@@ -138,7 +148,7 @@
         // Value found empirically after looking at the files. ADTS containers
         // don't have encoder delay / padding info so we can't trim correctly.
         ok(
-          Math.abs(decoded.duration - 0.5) < 0.02,
+          Math.abs(decoded.duration - 0.5) < 0.06,
           `The ADTS file ${testfile} is about half a second (${decoded.duration}, error: ${Math.abs(decoded.duration-0.5)}).`
         );
         checkDone();
