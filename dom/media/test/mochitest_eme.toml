@@ -728,6 +728,7 @@ scheme = "https"
 skip-if = [
   "os == 'mac' && os_version == '14.70' && arch == 'x86_64'", # Bug 1929444
   "os == 'mac' && os_version == '15.30' && arch == 'aarch64'", # bug 1707737
+  "os == 'android' && arch == 'x86_64'", # Bug 2014224
 ]
 
 ["test_eme_protection_query.html"]
@@ -769,6 +770,7 @@ scheme = "https"
 skip-if = [
   "os == 'mac' && os_version == '14.70' && arch == 'x86_64'", # Bug 1929444
   "os == 'mac' && os_version == '15.30' && arch == 'aarch64'", # bug 1707737
+  "os == 'android' && arch == 'x86_64'", # Bug 2014224
 ]
 
 ["test_eme_unsetMediaKeys_then_capture.html"]
@@ -785,6 +787,7 @@ scheme = "https"
 skip-if = [
   "os == 'mac' && os_version == '14.70' && arch == 'x86_64'", # Bug 1929444
   "os == 'mac' && os_version == '15.30' && arch == 'aarch64'", # bug 1707737
+  "os == 'android' && arch == 'x86_64'", # Bug 2014224
   "xorigin",
 ]
 
