@@ -37,6 +37,7 @@
 #include "nsNetUtil.h"
 #include "nsPrintfCString.h"
 #include "nsProxyInfo.h"
+#include "nsSimpleURI.h"
 #include "nsSocketProviderService.h"
 #include "nsStreamUtils.h"
 #include "nsThreadUtils.h"
@@ -1280,21 +1281,30 @@ nsresult nsSocketTransport::InitiateSocket() {
 #endif
 
     if (NS_SUCCEEDED(mCondition) && ShouldBlockAddress(mNetAddr)) {
-      nsAutoCString ipaddr;
-      RefPtr<nsNetAddr> netaddr = new nsNetAddr(&mNetAddr);
-      netaddr->GetAddress(ipaddr);
-      fprintf_stderr(
-          stderr,
-          "FATAL ERROR: Non-local network connections are disabled and a "
-          "connection "
-          "attempt to %s (%s) was made.\nYou should only access hostnames "
-          "available via the test networking proxy (if running mochitests) "
-          "or from a test-specific httpd.js server (if running xpcshell "
-          "tests). "
-          "Browser services should be disabled or redirected to a local "
-          "server.\n",
-          mHost.get(), ipaddr.get());
-      return NS_ERROR_NON_LOCAL_CONNECTION_REFUSED;
+      nsCOMPtr<nsIURI> uri;
+      rv = NS_MutateURI(new mozilla::net::nsSimpleURI::Mutator())
+               .SetScheme("https"_ns)
+               .SetHost(mHost)
+               .Finalize(uri);
+      const auto prefLock =
+          mozilla::StaticPrefs::network_socket_allowed_nonlocal_domains();
+      if (!nsContentUtils::IsURIInList(uri, *prefLock)) {
+        nsAutoCString ipaddr;
+        RefPtr<nsNetAddr> netaddr = new nsNetAddr(&mNetAddr);
+        netaddr->GetAddress(ipaddr);
+        fprintf_stderr(
+            stderr,
+            "FATAL ERROR: Non-local network connections are disabled and a "
+            "connection "
+            "attempt to %s (%s) was made.\nYou should only access hostnames "
+            "available via the test networking proxy (if running mochitests) "
+            "or from a test-specific httpd.js server (if running xpcshell "
+            "tests). "
+            "Browser services should be disabled or redirected to a local "
+            "server.\n",
+            mHost.get(), ipaddr.get());
+        return NS_ERROR_NON_LOCAL_CONNECTION_REFUSED;
+      }
     }
   }
 
