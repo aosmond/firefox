@@ -8526,6 +8526,9 @@ subsuite = "webgl2-core"
 
 ["generated/test_2_conformance2__textures__misc__npot-video-sizing.html"]
 subsuite = "webgl2-core"
+skip-if = [
+  "os == 'android' && os_version == '14' && arch == 'aarch64'", # Bug 2014224
+]
 
 ["generated/test_2_conformance2__textures__misc__origin-clean-conformance-offscreencanvas.html"]
 subsuite = "webgl2-core"
