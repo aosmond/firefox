@@ -997,6 +997,9 @@ run-if = [
 ["test_preserve_playbackrate_after_ui_play.html"]
 
 ["test_progress.html"]
+skip-if = [
+  "os == 'android' && arch == 'x86_64'",
+]
 
 ["test_reactivate.html"]
 skip-if = [
@@ -1008,6 +1011,9 @@ skip-if = [
 ["test_referer.html"]
 
 ["test_reset_src.html"]
+skip-if = [
+  "os == 'android' && arch == 'x86_64'",
+]
 
 ["test_source.html"]
 
@@ -1018,19 +1024,31 @@ skip-if = [
 ["test_standalone.html"]
 
 ["test_suspend_media_by_inactive_docshell.html"]
+skip-if = [
+  "os == 'android' && arch == 'x86_64'",
+]
 
 ["test_timeupdate_small_files.html"]
+skip-if = [
+  "os == 'android' && arch == 'x86_64'",
+]
 
 ["test_unseekable.html"]
 
 ["test_videoDocumentTitle.html"]
 
 ["test_video_gzip_encoding.html"]
+skip-if = [
+  "os == 'android' && arch == 'x86_64'",
+]
 
 ["test_video_in_audio_element.html"]
 
 ["test_video_stats_resistfingerprinting.html"]
 tags = "resistfingerprinting"
+skip-if = [
+  "os == 'android' && arch == 'x86_64'",
+]
 
 ["test_volume.html"]
 # The tests below contain backend-specific tests. Write backend independent

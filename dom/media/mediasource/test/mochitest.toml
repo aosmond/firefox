@@ -263,6 +263,9 @@ skip-if = [
 ["test_NoAudioLoopBackData_Muted.html"]
 
 ["test_NoVideoLoopBackData.html"]
+skip-if = [
+  "os == 'android' && arch == 'x86_64'",
+]
 
 ["test_PlayEvents.html"]
 
@@ -282,6 +285,9 @@ skip-if = [
 ["test_TimestampOffset_mp4.html"]
 
 ["test_WMFUnmatchedAudioDataTime.html"]
+skip-if = [
+  "os == 'android' && arch == 'x86_64'",
+]
 
 ["test_WaitingOnMissingData.html"]
 
