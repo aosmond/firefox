@@ -842,7 +842,7 @@ skip-if = [
 
 ["test_hevc_playback.html"]
 run-if = [
-  "os == 'android'",
+  "os == 'android' && arch == 'x86_64'", # Bug 2014224
   "os == 'mac' && os_version != '10.15'", # Bug 1942396
   "os == 'win'",
 ]
@@ -972,9 +972,15 @@ tags = "promise-play"
 
 ["test_play_promise_7.html"]
 tags = "promise-play"
+skip-if = [
+  "os == 'android' && arch == 'x86_64'", # Bug 2014224
+]
 
 ["test_play_promise_8.html"]
 tags = "promise-play"
+skip-if = [
+  "os == 'android' && arch == 'x86_64'", # Bug 2014224
+]
 
 ["test_play_promise_9.html"]
 tags = "promise-play"
@@ -1000,6 +1006,9 @@ run-if = [
 ["test_preserve_playbackrate_after_ui_play.html"]
 
 ["test_progress.html"]
+skip-if = [
+  "os == 'android' && arch == 'x86_64'", # Bug 2014224
+]
 
 ["test_reactivate.html"]
 skip-if = [
@@ -1014,6 +1023,9 @@ skip-if = [
 ]
 
 ["test_reset_src.html"]
+skip-if = [
+  "os == 'android'", # Bug 2014224
+]
 
 ["test_source.html"]
 
@@ -1024,19 +1036,31 @@ skip-if = [
 ["test_standalone.html"]
 
 ["test_suspend_media_by_inactive_docshell.html"]
+skip-if = [
+  "os == 'android'", # Bug 2014224
+]
 
 ["test_timeupdate_small_files.html"]
+skip-if = [
+  "os == 'android'", # Bug 2014224
+]
 
 ["test_unseekable.html"]
 
 ["test_videoDocumentTitle.html"]
 
 ["test_video_gzip_encoding.html"]
+skip-if = [
+  "os == 'android'", # Bug 2014224
+]
 
 ["test_video_in_audio_element.html"]
 
 ["test_video_stats_resistfingerprinting.html"]
 tags = "resistfingerprinting"
+skip-if = [
+  "os == 'android'", # Bug 2014224
+]
 
 ["test_volume.html"]
 # The tests below contain backend-specific tests. Write backend independent
