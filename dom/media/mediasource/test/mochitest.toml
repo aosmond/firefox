@@ -230,8 +230,14 @@ support-files = [
 ["test_ChangeType.html"]
 
 ["test_ChangeWhileWaitingOnMissingData_mp4.html"]
+skip-if = [
+  "os == 'android'", # Bug 2014224
+]
 
 ["test_DrainOnMissingData_mp4.html"]
+skip-if = [
+  "os == 'android' && arch == 'aarch64'", # Bug 2014224
+]
 
 ["test_EndedEvent.html"]
 
@@ -241,7 +247,7 @@ support-files = [
 
 ["test_FrameSelection_mp4.html"]
 skip-if = [
-  "os == 'android' && arch == 'aarch64' && debug", # Bug 1776960 - android aarch64 debug
+  "os == 'android' && arch == 'aarch64'", # Bug 1776960 and Bug 2014224
   "os == 'mac' && os_version == '10.15' && arch == 'x86_64'", # mac due to bug 1487973
   "os == 'win'", # bug 1487973,
 ]
@@ -256,6 +262,9 @@ skip-if = [
 ["test_NoAudioLoopBackData_Muted.html"]
 
 ["test_NoVideoLoopBackData.html"]
+skip-if = [
+  "os == 'android'", # Bug 2014224
+]
 
 ["test_PlayEvents.html"]
 
@@ -268,6 +277,9 @@ skip-if = [
 ["test_ResumeAfterClearing_mp4.html"]
 
 ["test_SeekToLastFrame_mp4.html"]
+skip-if = [
+  "os == 'android'", # Bug 2014224
+]
 
 ["test_SeekedEvent_mp4.html"]
 
@@ -276,6 +288,9 @@ skip-if = [
 ["test_TimestampOffset_mp4.html"]
 
 ["test_WMFUnmatchedAudioDataTime.html"]
+skip-if = [
+  "os == 'android'", # Bug 2014224
+]
 
 ["test_WaitingOnMissingData.html"]
 

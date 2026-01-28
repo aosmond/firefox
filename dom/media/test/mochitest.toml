@@ -924,6 +924,9 @@ skip-if = [
 
 ["test_resolution_change.html"]
 tags = "capturestream"
+skip-if = [
+  "os == 'android' && arch == 'x86_64'", # Bug 2014224
+]
 
 ["test_resume.html"]
 skip-if = [

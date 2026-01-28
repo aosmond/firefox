@@ -49,22 +49,26 @@ skip-if = [
 skip-if = [
   "isolated_process", # Bug 1709948
   "os != 'android'",
+  "os == 'android' && arch == 'x86_64'", # Bug 2014224
 ]
 
 ["test_autoplay_gvobserver_late_auth.html"]
 skip-if = [
   "isolated_process", # Bug 1810736
   "os != 'android'",
+  "os == 'android' && arch == 'x86_64'", # Bug 2014224
 ]
 
 ["test_autoplay_policy.html"]
 skip-if = [
   "isolated_process", # Bug 1709948
+  "os == 'android' && arch == 'x86_64'", # Bug 2014224
 ]
 
 ["test_autoplay_policy_activation.html"]
 skip-if = [
   "isolated_process", # Bug 1709948
+  "os == 'android' && arch == 'x86_64'", # Bug 2014224
 ]
 
 ["test_autoplay_policy_eventdown_activation.html"]

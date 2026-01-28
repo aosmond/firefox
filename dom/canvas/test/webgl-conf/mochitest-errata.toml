@@ -1056,6 +1056,11 @@ skip-if = [
   "os == 'linux' && os_version == '24.04' && arch == 'x86_64' && display == 'x11' && debug",
 ]
 
+["generated/test_2_conformance2__textures__misc__npot-video-sizing.html"]
+skip-if = [
+  "os == 'android' && os_version == '14' && arch == 'aarch64'", # Bug 2014224
+]
+
 ["generated/test_2_conformance2__textures__misc__origin-clean-conformance-offscreencanvas.html"]
 skip-if = [
   "true",
