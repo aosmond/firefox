@@ -1233,6 +1233,7 @@ nsresult nsSocketTransport::BuildSocket(PRFileDesc*& fd, bool& proxyTransparent,
   return rv;
 }
 
+#ifndef ANDROID
 static bool ShouldBlockAddress(const NetAddr& aAddr) {
   if (!xpc::AreNonLocalConnectionsDisabled()) {
     return false;
@@ -1245,6 +1246,7 @@ static bool ShouldBlockAddress(const NetAddr& aAddr) {
   return !(addrToCheck.IsIPAddrAny() || addrToCheck.IsIPAddrLocal() ||
            addrToCheck.IsIPAddrShared() || addrToCheck.IsLoopbackAddr());
 }
+#endif
 
 nsresult nsSocketTransport::InitiateSocket() {
   SOCKET_LOG(("nsSocketTransport::InitiateSocket [this=%p]\n", this));
@@ -1279,7 +1281,7 @@ nsresult nsSocketTransport::InitiateSocket() {
       MOZ_ASSERT(!IsNeckoChild());
     }
 #endif
-
+#ifndef ANDROID
     if (NS_SUCCEEDED(mCondition) && ShouldBlockAddress(mNetAddr)) {
       nsCOMPtr<nsIURI> uri;
       rv = NS_MutateURI(new mozilla::net::nsSimpleURI::Mutator())
@@ -1306,6 +1308,7 @@ nsresult nsSocketTransport::InitiateSocket() {
         return NS_ERROR_NON_LOCAL_CONNECTION_REFUSED;
       }
     }
+#endif
   }
 
   // Hosts/Proxy Hosts that are Local IP Literals should not be speculatively
