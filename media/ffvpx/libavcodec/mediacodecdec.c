@@ -322,7 +322,14 @@ static int common_set_extradata(AVCodecContext *avctx, FFAMediaFormat *format)
 {
     int ret = 0;
 
+    av_log(avctx, AV_LOG_INFO, "extradata %p size %d\n", avctx->extradata, avctx->extradata_size);
+
     if (avctx->extradata) {
+        av_log(avctx, AV_LOG_INFO, "extradata dump:\n");
+        for (int i = 0; i < avctx->extradata_size; ++i) {
+          av_log(avctx, AV_LOG_INFO, "  %02x", avctx->extradata[i]);
+	}
+        av_log(avctx, AV_LOG_INFO, "\n");
         ff_AMediaFormat_setBuffer(format, "csd-0", avctx->extradata, avctx->extradata_size);
     }
 
