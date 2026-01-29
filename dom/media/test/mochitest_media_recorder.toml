@@ -757,6 +757,9 @@ tags = "mtg capturestream"
 ["test_mediarecorder_record_audiocontext_mlk.html"]
 
 ["test_mediarecorder_record_audionode.html"]
+skip-if = [
+  "os == 'android' && arch == 'x86_64'",
+]
 
 ["test_mediarecorder_record_canvas_captureStream.html"]
 skip-if = [
