@@ -638,6 +638,12 @@ FFmpegVideoDecoder<LIBAV_VER>::~FFmpegVideoDecoder() {
   MOZ_DIAGNOSTIC_ASSERT(mAllocatedImages.IsEmpty(),
                         "Should release all shmem buffers before destroy!");
 #endif
+#ifdef MOZ_WIDGET_ANDROID
+  MOZ_RELEASE_ASSERT(mFrameMap.IsEmpty());
+  MOZ_RELEASE_ASSERT(!mMediaCodecDeviceContext);
+  MOZ_RELEASE_ASSERT(!mCodecContext);
+  MOZ_RELEASE_ASSERT(!mFrame);
+#endif
 }
 
 #ifdef MOZ_USE_HWDECODE

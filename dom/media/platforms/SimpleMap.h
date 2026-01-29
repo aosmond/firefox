@@ -45,6 +45,10 @@ class SimpleMap {
  public:
   SimpleMap() : mLock("SimpleMap") {};
 
+  bool IsEmpty() {
+    Policy guard(mLock);
+    return mMap.IsEmpty();
+  }
   // Check if aKey is in the map.
   bool Contains(const K& aKey) {
     struct Comparator {
