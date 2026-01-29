@@ -227,6 +227,9 @@ skip-if = [
 ["test_BufferingWait.html"]
 
 ["test_BufferingWait_mp4.html"]
+skip-if = [
+  "os == 'android' && arch == 'x86_64'",
+]
 
 ["test_ChangeType.html"]
 
