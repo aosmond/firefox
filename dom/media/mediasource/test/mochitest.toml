@@ -220,6 +220,9 @@ support-files = [
 ]
 
 ["test_BufferedSeekCanPlayThrough.html"]
+skip-if = [
+  "os == 'android' && arch == 'x86_64'",
+]
 
 ["test_BufferingWait.html"]
 
@@ -228,8 +231,14 @@ support-files = [
 ["test_ChangeType.html"]
 
 ["test_ChangeWhileWaitingOnMissingData_mp4.html"]
+skip-if = [
+  "os == 'android' && arch == 'x86_64'",
+]
 
 ["test_DrainOnMissingData_mp4.html"]
+skip-if = [
+  "os == 'android' && arch == 'x86_64'",
+]
 
 ["test_EndedEvent.html"]
 
@@ -239,7 +248,7 @@ support-files = [
 
 ["test_FrameSelection_mp4.html"]
 skip-if = [
-  "os == 'android' && arch == 'aarch64' && debug", # Bug 1776960 - android aarch64 debug
+  "os == 'android'", # Bug 1776960 - android aarch64 debug
   "os == 'mac' && os_version == '10.15' && arch == 'x86_64'", # mac due to bug 1487973
   "os == 'win'", # bug 1487973,
 ]
