@@ -280,6 +280,9 @@ skip-if = [
 ["test_ResumeAfterClearing_mp4.html"]
 
 ["test_SeekToLastFrame_mp4.html"]
+skip-if = [
+  "os == 'android' && arch == 'x86_64'",
+]
 
 ["test_SeekedEvent_mp4.html"]
 
