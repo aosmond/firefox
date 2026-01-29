@@ -781,7 +781,11 @@ static int mediacodec_dec_get_video_codec(AVCodecContext *avctx, MediaCodecDecCo
 
     if (s->codec_name)
         s->codec = ff_AMediaCodec_createCodecByName(s->codec_name, s->use_ndk_codec);
-    else {
+    else if (!strcmp(mime, "video/avc")) {
+        //s->codec_name = av_strdup("OMX.google.h264.decoder");
+        s->codec_name = av_strdup("c2.android.avc.decoder");
+        s->codec = ff_AMediaCodec_createCodecByName(s->codec_name, s->use_ndk_codec);
+    } else {
         s->codec = ff_AMediaCodec_createDecoderByType(mime, s->use_ndk_codec);
         if (s->codec) {
             s->codec_name = ff_AMediaCodec_getName(s->codec);
