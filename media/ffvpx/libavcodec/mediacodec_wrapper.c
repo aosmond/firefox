@@ -2133,6 +2133,7 @@ static inline FFAMediaCodec *ndk_codec_create(int method, const char *arg) {
     if (!codec->impl)
         goto error;
 
+    av_log(NULL, AV_LOG_DEBUG, "AO AMediaCodec_createXXX %p method=%d", codec->impl, method);
     return (FFAMediaCodec *)codec;
 
 error:
@@ -2159,6 +2160,8 @@ static int mediacodec_ndk_delete(FFAMediaCodec* ctx)
 
     if (!codec)
         return 0;
+
+    av_log(NULL, AV_LOG_DEBUG, "AO AMediaCodec_delete %p", codec->impl);
 
     av_assert0(codec->api.class == &amediacodec_ndk_class);
 

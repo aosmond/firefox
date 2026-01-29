@@ -246,7 +246,8 @@ static enum AVPixelFormat mcdec_map_color_format(AVCodecContext *avctx,
 
 static void ff_mediacodec_dec_ref(MediaCodecDecContext *s)
 {
-    atomic_fetch_add(&s->refcount, 1);
+    int rc = atomic_fetch_add(&s->refcount, 1);
+    av_log(NULL, AV_LOG_DEBUG, "AO ff_mediacodec_dec_ref s=%p rc=%d\n", s, rc);
 }
 
 static void ff_mediacodec_dec_unref(MediaCodecDecContext *s)
@@ -254,7 +255,9 @@ static void ff_mediacodec_dec_unref(MediaCodecDecContext *s)
     if (!s)
         return;
 
-    if (atomic_fetch_sub(&s->refcount, 1) == 1) {
+    int rc = atomic_fetch_sub(&s->refcount, 1);
+    av_log(NULL, AV_LOG_DEBUG, "AO ff_mediacodec_dec_unref s=%p rc=%d\n", s, rc);
+    if (rc == 1) {
         if (s->codec) {
             ff_AMediaCodec_delete(s->codec);
             s->codec = NULL;
