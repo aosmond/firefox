@@ -302,7 +302,9 @@ Result<already_AddRefed<MediaByteBuffer>, nsresult> MakeSpecificConfig(
     return Err(NS_ERROR_INVALID_ARG);
   }
 
-  uint8_t index = GetFrequencyIndex(aFrequency)
+  bool hasSBR = (aObjectType == 5 || aObjectType == 29);
+  uint32_t coreFrequency = hasSBR ? aFrequency / 2 : aFrequency;
+  uint8_t index = GetFrequencyIndex(coreFrequency)
                       .unwrapOr(0x0F /* frequency is written explictly */);
   MOZ_ASSERT(index <= 0x0F /* index needs only 4 bits */);
 
@@ -312,7 +314,9 @@ Result<already_AddRefed<MediaByteBuffer>, nsresult> MakeSpecificConfig(
   RefPtr<MediaByteBuffer> buffer = new MediaByteBuffer();
   BitWriter bw(buffer);
 
-  if (aObjectType < 0x1F /* Escape value */) {
+  if (hasSBR) {
+    bw.WriteBits(2, 5);
+  } else if (aObjectType < 0x1F /* Escape value */) {
     bw.WriteBits(aObjectType, 5);
   } else {  // If object type needs more than 5 bits
     MOZ_ASSERT(aObjectType >= 32);
@@ -323,11 +327,30 @@ Result<already_AddRefed<MediaByteBuffer>, nsresult> MakeSpecificConfig(
 
   bw.WriteBits(index, 4);
   if (index == 0x0F /* frequency is written explictly */) {
-    bw.WriteBits(aFrequency, 24);
+    bw.WriteBits(coreFrequency, 24);
   }
 
   bw.WriteBits(channelConfig, 4);
 
+  if (hasSBR) {
+    // Sync extension for SBR
+    bw.WriteBits(0x2b7, 11);  // syncExtension
+    bw.WriteBits(5, 5);       // extensionAudioObjectType (5 = SBR)
+    bw.WriteBits(1, 1);       // sbrPresentFlag = 1
+
+    uint8_t extIndex = GetFrequencyIndex(aFrequency).unwrapOr(0x0F);
+    bw.WriteBits(extIndex, 4);
+    if (extIndex == 0x0F) {
+      bw.WriteBits(aFrequency, 24);
+    }
+
+    // Optional: Explicitly signal Parametric Stereo for HE-AAC v2
+    if (aObjectType == 29) {
+      bw.WriteBits(0x548, 11);  // syncExtension
+      bw.WriteBits(29, 5);      // extensionAudioObjectType (29 = PS)
+      bw.WriteBits(1, 1);       // psPresentFlag = 1
+    }
+  }
   // Skip extension configuration for now.
 
   return buffer.forget();
