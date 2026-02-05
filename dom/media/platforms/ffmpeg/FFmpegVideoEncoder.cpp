@@ -745,7 +745,12 @@ FFmpegVideoEncoder<LIBAV_VER>::ToMediaRawData(AVPacket* aPacket) {
 
   auto extradataResult = GetExtraData(aPacket);
   if (extradataResult.isOk()) {
-    mLastExtraData = extradataResult.unwrap();
+    RefPtr<MediaByteBuffer> extraData = extradataResult.unwrap();
+    FFMPEGV_LOG("AO GetExtraData replace extraData %p (%zu) -> %p (%zu)",
+                mLastExtraData.get(),
+                mLastExtraData ? mLastExtraData->Length() : 0, extraData.get(),
+                extraData->Length());
+    mLastExtraData = std::move(extraData);
   } else if (extradataResult.isErr()) {
     MediaResult e = extradataResult.unwrapErr();
     if (e.Code() != NS_ERROR_NOT_AVAILABLE &&
@@ -765,6 +770,13 @@ FFmpegVideoEncoder<LIBAV_VER>::ToMediaRawData(AVPacket* aPacket) {
   size_t packetSize = static_cast<size_t>(aPacket->size);
 
 #ifdef MOZ_WIDGET_ANDROID
+  FFMPEGV_LOG(
+      "AO keyframe %d extradataResult %d lastExtraData %p (%zu) isH264 %d "
+      "isAnnexB %d",
+      data->mKeyframe, extradataResult.isOk(), mLastExtraData.get(),
+      mLastExtraData ? mLastExtraData->Length() : 0, isH264,
+      isH264 && mConfig.mCodecSpecific.as<H264Specific>().mFormat ==
+                    H264BitStreamFormat::ANNEXB);
   // If we have an AnnexB keyframe, and we failed to extract extradata from the
   // packet, then we know that the SPS/PPS data is missing from the data. In
   // that case we need to prepend our cached extradata to supply it in-band.
