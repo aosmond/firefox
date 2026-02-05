@@ -634,6 +634,9 @@ static int mediacodec_receive(AVCodecContext *avctx, AVPacket *pkt)
     int extradata_size = 0;
 
     ret = mediacodec_get_output_index(avctx, &index, &out_info);
+    av_log(avctx, AV_LOG_TRACE, "AO receive packet index %" PRId64 " ret %d pts %" PRId64
+           " offset %d size %d flags 0x%08x\n",
+           (int64_t)index, ret, out_info.presentationTimeUs, out_info.offset, out_info.size, out_info.flags);
     if (ret < 0)
         return ret;
 
