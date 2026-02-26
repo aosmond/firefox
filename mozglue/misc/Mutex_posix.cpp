@@ -17,11 +17,11 @@
 #include "mozilla/PlatformMutex.h"
 #include "MutexPlatformData_posix.h"
 
-#define REPORT_PTHREADS_ERROR(result, msg) \
-  {                                        \
-    errno = result;                        \
-    perror(msg);                           \
-    MOZ_CRASH(msg);                        \
+#define REPORT_PTHREADS_ERROR(result, msg)      \
+  {                                             \
+    errno = result;                             \
+    perror(msg);                                \
+    MOZ_CRASH_UNSAFE_PRINTF(msg " %d", result); \
   }
 
 #define TRY_CALL_PTHREADS(call, msg)      \
