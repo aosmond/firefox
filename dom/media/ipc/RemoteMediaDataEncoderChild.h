@@ -26,7 +26,8 @@ class RemoteMediaDataEncoderChild final
 
  public:
   MEDIA_INLINE_DECL_THREADSAFE_REFCOUNTING_META(RemoteMediaDataEncoderChild,
-                                                NS_IMETHOD_, delete(this),
+                                                NS_IMETHOD_, mMutex,
+                                                delete(this),
                                                 MaybeDestroyActor(), final);
 
   RemoteMediaDataEncoderChild(nsCOMPtr<nsISerialEventTarget>&& aThread,
@@ -62,7 +63,7 @@ class RemoteMediaDataEncoderChild final
       const nsTArray<RefPtr<MediaData>>& aSamples, ShmemRecycleTicket* aTicket);
 
   void DoSendInit();
-  void MaybeDestroyActor();
+  void MaybeDestroyActor() MOZ_REQUIRES(mMutex);
 
   const nsCOMPtr<nsISerialEventTarget> mThread;
   const RemoteMediaIn mLocation;
