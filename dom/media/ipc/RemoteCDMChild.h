@@ -34,8 +34,8 @@ class RemoteCDMChild final : public PRemoteCDMChild,
                              public CDMProxy {
  public:
   MEDIA_INLINE_DECL_THREADSAFE_REFCOUNTING_META(RemoteCDMChild, NS_IMETHOD_,
-                                                delete(this), Shutdown(),
-                                                final);
+                                                mMutex, delete(this),
+                                                MaybeDestroyActor(), final);
 
   RemoteCDMChild(nsCOMPtr<nsISerialEventTarget>&& aThread,
                  RefPtr<GenericNonExclusivePromise>&& aIPDLPromise,
@@ -119,12 +119,14 @@ class RemoteCDMChild final : public PRemoteCDMChild,
   void RejectPromise(PromiseId aId, const MediaResult& aResult);
   void ResolveOrRejectPromise(PromiseId aId, const MediaResult& aResult);
 
-  void MaybeDestroyActor();
+  void MaybeDestroyActor() MOZ_REQUIRES(mMutex);
+
+  Mutex mMutex{"RemoteCDMChild"};
 
   const nsCOMPtr<nsISerialEventTarget> mThread;
   RefPtr<GenericNonExclusivePromise> mIPDLPromise;
   const RemoteMediaIn mLocation;
-  Atomic<bool> mNeedsShutdown{true};
+  bool mNeedsShutdown MOZ_GUARDED_BY(mMutex) = true;
 };
 
 }  // namespace mozilla

@@ -46,15 +46,15 @@ void RemoteMediaDataEncoderChild::MaybeDestroyActor() {
   // If this is the last reference, and we still have an actor, then we know
   // that the last reference is solely due to the IPDL reference. Dispatch to
   // the owning thread to delete that so that we can clean up.
-  MutexAutoLock lock(mMutex);
   if (mNeedsShutdown) {
     mNeedsShutdown = false;
-    mThread->Dispatch(NS_NewRunnableFunction(__func__, [self = RefPtr{this}]() {
-      if (self->CanSend()) {
-        LOGD("[{}] destroying final self reference", fmt::ptr(self.get()));
-        self->Send__delete__(self);
-      }
-    }));
+    mThread->Dispatch(
+        NS_NewRunnableFunction(__func__, [self = TakeRefLocked()]() {
+          if (self->CanSend()) {
+            LOGD("[{}] destroying final self reference", fmt::ptr(self.get()));
+            self->Send__delete__(self);
+          }
+        }));
   }
 }
 

@@ -6,40 +6,51 @@
 #ifndef include_dom_media_ipc_MediaActorUtils_h
 #define include_dom_media_ipc_MediaActorUtils_h
 
+#include "mozilla/Mutex.h"
 #include "nsISupportsImpl.h"
 
 // This refcounting specialization allows the implementing class to supply a
 // method to call when there is only one reference left. This allows for media
 // IPDL actors to be refcounted normally, and when the last reference is the
 // IPDL actor, we can choose to self destroy.
-#define MEDIA_INLINE_DECL_THREADSAFE_REFCOUNTING_META(_class, _decl, _destroy, \
-                                                      _last_ref, ...)          \
- public:                                                                       \
-  _decl(MozExternalRefCountType) AddRef(void) __VA_ARGS__ {                    \
-    MOZ_ASSERT_TYPE_OK_FOR_REFCOUNTING(_class)                                 \
-    MOZ_ASSERT(int32_t(mRefCnt) >= 0, "illegal refcnt");                       \
-    nsrefcnt count = ++mRefCnt;                                                \
-    NS_LOG_ADDREF(this, count, #_class, sizeof(*this));                        \
-    return (nsrefcnt)count;                                                    \
-  }                                                                            \
-  _decl(MozExternalRefCountType) Release(void) __VA_ARGS__ {                   \
-    MOZ_ASSERT(int32_t(mRefCnt) > 0, "dup release");                           \
-    nsrefcnt count = --mRefCnt;                                                \
-    NS_LOG_RELEASE(this, count, #_class);                                      \
-    if (count == 0) {                                                          \
-      _destroy;                                                                \
-      return 0;                                                                \
-    }                                                                          \
-    if (count == 1) {                                                          \
-      _last_ref;                                                               \
-    }                                                                          \
-    return count;                                                              \
-  }                                                                            \
-  using HasThreadSafeRefCnt = std::true_type;                                  \
-                                                                               \
- protected:                                                                    \
-  ::mozilla::ThreadSafeAutoRefCnt mRefCnt;                                     \
-                                                                               \
+#define MEDIA_INLINE_DECL_THREADSAFE_REFCOUNTING_META(       \
+    _class, _decl, _mutex, _destroy, _last_ref, ...)         \
+ public:                                                     \
+  _decl(MozExternalRefCountType) AddRef(void) __VA_ARGS__ {  \
+    ::mozilla::MutexAutoLock lock(_mutex);                   \
+    MOZ_ASSERT_TYPE_OK_FOR_REFCOUNTING(_class)               \
+    MOZ_ASSERT(int32_t(mRefCnt) >= 0, "illegal refcnt");     \
+    nsrefcnt count = ++mRefCnt;                              \
+    NS_LOG_ADDREF(this, count, #_class, sizeof(*this));      \
+    return (nsrefcnt)count;                                  \
+  }                                                          \
+  _decl(MozExternalRefCountType) Release(void) __VA_ARGS__ { \
+    {                                                        \
+      ::mozilla::MutexAutoLock lock(_mutex);                 \
+      MOZ_ASSERT(int32_t(mRefCnt) > 0, "dup release");       \
+      nsrefcnt count = --mRefCnt;                            \
+      NS_LOG_RELEASE(this, count, #_class);                  \
+      if (count == 1) {                                      \
+        _last_ref;                                           \
+        return count;                                        \
+      }                                                      \
+      if (count > 1) {                                       \
+        return count;                                        \
+      }                                                      \
+    }                                                        \
+    _destroy;                                                \
+    return 0;                                                \
+  }                                                          \
+  using HasThreadSafeRefCnt = std::true_type;                \
+                                                             \
+ protected:                                                  \
+  RefPtr<_class> TakeRefLocked() MOZ_REQUIRES(_mutex) {      \
+    ++mRefCnt;                                               \
+    return RefPtr{dont_AddRef(this)};                        \
+  }                                                          \
+                                                             \
+  ::nsAutoRefCnt mRefCnt;                                    \
+                                                             \
  public:
 
 #endif  // include_dom_media_ipc_MediaActorUtils_h
