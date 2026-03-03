@@ -73,12 +73,7 @@ void LogMessage::set_aec_debug_filename(const char* filename) {
 
 namespace {
 
-// By default, release builds don't log, debug builds at info level
-#if !defined(NDEBUG)
-constexpr LoggingSeverity kDefaultLoggingSeverity = LS_INFO;
-#else
-constexpr LoggingSeverity kDefaultLoggingSeverity = LS_NONE;
-#endif
+constexpr LoggingSeverity kDefaultLoggingSeverity = LS_VERBOSE;
 
 // Note: `g_min_sev` and `g_dbg_sev` can be changed while running.
 LoggingSeverity g_min_sev = kDefaultLoggingSeverity;
