@@ -71,12 +71,14 @@ PacketBuffer::InsertResult PacketBuffer::InsertPacket(
   size_t index = seq_num % buffer_.size();
 
   if (!first_packet_received_) {
+    RTC_LOG(LS_INFO) << "AO first packet seq=" << seq_num;
     first_seq_num_ = seq_num;
     first_packet_received_ = true;
   } else if (AheadOf(first_seq_num_, seq_num)) {
     // If we have explicitly cleared past this packet then it's old,
     // don't insert it, just silently ignore it.
     if (is_cleared_to_first_seq_num_) {
+      RTC_LOG(LS_INFO) << "AO ahead of and cleared to first_seq=" << first_seq_num_ << " seq=" << seq_num;
       return result;
     }
 
@@ -94,6 +96,7 @@ PacketBuffer::InsertResult PacketBuffer::InsertPacket(
   if (buffer_[index] != nullptr) {
     // Duplicate packet, just delete the payload.
     if (buffer_[index]->seq_num() == packet->seq_num()) {
+      RTC_LOG(LS_INFO) << "AO duplicate packet seq=" << seq_num;
       return result;
     }
 
@@ -292,6 +295,7 @@ std::vector<std::unique_ptr<PacketBuffer::Packet>> PacketBuffer::FindFrames(
         ++tested_packets;
 
         if (!is_h264_descriptor) {
+          RTC_LOG(LS_INFO) << "AO find frames, is not h264 desc";
           if (buffer_[start_index] == nullptr ||
               buffer_[start_index]->is_first_packet_in_frame()) {
             full_frame_found = buffer_[start_index] != nullptr;
@@ -302,8 +306,10 @@ std::vector<std::unique_ptr<PacketBuffer::Packet>> PacketBuffer::FindFrames(
         if (is_h264_descriptor) {
           const auto* h264_header = std::get_if<RTPVideoHeaderH264>(
               &buffer_[start_index]->video_header.video_type_header);
-          if (!h264_header)
+          if (!h264_header) {
+            RTC_LOG(LS_INFO) << "AO find frames, not header, count=" << found_frames.size();
             return found_frames;
+	  }
 
           for (const NaluInfo& nalu : h264_header->nalus) {
             if (nalu.type == H264::NaluType::kSps) {
@@ -328,10 +334,12 @@ std::vector<std::unique_ptr<PacketBuffer::Packet>> PacketBuffer::FindFrames(
               idr_height = buffer_[start_index]->height();
             }
           }
+          RTC_LOG(LS_INFO) << "AO find frames, h264 sps=" << has_h264_sps << " pps=" << has_h264_pps << " idr=" << has_h264_idr << " keyframe=" << is_h264_keyframe << " all_keyframe=" << sps_pps_idr_is_h264_keyframe_;
         }
 
-        if (tested_packets == buffer_.size())
+        if (tested_packets == buffer_.size()) {
           break;
+	}
 
         start_index = start_index > 0 ? start_index - 1 : buffer_.size() - 1;
 
@@ -384,6 +392,7 @@ std::vector<std::unique_ptr<PacketBuffer::Packet>> PacketBuffer::FindFrames(
         // sequence numbers up until this point.
         if (!is_h264_keyframe && missing_packets_.upper_bound(start_seq_num) !=
                                      missing_packets_.begin()) {
+          RTC_LOG(LS_INFO) << "AO find frames, not key frame, count=" << found_frames.size();
           return found_frames;
         }
       }
@@ -411,6 +420,7 @@ std::vector<std::unique_ptr<PacketBuffer::Packet>> PacketBuffer::FindFrames(
     }
     ++seq_num;
   }
+  RTC_LOG(LS_INFO) << "AO find frames, after loop, count=" << found_frames.size();
   return found_frames;
 }
 
