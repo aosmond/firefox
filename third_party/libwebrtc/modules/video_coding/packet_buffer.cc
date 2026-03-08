@@ -420,7 +420,7 @@ std::vector<std::unique_ptr<PacketBuffer::Packet>> PacketBuffer::FindFrames(
     }
     ++seq_num;
   }
-  RTC_LOG(LS_INFO) << "AO find frames, after loop, count=" << found_frames.size();
+  RTC_LOG(LS_INFO) << "AO find frames seq " << seq_num << ", after loop, count=" << found_frames.size();
   return found_frames;
 }
 
