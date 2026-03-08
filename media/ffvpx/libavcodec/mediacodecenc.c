@@ -504,6 +504,10 @@ static av_cold int mediacodec_init(AVCodecContext *avctx)
     ff_AMediaFormat_setInt32(format, "frame-rate", s->fps);
     ff_AMediaFormat_setInt32(format, "i-frame-interval", gop);
 
+    if (avctx->codec_id == AV_CODEC_ID_H264) {
+      ff_AMediaFormat_setInt32(format, "prepend-sps-pps-to-idr-frames", 1);
+    }
+
     ret = ff_AMediaCodecProfile_getProfileFromAVCodecContext(avctx);
     if (ret > 0) {
         av_log(avctx, AV_LOG_DEBUG, "set profile to 0x%x\n", ret);
