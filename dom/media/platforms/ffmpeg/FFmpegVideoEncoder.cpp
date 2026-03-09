@@ -767,7 +767,6 @@ FFmpegVideoEncoder<LIBAV_VER>::ToMediaRawData(AVPacket* aPacket) {
 
   const bool isH264 =
       mCodecID == AV_CODEC_ID_H264 && mConfig.mCodecSpecific.is<H264Specific>();
-  size_t packetSize = static_cast<size_t>(aPacket->size);
 
 #ifdef MOZ_WIDGET_ANDROID
   FFMPEGV_LOG(
@@ -786,21 +785,17 @@ FFmpegVideoEncoder<LIBAV_VER>::ToMediaRawData(AVPacket* aPacket) {
   if (data->mKeyframe && !extradataResult.isOk() && mLastExtraData && isH264 &&
       mConfig.mCodecSpecific.as<H264Specific>().mFormat ==
           H264BitStreamFormat::ANNEXB) {
-    size_t extraDataSize = mLastExtraData->Length();
-    if (!writer->SetSize(extraDataSize + packetSize)) {
-      return Err(MediaResult(NS_ERROR_OUT_OF_MEMORY,
-                             "fail to allocate MediaRawData buffer"_ns));
-    }
-    memcpy(writer->Data(), mLastExtraData->Elements(), extraDataSize);
-    memcpy(writer->Data() + extraDataSize, aPacket->data, packetSize);
-  } else
-#endif
-  {
-    if (!writer->Append(aPacket->data, packetSize)) {
+    if (!writer->Append(mLastExtraData->Elements(), mLastExtraData->Length())) {
       return Err(
           MediaResult(NS_ERROR_OUT_OF_MEMORY,
-                      "fail to append packet to MediaRawData buffer"_ns));
+                      "fail to append extradata to MediaRawData buffer"_ns));
     }
+  }
+#endif
+
+  if (!writer->Append(aPacket->data, aPacket->size)) {
+    return Err(MediaResult(NS_ERROR_OUT_OF_MEMORY,
+                           "fail to append packet to MediaRawData buffer"_ns));
   }
 
   auto creationResult = CreateMediaRawData(aPacket);
