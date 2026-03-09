@@ -785,8 +785,7 @@ FFmpegVideoEncoder<LIBAV_VER>::ToMediaRawData(AVPacket* aPacket) {
   if (data->mKeyframe && !extradataResult.isOk() && mLastExtraData && isH264 &&
       mConfig.mCodecSpecific.as<H264Specific>().mFormat ==
           H264BitStreamFormat::ANNEXB) {
-    RefPtr<MediaByteBuffer> extraData = AnnexB::ConvertAVCCExtraDataToAnnexB(mLastExtraData);
-    if (!writer->Append(extraData->Elements(), extraData->Length())) {
+    if (!writer->Append(mLastExtraData->Elements(), mLastExtraData->Length())) {
       return Err(
           MediaResult(NS_ERROR_OUT_OF_MEMORY,
                       "fail to append extradata to MediaRawData buffer"_ns));
@@ -865,10 +864,14 @@ FFmpegVideoEncoder<LIBAV_VER>::GetExtraData(AVPacket* aPacket) {
         MediaResult(NS_ERROR_NOT_AVAILABLE, "Extra data unnecessary"_ns));
   }
 
+  const bool wantAVCC = mConfig.mCodecSpecific.as<H264Specific>().mFormat ==
+                        H264BitStreamFormat::AVC;
+
   Span<const uint8_t> packetBuf(aPacket->data,
                                 static_cast<size_t>(aPacket->size));
   if (!mCodecName.Equals("libx264"_ns) && AnnexB::IsAnnexB(packetBuf)) {
-    auto extraData = AnnexB::ExtractExtraDataForAVCC(packetBuf);
+    auto extraData = wantAVCC ? AnnexB::ExtractExtraDataForAVCC(packetBuf)
+                              : AnnexB::ExtractExtraData(packetBuf);
     if (!extraData) {
       return Err(MediaResult(NS_ERROR_NOT_AVAILABLE,
                              "Extra data missing from packet"_ns));
@@ -889,8 +892,7 @@ FFmpegVideoEncoder<LIBAV_VER>::GetExtraData(AVPacket* aPacket) {
             mCodecName.get())));
   }
 
-  if (mConfig.mCodecSpecific.as<H264Specific>().mFormat !=
-      H264BitStreamFormat::AVC) {
+  if (!wantAVCC) {
     return Err(
         MediaResult(NS_ERROR_NOT_AVAILABLE, "Extra data unnecessary"_ns));
   }
