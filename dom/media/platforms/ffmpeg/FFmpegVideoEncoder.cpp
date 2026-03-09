@@ -785,7 +785,8 @@ FFmpegVideoEncoder<LIBAV_VER>::ToMediaRawData(AVPacket* aPacket) {
   if (data->mKeyframe && !extradataResult.isOk() && mLastExtraData && isH264 &&
       mConfig.mCodecSpecific.as<H264Specific>().mFormat ==
           H264BitStreamFormat::ANNEXB) {
-    if (!writer->Append(mLastExtraData->Elements(), mLastExtraData->Length())) {
+    RefPtr<MediaByteBuffer> extraData = AnnexB::ConvertAVCCExtraDataToAnnexB(mLastExtraData);
+    if (!writer->Append(extraData->Elements(), extraData->Length())) {
       return Err(
           MediaResult(NS_ERROR_OUT_OF_MEMORY,
                       "fail to append extradata to MediaRawData buffer"_ns));
