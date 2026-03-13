@@ -12,6 +12,7 @@ namespace mozilla {
 
 class PRemoteCDMChild;
 class PRemoteCDMParent;
+class RemoteCDMProxy;
 enum class RemoteMediaIn;
 
 class PRemoteCDMActor {
@@ -21,6 +22,8 @@ class PRemoteCDMActor {
   virtual PRemoteCDMChild* AsPRemoteCDMChild() { return nullptr; }
 
   virtual PRemoteCDMParent* AsPRemoteCDMParent() { return nullptr; }
+
+  virtual RemoteCDMProxy* AsRemoteCDMProxy() = 0;
 
   virtual RemoteMediaIn GetLocation() const = 0;
 };

@@ -18,7 +18,6 @@ PREPROCESSED_IPDL_SOURCES += [
 ]
 
 EXPORTS.mozilla += [
-    "MediaActorUtils.h",
     "PRemoteCDMActor.h",
     "RDDChild.h",
     "RDDParent.h",
@@ -27,6 +26,7 @@ EXPORTS.mozilla += [
     "RDDProcessManager.h",
     "RemoteCDMChild.h",
     "RemoteCDMParent.h",
+    "RemoteCDMProxy.h",
     "RemoteDecoderChild.h",
     "RemoteDecoderModule.h",
     "RemoteDecoderParent.h",
@@ -35,6 +35,7 @@ EXPORTS.mozilla += [
     "RemoteImageHolder.h",
     "RemoteMediaData.h",
     "RemoteMediaDataDecoder.h",
+    "RemoteMediaDataEncoder.h",
     "RemoteMediaDataEncoderChild.h",
     "RemoteMediaDataEncoderParent.h",
     "RemoteMediaManagerChild.h",
@@ -56,6 +57,7 @@ SOURCES += [
     "RemoteAudioDecoder.cpp",
     "RemoteCDMChild.cpp",
     "RemoteCDMParent.cpp",
+    "RemoteCDMProxy.cpp",
     "RemoteDecoderChild.cpp",
     "RemoteDecoderModule.cpp",
     "RemoteDecoderParent.cpp",
@@ -64,6 +66,7 @@ SOURCES += [
     "RemoteImageHolder.cpp",
     "RemoteMediaData.cpp",
     "RemoteMediaDataDecoder.cpp",
+    "RemoteMediaDataEncoder.cpp",
     "RemoteMediaDataEncoderChild.cpp",
     "RemoteMediaDataEncoderParent.cpp",
     "RemoteMediaManagerChild.cpp",
