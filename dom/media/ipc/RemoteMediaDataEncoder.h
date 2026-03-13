@@ -3,41 +3,30 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-#ifndef include_dom_media_ipc_RemoteMediaDataEncoderChild_h
-#define include_dom_media_ipc_RemoteMediaDataEncoderChild_h
-
-#include <functional>
+#ifndef include_dom_media_ipc_RemoteMediaDataEncoder_h
+#define include_dom_media_ipc_RemoteMediaDataEncoder_h
 
 #include "PlatformEncoderModule.h"
-#include "mozilla/MediaActorUtils.h"
-#include "mozilla/PRemoteEncoderChild.h"
+#include "mozilla/RemoteMediaDataEncoderChild.h"
 #include "mozilla/RemoteMediaManagerChild.h"
 #include "mozilla/ShmemRecycleAllocator.h"
 
 namespace mozilla {
 
-class RemoteMediaManagerChild;
-
-class RemoteMediaDataEncoderChild final
-    : public ShmemRecycleAllocator<RemoteMediaDataEncoderChild>,
-      public PRemoteEncoderChild,
-      public MediaDataEncoder {
+class RemoteMediaDataEncoder final : public MediaDataEncoder {
   friend class PRemoteEncoderChild;
 
  public:
-  MEDIA_INLINE_DECL_THREADSAFE_REFCOUNTING_META(RemoteMediaDataEncoderChild,
-                                                NS_IMETHOD_, delete(this),
-                                                MaybeDestroyActor(), final);
+  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(MediaDataEncoder, final);
 
-  RemoteMediaDataEncoderChild(nsCOMPtr<nsISerialEventTarget>&& aThread,
-                              RemoteMediaIn aLocation);
+  RemoteMediaDataEncoder(nsCOMPtr<nsISerialEventTarget>&& aThread,
+                         RemoteMediaIn aLocation);
 
   nsISerialEventTarget* GetManagerThread() const { return mThread; }
   RemoteMediaIn GetLocation() const { return mLocation; }
+  RemoteMediaDataEncoderChild* GetChild() const { return mChild; }
 
   RefPtr<PlatformEncoderModule::CreateEncoderPromise> Construct();
-
-  void ActorDestroy(ActorDestroyReason aWhy) override;
 
   // MediaDataEncoder
   RefPtr<MediaDataEncoder::InitPromise> Init() override;
@@ -55,15 +44,16 @@ class RemoteMediaDataEncoderChild final
   RefPtr<GenericPromise> SetBitrate(uint32_t aBitsPerSec) override;
 
  private:
-  virtual ~RemoteMediaDataEncoderChild();
+  virtual ~RemoteMediaDataEncoder();
   RemoteMediaManagerChild* GetManager();
 
-  virtual RefPtr<PRemoteEncoderChild::EncodePromise> DoSendEncode(
+  RefPtr<PRemoteEncoderChild::EncodePromise> DoSendEncode(
       const nsTArray<RefPtr<MediaData>>& aSamples, ShmemRecycleTicket* aTicket);
 
   void DoSendInit();
   void MaybeDestroyActor();
 
+  const RefPtr<RemoteMediaDataEncoderChild> mChild;
   const nsCOMPtr<nsISerialEventTarget> mThread;
   const RemoteMediaIn mLocation;
   bool mRemoteCrashed = false;
@@ -77,7 +67,7 @@ class RemoteMediaDataEncoderChild final
       mReconfigurePromise;
   MozPromiseHolder<mozilla::ShutdownPromise> mShutdownPromise;
 
-  mutable Mutex mMutex{"RemoteMediaDataEncoderChild"};
+  mutable Mutex mMutex{"RemoteMediaDataEncoder"};
 
   nsCString mHardwareAcceleratedReason MOZ_GUARDED_BY(mMutex);
   nsCString mDescription MOZ_GUARDED_BY(mMutex);
@@ -87,4 +77,4 @@ class RemoteMediaDataEncoderChild final
 
 }  // namespace mozilla
 
-#endif  // include_dom_media_ipc_RemoteMediaDataEncoderChild_h
+#endif  // include_dom_media_ipc_RemoteMediaDataEncoder_h

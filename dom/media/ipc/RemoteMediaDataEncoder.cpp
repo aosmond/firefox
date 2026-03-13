@@ -4,10 +4,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "RemoteMediaDataEncoderChild.h"
+#include "RemoteMediaDataEncoder.h"
 
 #include "RemoteDecodeUtils.h"
-#include "RemoteMediaManagerChild.h"
 #include "mozilla/dom/WebCodecsUtils.h"
 
 namespace mozilla {
@@ -15,70 +14,55 @@ namespace mozilla {
 extern LazyLogModule sPEMLog;
 
 #define AUTO_MARKER(var, postfix) \
-  AutoWebCodecsMarker var("RemoteMediaDataEncoderChild", postfix);
+  AutoWebCodecsMarker var("RemoteMediaDataEncoder", postfix);
 
 #define LOGE(fmt, ...)                           \
   MOZ_LOG_FMT(sPEMLog, mozilla::LogLevel::Error, \
-              "[RemoteMediaDataEncoderChild] {}: " fmt, __func__, __VA_ARGS__)
+              "[RemoteMediaDataEncoder] {}: " fmt, __func__, __VA_ARGS__)
 #define LOGW(fmt, ...)                             \
   MOZ_LOG_FMT(sPEMLog, mozilla::LogLevel::Warning, \
-              "[RemoteMediaDataEncoderChild] {}: " fmt, __func__, __VA_ARGS__)
+              "[RemoteMediaDataEncoder] {}: " fmt, __func__, __VA_ARGS__)
 #define LOGD(fmt, ...)                           \
   MOZ_LOG_FMT(sPEMLog, mozilla::LogLevel::Debug, \
-              "[RemoteMediaDataEncoderChild] {}: " fmt, __func__, __VA_ARGS__)
+              "[RemoteMediaDataEncoder] {}: " fmt, __func__, __VA_ARGS__)
 #define LOGV(fmt, ...)                             \
   MOZ_LOG_FMT(sPEMLog, mozilla::LogLevel::Verbose, \
-              "[RemoteMediaDataEncoderChild] {}: " fmt, __func__, __VA_ARGS__)
+              "[RemoteMediaDataEncoder] {}: " fmt, __func__, __VA_ARGS__)
 
-RemoteMediaDataEncoderChild::RemoteMediaDataEncoderChild(
+RemoteMediaDataEncoder::RemoteMediaDataEncoder(
     nsCOMPtr<nsISerialEventTarget>&& aThread, RemoteMediaIn aLocation)
-    : ShmemRecycleAllocator(this),
+    : mChild(MakeRefPtr<RemoteMediaDataEncoderChild>()),
       mThread(std::move(aThread)),
       mLocation(aLocation) {
-  LOGV("[{}]", fmt::ptr(this));
+  LOGV("[{}] child {}", fmt::ptr(this), fmt::ptr(mChild.get()));
 }
 
-RemoteMediaDataEncoderChild::~RemoteMediaDataEncoderChild() {
+RemoteMediaDataEncoder::~RemoteMediaDataEncoder() {
   LOGV("[{}]", fmt::ptr(this));
-}
-
-void RemoteMediaDataEncoderChild::MaybeDestroyActor() {
   // If this is the last reference, and we still have an actor, then we know
   // that the last reference is solely due to the IPDL reference. Dispatch to
   // the owning thread to delete that so that we can clean up.
   MutexAutoLock lock(mMutex);
   if (mNeedsShutdown) {
     mNeedsShutdown = false;
-    mThread->Dispatch(NS_NewRunnableFunction(__func__, [self = RefPtr{this}]() {
-      if (self->CanSend()) {
-        LOGD("[{}] destroying final self reference", fmt::ptr(self.get()));
-        self->Send__delete__(self);
+    mThread->Dispatch(NS_NewRunnableFunction(__func__, [child = RefPtr{mChild}]() {
+      if (child->CanSend()) {
+        LOGD("[{}] destroying final self reference", fmt::ptr(child.get()));
+        child->Send__delete__(child);
       }
     }));
   }
 }
 
-void RemoteMediaDataEncoderChild::ActorDestroy(ActorDestroyReason aWhy) {
-  LOGD("[{}]", fmt::ptr(this));
-
-  {
-    MutexAutoLock lock(mMutex);
-    mNeedsShutdown = false;
-  }
-
-  mRemoteCrashed = aWhy == ActorDestroyReason::AbnormalShutdown;
-  CleanupShmemRecycleAllocator();
-}
-
 RefPtr<PlatformEncoderModule::CreateEncoderPromise>
-RemoteMediaDataEncoderChild::Construct() {
+RemoteMediaDataEncoder::Construct() {
   {
     MutexAutoLock lock(mMutex);
-    mNeedsShutdown = CanSend();
+    mNeedsShutdown = mChild->CanSend();
   }
 
   LOGD("[{}] send", fmt::ptr(this));
-  SendConstruct()->Then(
+  mChild->SendConstruct()->Then(
       mThread, __func__,
       [self = RefPtr{this}](MediaResult aResult) {
         LOGD("[{}] Construct resolved code={}", fmt::ptr(self.get()),
@@ -101,11 +85,11 @@ RemoteMediaDataEncoderChild::Construct() {
   return mConstructPromise.Ensure(__func__);
 }
 
-void RemoteMediaDataEncoderChild::DoSendInit() {
+void RemoteMediaDataEncoder::DoSendInit() {
   MOZ_ASSERT(mHasConstructed);
 
   LOGD("[{}] Init send", fmt::ptr(this));
-  SendInit()->Then(
+  mChild->SendInit()->Then(
       mThread, __func__,
       [self = RefPtr{this}](EncodeInitResultIPDL&& aResponse) {
         if (aResponse.type() == EncodeInitResultIPDL::TMediaResult) {
@@ -138,7 +122,7 @@ void RemoteMediaDataEncoderChild::DoSendInit() {
       });
 }
 
-RefPtr<MediaDataEncoder::InitPromise> RemoteMediaDataEncoderChild::Init() {
+RefPtr<MediaDataEncoder::InitPromise> RemoteMediaDataEncoder::Init() {
   return InvokeAsync(
       mThread, __func__,
       [self = RefPtr{this}]() -> RefPtr<MediaDataEncoder::InitPromise> {
@@ -159,10 +143,9 @@ RefPtr<MediaDataEncoder::InitPromise> RemoteMediaDataEncoderChild::Init() {
       });
 }
 
-RefPtr<PRemoteEncoderChild::EncodePromise>
-RemoteMediaDataEncoderChild::DoSendEncode(
+RefPtr<PRemoteEncoderChild::EncodePromise> RemoteMediaDataEncoder::DoSendEncode(
     const nsTArray<RefPtr<MediaData>>& aSamples, ShmemRecycleTicket* aTicket) {
-  if (mRemoteCrashed) {
+  if (mChild->HasRemoteCrashed()) {
     LOGE("[{}] remote crashed", fmt::ptr(this));
     nsresult err = NS_ERROR_DOM_MEDIA_REMOTE_CRASHED_UTILITY_ERR;
     if (mLocation == RemoteMediaIn::GpuProcess ||
@@ -191,14 +174,14 @@ RemoteMediaDataEncoderChild::DoSendEncode(
 
     auto samples = MakeRefPtr<ArrayOfRemoteAudioData>();
     if (!samples->Fill(audioSamples, [&](size_t aSize) {
-          return AllocateBuffer(aSize, aTicket);
+          return mChild->AllocateBuffer(aSize, aTicket);
         })) {
       LOGE("[{}] buffer audio failed", fmt::ptr(this));
       return PRemoteEncoderChild::EncodePromise::CreateAndResolve(
           MediaResult(NS_ERROR_OUT_OF_MEMORY), __func__);
     }
     LOGD("[{}] send {} audio samples", fmt::ptr(this), audioSamples.Length());
-    return SendEncode(std::move(samples));
+    return mChild->SendEncode(std::move(samples));
   }
 
   if (type == MediaData::Type::VIDEO_DATA) {
@@ -217,7 +200,7 @@ RemoteMediaDataEncoderChild::DoSendEncode(
             sd, layers::Image::BuildSdbFlags::Default,
             Some(GetVideoBridgeSourceFromRemoteMediaIn(mLocation)),
             [&](uint32_t aBufferSize) {
-              ShmemBuffer buffer = AllocateBuffer(aBufferSize, aTicket);
+              ShmemBuffer buffer = mChild->AllocateBuffer(aBufferSize, aTicket);
               if (buffer.Valid()) {
                 return layers::MemoryOrShmem(std::move(buffer.Get()));
               }
@@ -241,19 +224,19 @@ RemoteMediaDataEncoderChild::DoSendEncode(
       }
     }
     LOGD("[{}] send {} video samples", fmt::ptr(this), videoSamples.Length());
-    return SendEncode(std::move(samples));
+    return mChild->SendEncode(std::move(samples));
   }
 
   return PRemoteEncoderChild::EncodePromise::CreateAndResolve(
       MediaResult(NS_ERROR_INVALID_ARG), __func__);
 }
 
-RefPtr<MediaDataEncoder::EncodePromise> RemoteMediaDataEncoderChild::Encode(
+RefPtr<MediaDataEncoder::EncodePromise> RemoteMediaDataEncoder::Encode(
     const MediaData* aSample) {
   return Encode(nsTArray<RefPtr<MediaData>>{const_cast<MediaData*>(aSample)});
 }
 
-RefPtr<MediaDataEncoder::EncodePromise> RemoteMediaDataEncoderChild::Encode(
+RefPtr<MediaDataEncoder::EncodePromise> RemoteMediaDataEncoder::Encode(
     nsTArray<RefPtr<MediaData>>&& aSamples) {
   return InvokeAsync(
       mThread, __func__,
@@ -266,7 +249,7 @@ RefPtr<MediaDataEncoder::EncodePromise> RemoteMediaDataEncoderChild::Encode(
             ->Then(
                 self->mThread, __func__,
                 [self, promise, ticket](EncodeResultIPDL&& aResponse) {
-                  self->ReleaseTicket(ticket);
+                  self->mChild->ReleaseTicket(ticket);
 
                   if (aResponse.type() == EncodeResultIPDL::TMediaResult) {
                     LOGD("[{}] Encode resolved, code={}", fmt::ptr(self.get()),
@@ -303,12 +286,12 @@ RefPtr<MediaDataEncoder::EncodePromise> RemoteMediaDataEncoderChild::Encode(
                   LOGV("[{}] Encode resolved, {} samples", fmt::ptr(self.get()),
                        samples.Length());
                   promise->Resolve(std::move(samples), __func__);
-                  self->SendReleaseTicket(encodeResponse.ticketId());
+                  self->mChild->SendReleaseTicket(encodeResponse.ticketId());
                 },
                 [self, promise,
                  ticket](const mozilla::ipc::ResponseRejectReason& aReason) {
                   LOGE("[{}] Encode ipc failed", fmt::ptr(self.get()));
-                  self->ReleaseTicket(ticket);
+                  self->mChild->ReleaseTicket(ticket);
                   RemoteMediaManagerChild::HandleRejectionError(
                       self->GetManager(), self->mLocation, aReason,
                       [promise](const MediaResult& aError) {
@@ -319,12 +302,12 @@ RefPtr<MediaDataEncoder::EncodePromise> RemoteMediaDataEncoderChild::Encode(
       });
 }
 
-RefPtr<MediaDataEncoder::EncodePromise> RemoteMediaDataEncoderChild::Drain() {
+RefPtr<MediaDataEncoder::EncodePromise> RemoteMediaDataEncoder::Drain() {
   return InvokeAsync(
       mThread, __func__,
       [self = RefPtr{this}]() -> RefPtr<MediaDataEncoder::EncodePromise> {
         LOGD("[{}] Drain send", fmt::ptr(self.get()));
-        self->SendDrain()->Then(
+        self->mChild->SendDrain()->Then(
             self->mThread, __func__,
             [self](EncodeResultIPDL&& aResponse) {
               if (aResponse.type() == EncodeResultIPDL::TMediaResult) {
@@ -358,7 +341,7 @@ RefPtr<MediaDataEncoder::EncodePromise> RemoteMediaDataEncoderChild::Drain() {
               LOGD("[{}] Drain resolved, {} samples", fmt::ptr(self.get()),
                    samples.Length());
               self->mDrainPromise.Resolve(std::move(samples), __func__);
-              self->SendReleaseTicket(encodeResponse.ticketId());
+              self->mChild->SendReleaseTicket(encodeResponse.ticketId());
             },
             [self](const mozilla::ipc::ResponseRejectReason& aReason) {
               LOGE("[{}] Drain ipc failed", fmt::ptr(self.get()));
@@ -373,14 +356,14 @@ RefPtr<MediaDataEncoder::EncodePromise> RemoteMediaDataEncoderChild::Drain() {
 }
 
 RefPtr<MediaDataEncoder::ReconfigurationPromise>
-RemoteMediaDataEncoderChild::Reconfigure(
+RemoteMediaDataEncoder::Reconfigure(
     const RefPtr<const EncoderConfigurationChangeList>& aConfigurationChanges) {
   return InvokeAsync(
       mThread, __func__,
       [self = RefPtr{this}, changes = RefPtr{aConfigurationChanges}]()
           -> RefPtr<MediaDataEncoder::ReconfigurationPromise> {
         LOGD("[{}] Reconfigure send", fmt::ptr(self.get()));
-        self->SendReconfigure(
+        self->mChild->SendReconfigure(
                 const_cast<EncoderConfigurationChangeList*>(changes.get()))
             ->Then(
                 self->mThread, __func__,
@@ -407,7 +390,7 @@ RemoteMediaDataEncoderChild::Reconfigure(
       });
 }
 
-RefPtr<mozilla::ShutdownPromise> RemoteMediaDataEncoderChild::Shutdown() {
+RefPtr<mozilla::ShutdownPromise> RemoteMediaDataEncoder::Shutdown() {
   {
     MutexAutoLock lock(mMutex);
     mNeedsShutdown = false;
@@ -417,13 +400,13 @@ RefPtr<mozilla::ShutdownPromise> RemoteMediaDataEncoderChild::Shutdown() {
       mThread, __func__,
       [self = RefPtr{this}]() -> RefPtr<mozilla::ShutdownPromise> {
         LOGD("[{}] Shutdown send", fmt::ptr(self.get()));
-        self->SendShutdown()->Then(
+        self->mChild->SendShutdown()->Then(
             self->mThread, __func__,
             [self](PRemoteEncoderChild::ShutdownPromise::ResolveOrRejectValue&&
                        aValue) {
               LOGD("[{}] Shutdown resolved", fmt::ptr(self.get()));
-              if (self->CanSend()) {
-                self->Send__delete__(self);
+              if (self->mChild->CanSend()) {
+                self->mChild->Send__delete__(self->mChild);
               }
               self->mShutdownPromise.Resolve(aValue.IsResolve(), __func__);
             });
@@ -431,13 +414,13 @@ RefPtr<mozilla::ShutdownPromise> RemoteMediaDataEncoderChild::Shutdown() {
       });
 }
 
-RefPtr<GenericPromise> RemoteMediaDataEncoderChild::SetBitrate(
+RefPtr<GenericPromise> RemoteMediaDataEncoder::SetBitrate(
     uint32_t aBitsPerSec) {
   return InvokeAsync(
       mThread, __func__,
       [self = RefPtr{this}, aBitsPerSec]() -> RefPtr<GenericPromise> {
         auto promise = MakeRefPtr<GenericPromise::Private>(__func__);
-        self->SendSetBitrate(aBitsPerSec)
+        self->mChild->SendSetBitrate(aBitsPerSec)
             ->Then(
                 self->mThread, __func__,
                 [promise](const nsresult& aRv) {
@@ -460,21 +443,21 @@ RefPtr<GenericPromise> RemoteMediaDataEncoderChild::SetBitrate(
       });
 }
 
-RemoteMediaManagerChild* RemoteMediaDataEncoderChild::GetManager() {
-  if (!CanSend()) {
+RemoteMediaManagerChild* RemoteMediaDataEncoder::GetManager() {
+  if (!mChild->CanSend()) {
     return nullptr;
   }
-  return static_cast<RemoteMediaManagerChild*>(Manager());
+  return static_cast<RemoteMediaManagerChild*>(mChild->Manager());
 }
 
-bool RemoteMediaDataEncoderChild::IsHardwareAccelerated(
+bool RemoteMediaDataEncoder::IsHardwareAccelerated(
     nsACString& aFailureReason) const {
   MutexAutoLock lock(mMutex);
   aFailureReason = mHardwareAcceleratedReason;
   return mIsHardwareAccelerated;
 }
 
-nsCString RemoteMediaDataEncoderChild::GetDescriptionName() const {
+nsCString RemoteMediaDataEncoder::GetDescriptionName() const {
   MutexAutoLock lock(mMutex);
   return mDescription;
 }
