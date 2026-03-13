@@ -24,7 +24,7 @@ class MediaKeys;
 
 class PMFCDMChild;
 class PMFMediaEngineChild;
-class RemoteCDMChild;
+class RemoteCDMProxy;
 class RemoteDecoderChild;
 class RemoteMediaDataEncoder;
 
@@ -72,7 +72,7 @@ class RemoteMediaManagerChild final
       const CreateDecoderParams& aParams, RemoteMediaIn aLocation);
   static RefPtr<PlatformDecoderModule::CreateDecoderPromise> CreateVideoDecoder(
       const CreateDecoderParams& aParams, RemoteMediaIn aLocation);
-  static RefPtr<RemoteCDMChild> CreateCDM(RemoteMediaIn aLocation,
+  static RefPtr<RemoteCDMProxy> CreateCDM(RemoteMediaIn aLocation,
                                           dom::MediaKeys* aKeys,
                                           const nsAString& aKeySystem,
                                           bool aDistinctiveIdentifierRequired,

@@ -13,7 +13,7 @@
 #include "PlatformDecoderModule.h"
 #include "PlatformEncoderModule.h"
 #include "RemoteAudioDecoder.h"
-#include "RemoteCDMChild.h"
+#include "RemoteCDMProxy.h"
 #include "RemoteMediaDataDecoder.h"
 #include "RemoteMediaDataEncoder.h"
 #include "RemoteVideoDecoder.h"
@@ -454,7 +454,7 @@ RemoteMediaManagerChild::CreateVideoDecoder(const CreateDecoderParams& aParams,
 }
 
 /* static */
-RefPtr<RemoteCDMChild> RemoteMediaManagerChild::CreateCDM(
+RefPtr<RemoteCDMProxy> RemoteMediaManagerChild::CreateCDM(
     RemoteMediaIn aLocation, dom::MediaKeys* aKeys, const nsAString& aKeySystem,
     bool aDistinctiveIdentifierRequired, bool aPersistentStateRequired) {
   MOZ_ASSERT(NS_IsMainThread());
@@ -481,9 +481,10 @@ RefPtr<RemoteCDMChild> RemoteMediaManagerChild::CreateCDM(
   RefPtr<GenericNonExclusivePromise> p = LaunchRDDProcessIfNeeded();
   LOG("Create CDM in %s", RemoteMediaInToStr(aLocation));
 
-  return MakeRefPtr<RemoteCDMChild>(
-      std::move(managerThread), std::move(p), aLocation, aKeys, aKeySystem,
-      aDistinctiveIdentifierRequired, aPersistentStateRequired);
+  return MakeRefPtr<RemoteCDMProxy>(std::move(managerThread),
+                                    std::move(p), aLocation, aKeys, aKeySystem,
+                                    aDistinctiveIdentifierRequired,
+                                    aPersistentStateRequired);
 }
 
 /* static */
@@ -511,13 +512,12 @@ RemoteMediaManagerChild::Construct(RefPtr<RemoteDecoderChild>&& aChild,
                   CreateAndReject(aResult, __func__);
             }
             if (params.mCDM) {
-              if (auto* cdmChild = params.mCDM->AsPRemoteCDMChild()) {
+              if (auto* cdm = params.mCDM->AsRemoteCDMProxy()) {
                 return PlatformDecoderModule::CreateDecoderPromise::
                     CreateAndResolve(
                         MakeRefPtr<EMEMediaDataDecoderProxy>(
                             params,
-                            MakeAndAddRef<RemoteMediaDataDecoder>(child),
-                            static_cast<RemoteCDMChild*>(cdmChild)),
+                            MakeAndAddRef<RemoteMediaDataDecoder>(child), cdm),
                         __func__);
               }
               return PlatformDecoderModule::CreateDecoderPromise::
