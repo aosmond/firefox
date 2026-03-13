@@ -26,7 +26,7 @@ class PMFCDMChild;
 class PMFMediaEngineChild;
 class RemoteCDMChild;
 class RemoteDecoderChild;
-class RemoteMediaDataEncoderChild;
+class RemoteMediaDataEncoder;
 
 enum class RemoteMediaIn {
   Unspecified,
@@ -81,8 +81,7 @@ class RemoteMediaManagerChild final
   static media::EncodeSupportSet Supports(RemoteMediaIn aLocation,
                                           CodecType aCodec);
   static RefPtr<PlatformEncoderModule::CreateEncoderPromise> InitializeEncoder(
-      RefPtr<RemoteMediaDataEncoderChild>&& aEncoder,
-      const EncoderConfig& aConfig);
+      RefPtr<RemoteMediaDataEncoder>&& aEncoder, const EncoderConfig& aConfig);
 
   // Can be called from any thread.
   static nsCOMPtr<nsISerialEventTarget> GetManagerThread();

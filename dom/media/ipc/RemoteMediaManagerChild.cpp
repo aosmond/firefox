@@ -15,7 +15,7 @@
 #include "RemoteAudioDecoder.h"
 #include "RemoteCDMChild.h"
 #include "RemoteMediaDataDecoder.h"
-#include "RemoteMediaDataEncoderChild.h"
+#include "RemoteMediaDataEncoder.h"
 #include "RemoteVideoDecoder.h"
 #include "VideoUtils.h"
 #include "mozilla/DataMutex.h"
@@ -612,8 +612,7 @@ EncodeSupportSet RemoteMediaManagerChild::Supports(RemoteMediaIn aLocation,
 
 /* static */ RefPtr<PlatformEncoderModule::CreateEncoderPromise>
 RemoteMediaManagerChild::InitializeEncoder(
-    RefPtr<RemoteMediaDataEncoderChild>&& aEncoder,
-    const EncoderConfig& aConfig) {
+    RefPtr<RemoteMediaDataEncoder>&& aEncoder, const EncoderConfig& aConfig) {
   RemoteMediaIn location = aEncoder->GetLocation();
 
   TrackSupport required;
@@ -678,7 +677,8 @@ RemoteMediaManagerChild::InitializeEncoder(
                           "Remote manager not available"),
               __func__);
         }
-        if (!manager->SendPRemoteEncoderConstructor(encoder, aConfig)) {
+        if (!manager->SendPRemoteEncoderConstructor(encoder->GetChild(),
+                                                    aConfig)) {
           LOG("Create encoder in %s failed, send failed",
               RemoteMediaInToStr(encoder->GetLocation()));
           return PlatformEncoderModule::CreateEncoderPromise::CreateAndReject(
