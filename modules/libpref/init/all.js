@@ -4251,3 +4251,21 @@ pref("general.smoothScroll", true, sticky);
 #if defined(MOZ_ARTIFACT_BUILDS) && defined(XP_MACOSX)
   pref("dom.ipc.processLaunch.useMacPlists", true);
 #endif
+
+pref("logging.FFmpegVideo", 5);
+pref("logging.FFmpegAudio", 5);
+pref("logging.FFmpegLib", 4);
+pref("logging.AndroidDecoderModule", 5);
+pref("logging.PlatformDecoderModule", 5);
+pref("logging.PlatformEncoderModule", 5);
+pref("logging.MediaDecoder", 5);
+pref("logging.MediaEncoder", 5);
+pref("logging.RemoteDecode", 5);
+pref("logging.MediaFormatReader", 5);
+pref("logging.WebCodecs", 5);
+pref("logging.EME", 5);
+pref("logging.AudioSinkWrapper", 4);   // gAudioSinkWrapperLog
+pref("logging.AudioStream", 4);        // gAudioStreamLog
+pref("logging.cubeb", 4);              // gCubebLog
+pref("logging.AudioSink", 4);          // gAudioSinkLog
+pref("logging.config.add_timestamp", true);
