@@ -401,8 +401,6 @@ GeckoMediaPluginService::GetThread(nsIThread** aThread) {
 nsresult GeckoMediaPluginService::GetThreadLocked(nsIThread** aThread) {
   MOZ_ASSERT(aThread);
 
-  mMutex.AssertCurrentThreadOwns();
-
   if (!mGMPThread) {
     // Don't allow the thread to be created after shutdown has started.
     if (mGMPThreadShutdown) {

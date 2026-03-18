@@ -52,7 +52,7 @@ class GeckoMediaPluginServiceChild : public GeckoMediaPluginService {
   void BeginShutdown();
 
  protected:
-  void InitializePlugins(nsISerialEventTarget*) override {
+  void InitializePlugins(nsISerialEventTarget*) MOZ_REQUIRES(mMutex) override {
     // Nothing to do here.
   }
 

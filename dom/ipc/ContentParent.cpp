@@ -1248,7 +1248,13 @@ mozilla::ipc::IPCResult ContentParent::RecvCreateGMPService() {
     return IPC_FAIL(this, "CreateEndpoints failed");
   }
 
-  if (!GMPServiceParent::Create(std::move(parent))) {
+  RefPtr<GeckoMediaPluginServiceParent> gmps(
+      GeckoMediaPluginServiceParent::GetSingleton());
+  if (!gmps) {
+    return IPC_FAIL(this, "GMP Service singleton already shutdown");
+  }
+
+  if (!gmps->CreateGMPServiceParent(std::move(parent))) {
     return IPC_FAIL(this, "GMPServiceParent::Create failed");
   }
 
