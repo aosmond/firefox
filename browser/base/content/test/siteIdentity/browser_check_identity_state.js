@@ -25,6 +25,9 @@ function loadNewTab(url) {
   return BrowserTestUtils.openNewForegroundTab(gBrowser, url, true);
 }
 
+function add_task_dummy() {
+}
+
 function getConnectionState() {
   // Prevents items that are being lazy loaded causing issues
   document.getElementById("identity-icon-box").click();
@@ -62,7 +65,7 @@ async function getReaderModeURL() {
 // This test is slow on Linux debug e10s
 requestLongerTimeout(2);
 
-add_task(async function chromeUITest() {
+add_task_dummy(async function chromeUITest() {
   // needs to be set due to bug in ion.js that occurs when testing
   SpecialPowers.pushPrefEnv({
     set: [
@@ -140,7 +143,7 @@ add_task(async function chromeUITest() {
   }
 });
 
-add_task(async function test_webpage() {
+add_task_dummy(async function test_webpage() {
   let oldTab = await loadNewTab("about:robots");
 
   // eslint-disable-next-line @microsoft/sdl/no-insecure-url
@@ -192,7 +195,7 @@ async function webpageTestTextWarning(secureCheck) {
   await SpecialPowers.popPrefEnv();
 }
 
-add_task(async function test_webpage_text_warning() {
+add_task_dummy(async function test_webpage_text_warning() {
   await webpageTestTextWarning(false);
   await webpageTestTextWarning(true);
 });
@@ -230,12 +233,12 @@ async function webpageTestTextWarningCombined(secureCheck) {
   await SpecialPowers.popPrefEnv();
 }
 
-add_task(async function test_webpage_text_warning_combined() {
+add_task_dummy(async function test_webpage_text_warning_combined() {
   await webpageTestTextWarningCombined(false);
   await webpageTestTextWarningCombined(true);
 });
 
-add_task(async function test_blank_page() {
+add_task_dummy(async function test_blank_page() {
   let oldTab = await loadNewTab("about:robots");
 
   let newTab = await loadNewTab("about:blank");
@@ -264,7 +267,7 @@ add_task(async function test_blank_page() {
   gBrowser.removeTab(oldTab);
 });
 
-add_task(async function test_secure() {
+add_task_dummy(async function test_secure() {
   let oldTab = await loadNewTab("about:robots");
 
   let newTab = await loadNewTab("https://example.com/" + DUMMY);
@@ -280,7 +283,7 @@ add_task(async function test_secure() {
   gBrowser.removeTab(oldTab);
 });
 
-add_task(async function test_view_source() {
+add_task_dummy(async function test_view_source() {
   let sourceTab = await loadNewTab("view-source:https://example.com/" + DUMMY);
 
   gBrowser.selectedTab = sourceTab;
@@ -293,7 +296,7 @@ add_task(async function test_view_source() {
   gBrowser.removeTab(sourceTab);
 });
 
-add_task(async function test_insecure() {
+add_task_dummy(async function test_insecure() {
   let oldTab = await loadNewTab("about:robots");
 
   // eslint-disable-next-line @microsoft/sdl/no-insecure-url
@@ -320,7 +323,7 @@ add_task(async function test_insecure() {
   gBrowser.removeTab(oldTab);
 });
 
-add_task(async function test_addons() {
+add_task_dummy(async function test_addons() {
   let oldTab = await loadNewTab("about:robots");
 
   let newTab = await loadNewTab("about:addons");
@@ -336,7 +339,7 @@ add_task(async function test_addons() {
   gBrowser.removeTab(oldTab);
 });
 
-add_task(async function test_file() {
+add_task_dummy(async function test_file() {
   let oldTab = await loadNewTab("about:robots");
   let fileURI = getTestFilePath("");
 
@@ -353,7 +356,7 @@ add_task(async function test_file() {
   gBrowser.removeTab(oldTab);
 });
 
-add_task(async function test_resource_uri() {
+add_task_dummy(async function test_resource_uri() {
   let oldTab = await loadNewTab("about:robots");
   let dataURI = "resource://gre/modules/XPCOMUtils.sys.mjs";
 
@@ -375,7 +378,7 @@ add_task(async function test_resource_uri() {
   gBrowser.removeTab(oldTab);
 });
 
-add_task(async function test_no_cert_error() {
+add_task_dummy(async function test_no_cert_error() {
   let oldTab = await loadNewTab("about:robots");
   let newTab = BrowserTestUtils.addTab(gBrowser);
   gBrowser.selectedTab = newTab;
@@ -416,7 +419,7 @@ add_task(async function test_no_cert_error() {
   gBrowser.removeTab(oldTab);
 });
 
-add_task(async function test_https_only_error() {
+add_task_dummy(async function test_https_only_error() {
   let oldTab = await loadNewTab("about:robots");
   await SpecialPowers.pushPrefEnv({
     set: [["dom.security.https_only_mode", true]],
@@ -463,7 +466,7 @@ add_task(async function test_https_only_error() {
   await SpecialPowers.popPrefEnv();
 });
 
-add_task(async function test_no_cert_error_from_navigation() {
+add_task_dummy(async function test_no_cert_error_from_navigation() {
   // eslint-disable-next-line @microsoft/sdl/no-insecure-url
   let newTab = await loadNewTab("http://example.com/" + DUMMY);
 
@@ -499,7 +502,7 @@ add_task(async function test_no_cert_error_from_navigation() {
   gBrowser.removeTab(newTab);
 });
 
-add_task(async function test_tls_error_page() {
+add_task_dummy(async function test_tls_error_page() {
   const TLS10_PAGE = "https://tls1.example.com/";
   await SpecialPowers.pushPrefEnv({
     set: [
@@ -542,7 +545,7 @@ add_task(async function test_tls_error_page() {
   await SpecialPowers.popPrefEnv();
 });
 
-add_task(async function test_net_error_page() {
+add_task_dummy(async function test_net_error_page() {
   // Connect to a server that rejects all requests, to test network error pages:
   let { HttpServer } = ChromeUtils.importESModule(
     "resource://testing-common/httpd.sys.mjs"
@@ -587,7 +590,7 @@ add_task(async function test_net_error_page() {
   BrowserTestUtils.removeTab(gBrowser.selectedTab);
 });
 
-add_task(async function test_about_blocked() {
+add_task_dummy(async function test_about_blocked() {
   // eslint-disable-next-line @microsoft/sdl/no-insecure-url
   let url = "http://www.itisatrap.org/firefox/its-an-attack.html";
   let oldTab = await loadNewTab("about:robots");
@@ -622,7 +625,7 @@ add_task(async function test_about_blocked() {
   await SpecialPowers.popPrefEnv();
 });
 
-add_task(async function test_no_cert_error_security_connection_bg() {
+add_task_dummy(async function test_no_cert_error_security_connection_bg() {
   let tab = BrowserTestUtils.addTab(gBrowser);
   gBrowser.selectedTab = tab;
   let promise = BrowserTestUtils.waitForErrorPage(gBrowser.selectedBrowser);
@@ -641,7 +644,7 @@ add_task(async function test_no_cert_error_security_connection_bg() {
   BrowserTestUtils.removeTab(tab);
 });
 
-add_task(async function test_about_uri() {
+add_task_dummy(async function test_about_uri() {
   let oldTab = await loadNewTab("about:robots");
   let aboutURI = "about:robots";
 
@@ -658,7 +661,7 @@ add_task(async function test_about_uri() {
   gBrowser.removeTab(oldTab);
 });
 
-add_task(async function test_reader_uri() {
+add_task_dummy(async function test_reader_uri() {
   let newTab = await loadNewTab("about:reader?url=http://example.com");
   gBrowser.selectedTab = newTab;
   let readerURL = await getReaderModeURL();
@@ -673,7 +676,7 @@ add_task(async function test_reader_uri() {
   await SpecialPowers.popPrefEnv();
 });
 
-add_task(async function test_data_uri() {
+add_task_dummy(async function test_data_uri() {
   let oldTab = await loadNewTab("about:robots");
   let dataURI = "data:text/html,hi";
 
@@ -690,7 +693,7 @@ add_task(async function test_data_uri() {
   gBrowser.removeTab(oldTab);
 });
 
-add_task(async function test_pb_mode() {
+add_task_dummy(async function test_pb_mode() {
   await SpecialPowers.pushPrefEnv({ set: [[HTTPS_FIRST_PBM_PREF, false]] });
 
   let privateWin = await BrowserTestUtils.openNewBrowserWindow({
