@@ -83,11 +83,14 @@ struct ScopedLayerTreeRegistration {
 };
 
 class CompositorBridgeParentBase : public PCompositorBridgeParent,
+                                   public CompositorController,
                                    public HostIPCAllocator,
                                    public mozilla::ipc::IShmemAllocator {
   friend class PCompositorBridgeParent;
 
  public:
+  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(CompositorBridgeParentBase, final);
+
   explicit CompositorBridgeParentBase(CompositorManagerParent* aManager);
 
   virtual bool SetTestSampleTime(const LayersId& aId, const TimeStamp& aTime) {
@@ -137,12 +140,6 @@ class CompositorBridgeParentBase : public PCompositorBridgeParent,
   bool AllocUnsafeShmem(size_t aSize, mozilla::ipc::Shmem* aShmem) override;
   bool DeallocShmem(mozilla::ipc::Shmem& aShmem) override;
 
-  NS_IMETHOD_(MozExternalRefCountType) AddRef() override {
-    return HostIPCAllocator::AddRef();
-  }
-  NS_IMETHOD_(MozExternalRefCountType) Release() override {
-    return HostIPCAllocator::Release();
-  }
   virtual bool IsRemote() const { return false; }
 
   virtual void NotifyMemoryPressure() {}
@@ -227,8 +224,7 @@ class CompositorBridgeParentBase : public PCompositorBridgeParent,
 MOZ_MAKE_ENUM_CLASS_BITWISE_OPERATORS(
     CompositorBridgeParentBase::TransformsToSkip)
 
-class CompositorBridgeParent final : public CompositorBridgeParentBase,
-                                     public CompositorController {
+class CompositorBridgeParent final : public CompositorBridgeParentBase {
   friend class CompositorThreadHolder;
   friend class InProcessCompositorSession;
   friend class gfx::GPUProcessManager;
@@ -236,13 +232,6 @@ class CompositorBridgeParent final : public CompositorBridgeParentBase,
   friend class PCompositorBridgeParent;
 
  public:
-  NS_IMETHOD_(MozExternalRefCountType) AddRef() override {
-    return CompositorBridgeParentBase::AddRef();
-  }
-  NS_IMETHOD_(MozExternalRefCountType) Release() override {
-    return CompositorBridgeParentBase::Release();
-  }
-
   explicit CompositorBridgeParent(CompositorManagerParent* aManager,
                                   CSSToLayoutDeviceScale aScale,
                                   const TimeDuration& aVsyncRate,

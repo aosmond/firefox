@@ -41,12 +41,7 @@ class ImageBridgeParent final : public PImageBridgeParent,
                     dom::ContentParentId aContentId);
 
  public:
-  NS_IMETHOD_(MozExternalRefCountType) AddRef() override {
-    return ISurfaceAllocator::AddRef();
-  }
-  NS_IMETHOD_(MozExternalRefCountType) Release() override {
-    return ISurfaceAllocator::Release();
-  }
+  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(ImageBridgeParent, final);
 
   /**
    * Creates the globals of ImageBridgeParent.

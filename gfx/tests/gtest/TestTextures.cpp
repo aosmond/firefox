@@ -41,10 +41,14 @@ namespace layers {
 
 class TestSurfaceAllocator final : public ISurfaceAllocator {
  public:
+  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(TestSurfaceAllocator, final);
+
   TestSurfaceAllocator() = default;
-  virtual ~TestSurfaceAllocator() = default;
 
   bool IsSameProcess() const override { return true; }
+
+ private:
+  virtual ~TestSurfaceAllocator() = default;
 };
 
 // fills the surface with values betwee 0 and 100.

@@ -163,6 +163,10 @@ class ContentCompositorBridgeParent final : public CompositorBridgeParentBase {
 
   bool IsRemote() const override { return true; }
 
+  void ScheduleRenderOnCompositorThread(wr::RenderReasons aReasons) override {
+    MOZ_ASSERT_UNREACHABLE("Unused for content!");
+  }
+
  private:
   // Private destructor, to discourage deletion outside of Release():
   virtual ~ContentCompositorBridgeParent();

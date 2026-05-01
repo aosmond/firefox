@@ -50,11 +50,11 @@ class VideoBridgeChild final : public PVideoBridgeChild,
       const dom::ContentParentId& aContentId, uint64_t aSerial,
       wr::MaybeExternalImageId& aExternalImageId) override;
 
-  // ClientIPCAllocator
+  // LayersIPCChannel
   base::ProcessId GetParentPid() const override { return OtherPid(); }
   nsISerialEventTarget* GetThread() const override { return mThread; }
   void CancelWaitForNotifyNotUsed(uint64_t aTextureId) override {
-    MOZ_ASSERT(false, "NO RECYCLING HERE");
+    MOZ_ASSERT_UNREACHABLE("NO RECYCLING HERE");
   }
 
   // ISurfaceAllocator
