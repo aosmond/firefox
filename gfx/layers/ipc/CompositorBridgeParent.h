@@ -159,12 +159,11 @@ class CompositorBridgeParentBase : public PCompositorBridgeParent,
   virtual already_AddRefed<PAPZCTreeManagerParent> AllocPAPZCTreeManagerParent(
       const LayersId& layersId) = 0;
 
-  virtual PTextureParent* AllocPTextureParent(
+  virtual already_AddRefed<PTextureParent> AllocPTextureParent(
       const SurfaceDescriptor& aSharedData, ReadLockDescriptor& aReadLock,
       const LayersBackend& aBackend, const TextureFlags& aTextureFlags,
       const uint64_t& aSerial,
       const MaybeExternalImageId& aExternalImageId) = 0;
-  virtual bool DeallocPTextureParent(PTextureParent* aActor) = 0;
 
   virtual already_AddRefed<PWebRenderBridgeParent> AllocPWebRenderBridgeParent(
       const PipelineId& pipelineId, const LayoutDeviceIntSize& aSize,
@@ -323,12 +322,11 @@ class CompositorBridgeParent final : public CompositorBridgeParentBase {
       const LayersId& aLayersId,
       PWebRenderBridgeParent::EndWheelTransactionResolver&& aResolve) override;
 
-  PTextureParent* AllocPTextureParent(
+  already_AddRefed<PTextureParent> AllocPTextureParent(
       const SurfaceDescriptor& aSharedData, ReadLockDescriptor& aReadLock,
       const LayersBackend& aLayersBackend, const TextureFlags& aFlags,
       const uint64_t& aSerial,
       const wr::MaybeExternalImageId& aExternalImageId) override;
-  bool DeallocPTextureParent(PTextureParent* actor) override;
 
   bool IsSameProcess() const override;
 

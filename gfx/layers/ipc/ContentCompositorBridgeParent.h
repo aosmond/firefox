@@ -128,13 +128,11 @@ class ContentCompositorBridgeParent final : public CompositorBridgeParentBase {
   void DidCompositeLocked(LayersId aId, const VsyncId& aVsyncId,
                           TimeStamp& aCompositeStart, TimeStamp& aCompositeEnd);
 
-  PTextureParent* AllocPTextureParent(
+  already_AddRefed<PTextureParent> AllocPTextureParent(
       const SurfaceDescriptor& aSharedData, ReadLockDescriptor& aReadLock,
       const LayersBackend& aLayersBackend, const TextureFlags& aFlags,
       const uint64_t& aSerial,
       const wr::MaybeExternalImageId& aExternalImageId) override;
-
-  bool DeallocPTextureParent(PTextureParent* actor) override;
 
   bool IsSameProcess() const override;
 

@@ -1778,17 +1778,13 @@ CompositorBridgeParent::GetGeckoContentControllerForRoot(
   return state ? state->mController.get() : nullptr;
 }
 
-PTextureParent* CompositorBridgeParent::AllocPTextureParent(
+already_AddRefed<PTextureParent> CompositorBridgeParent::AllocPTextureParent(
     const SurfaceDescriptor& aSharedData, ReadLockDescriptor& aReadLock,
     const LayersBackend& aLayersBackend, const TextureFlags& aFlags,
     const uint64_t& aSerial, const wr::MaybeExternalImageId& aExternalImageId) {
   return TextureHost::CreateIPDLActor(
       this, aSharedData, std::move(aReadLock), aLayersBackend, aFlags,
       mCompositorManager->GetContentId(), aSerial, aExternalImageId);
-}
-
-bool CompositorBridgeParent::DeallocPTextureParent(PTextureParent* actor) {
-  return TextureHost::DestroyIPDLActor(actor);
 }
 
 bool CompositorBridgeParent::IsSameProcess() const {

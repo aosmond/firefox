@@ -388,7 +388,8 @@ ContentCompositorBridgeParent::~ContentCompositorBridgeParent() {
   MOZ_ASSERT(XRE_GetAsyncIOEventTarget());
 }
 
-PTextureParent* ContentCompositorBridgeParent::AllocPTextureParent(
+already_AddRefed<PTextureParent>
+ContentCompositorBridgeParent::AllocPTextureParent(
     const SurfaceDescriptor& aSharedData, ReadLockDescriptor& aReadLock,
     const LayersBackend& aLayersBackend, const TextureFlags& aFlags,
     const uint64_t& aSerial, const wr::MaybeExternalImageId& aExternalImageId) {
@@ -398,11 +399,6 @@ PTextureParent* ContentCompositorBridgeParent::AllocPTextureParent(
   return TextureHost::CreateIPDLActor(
       this, aSharedData, std::move(aReadLock), aLayersBackend, aFlags,
       mCompositorManager->GetContentId(), aSerial, aExternalImageId);
-}
-
-bool ContentCompositorBridgeParent::DeallocPTextureParent(
-    PTextureParent* actor) {
-  return TextureHost::DestroyIPDLActor(actor);
 }
 
 bool ContentCompositorBridgeParent::IsSameProcess() const {
