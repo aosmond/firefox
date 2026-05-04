@@ -41,6 +41,9 @@ class GMPChild : public PGMPChild {
   bool SetMacSandboxInfo(bool aAllowWindowServer);
 #endif
 
+  void DestroyTimer(GMPTimerChild* aTimerChild);
+  void DestroyStorage(GMPStorageChild* aStorageChild);
+
  private:
   friend class GMPContentChild;
 
@@ -54,12 +57,6 @@ class GMPChild : public PGMPChild {
 
   mozilla::ipc::IPCResult RecvStartPlugin(const nsString& aAdapter);
   mozilla::ipc::IPCResult RecvPreloadLibs(const nsCString& aLibs);
-
-  PGMPTimerChild* AllocPGMPTimerChild();
-  bool DeallocPGMPTimerChild(PGMPTimerChild* aActor);
-
-  PGMPStorageChild* AllocPGMPStorageChild();
-  bool DeallocPGMPStorageChild(PGMPStorageChild* aActor);
 
   void GMPContentChildActorDestroy(GMPContentChild* aGMPContentChild);
 
