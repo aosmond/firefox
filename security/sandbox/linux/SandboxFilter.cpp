@@ -2035,9 +2035,13 @@ class RDDSandboxPolicy final : public SandboxPolicyCommon {
       case __NR_getrusage:
         return Allow();
 
-      // Required by FFmpeg
+      // Required by libnuma for FFmpeg
       case __NR_get_mempolicy:
         return Allow();
+
+      // Required by libnuma for FFmpeg
+      case __NR_set_mempolicy:
+        return Error(ENOSYS);
 
       case __NR_ioctl: {
         Arg<unsigned long> request(1);
@@ -2095,6 +2099,7 @@ class RDDSandboxPolicy final : public SandboxPolicyCommon {
         // Mesa attempts to use them to optimize performance; often
         // this involves passing other threads' tids, which we can't
         // safely allow, but maybe a future Mesa version could fix that.
+        // Also sched_setaffinity is required by libnuma for FFmpeg.
       case __NR_sched_getaffinity:
       case __NR_sched_setaffinity:
       case __NR_sched_getparam:
