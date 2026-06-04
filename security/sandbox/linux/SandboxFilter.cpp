@@ -2035,6 +2035,10 @@ class RDDSandboxPolicy final : public SandboxPolicyCommon {
       case __NR_getrusage:
         return Allow();
 
+      // Required by FFmpeg
+      case __NR_get_mempolicy:
+        return Allow();
+
       case __NR_ioctl: {
         Arg<unsigned long> request(1);
         auto shifted_type = request & kIoctlTypeMask;
