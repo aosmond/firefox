@@ -12280,11 +12280,7 @@
 
 - name: media.gpu-process-encoder
   type: RelaxedAtomicBool
-#ifdef NIGHTLY_BUILD
-  value: @IS_XP_WIN@
-#else
   value: false
-#endif
   mirror: always
 
 - name: media.ffvpx-hw.enabled
