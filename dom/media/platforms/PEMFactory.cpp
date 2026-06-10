@@ -122,6 +122,14 @@ void PEMFactory::InitRddPEMs() {
   }
 #endif
 
+#ifdef XP_WIN
+  if (StaticPrefs::media_use_remote_encoder_video() &&
+      StaticPrefs::media_wmf_enabled() &&
+      StaticPrefs::media_rdd_wmf_enabled()) {
+    mCurrentPEMs.AppendElement(new WMFEncoderModule());
+  }
+#endif
+
 #ifdef MOZ_FFVPX_AUDIOONLY
   if (StaticPrefs::media_use_remote_encoder_audio() &&
       StaticPrefs::media_ffmpeg_encoder_enabled() &&
