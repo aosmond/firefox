@@ -115,6 +115,42 @@ static MOZ_ALWAYS_INLINE xsimd::batch<uint8_t, Arch> LoadRemainderRGB_SIMD(
 }
 
 template <class Arch>
+  requires std::same_as<Arch, xsimd::avx2>
+static MOZ_ALWAYS_INLINE xsimd::batch<uint8_t, Arch> LoadRemainderRGB_SIMD(
+    const uint8_t* aSrc, size_t aLength) {
+  // Load aLength (1-8) packed RGB pixels (3-24 bytes) contiguously without
+  // reading past the valid source bytes; the low lane holds the first 16 bytes.
+  if (aLength <= 4) {
+    return _mm256_castsi128_si256(
+        LoadRemainderRGB_SIMD<xsimd::sse2>(aSrc, aLength));
+  }
+  if (aLength == 5) {
+    // 15 bytes: bytes 0-11, then 12-13, then 14.
+    __m128i lo = _mm_unpacklo_epi64(
+        _mm_loadl_epi64(reinterpret_cast<const __m128i*>(aSrc)),
+        _mm_cvtsi32_si128(*reinterpret_cast<const uint32_t*>(aSrc + 8)));
+    lo = _mm_insert_epi16(lo, *reinterpret_cast<const uint16_t*>(aSrc + 12), 6);
+    lo = _mm_insert_epi8(lo, aSrc[14], 14);
+    return _mm256_castsi128_si256(lo);
+  }
+  // aLength 6-8: low lane is a full 16-byte load, high lane is the remainder.
+  __m128i lo = _mm_loadu_si128(reinterpret_cast<const __m128i*>(aSrc));
+  __m128i hi;
+  if (aLength == 6) {
+    // Bytes 16-17.
+    hi = _mm_cvtsi32_si128(*reinterpret_cast<const uint16_t*>(aSrc + 16));
+  } else if (aLength == 7) {
+    // Bytes 16-20.
+    hi = _mm_cvtsi32_si128(*reinterpret_cast<const uint32_t*>(aSrc + 16));
+    hi = _mm_insert_epi8(hi, aSrc[20], 4);
+  } else {
+    // Bytes 16-23.
+    hi = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(aSrc + 16));
+  }
+  return _mm256_set_m128i(hi, lo);
+}
+
+template <class Arch>
   requires std::same_as<Arch, xsimd::sse2>
 static MOZ_ALWAYS_INLINE xsimd::batch<uint16_t, Arch> ExtractAlpha_SIMD(
     const xsimd::batch<uint8_t, Arch>& aSrc,
