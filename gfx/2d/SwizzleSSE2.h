@@ -28,6 +28,8 @@ static MOZ_ALWAYS_INLINE xsimd::batch<uint8_t, Arch> LoadRemainder_SIMD(
       }
       aSrc += 4 * 4;
       aLength -= 4;
+    } else {
+      px2 = _mm_setzero_si128();
     }
   }
   if (aLength >= 2) {
