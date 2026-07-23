@@ -170,6 +170,17 @@ static MOZ_ALWAYS_INLINE xsimd::batch<uint16_t, Arch> ExtractAlpha_SIMD(
 }
 
 template <class Arch>
+  requires std::same_as<Arch, xsimd::sse2>
+static MOZ_ALWAYS_INLINE xsimd::batch<uint16_t, Arch> PremultiplySwapRB_SIMD(
+    const xsimd::batch<uint16_t, Arch>& aRb) {
+  // Swap R<->B by exchanging the adjacent 16-bit words in each pixel with a
+  // word shuffle, matching the hand-written original. SSE2 has no byte shuffle,
+  // so the portable 32-bit rotate would otherwise lower to a 3-op shift/or.
+  return _mm_shufflehi_epi16(
+      _mm_shufflelo_epi16(aRb, _MM_SHUFFLE(2, 3, 0, 1)), _MM_SHUFFLE(2, 3, 0, 1));
+}
+
+template <class Arch>
   requires std::same_as<Arch, xsimd::sse2> || std::same_as<Arch, xsimd::ssse3>
 static MOZ_ALWAYS_INLINE xsimd::batch<uint32_t, Arch> UnpremultiplyLookup_SIMD(
     const xsimd::batch<uint8_t, Arch>& aSrc,

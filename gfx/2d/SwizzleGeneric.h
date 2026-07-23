@@ -155,6 +155,17 @@ void MOZ_ALWAYS_INLINE Swizzle_SIMD(const uint8_t* aSrc, int32_t aSrcGap,
       aSrc, aSrcGap, aDst, aDstGap, aSize);
 }
 
+// Swap the R and B channels held in each pixel's rb lanes (exchange the two
+// adjacent 16-bit words). The portable form is a 16-bit rotate of each 32-bit
+// lane, which lowers to rev32 on NEON and (v)pshufb on AVX2; SSE2 specializes
+// it to a word shuffle (SwizzleSSE2.h) to avoid a 3-op shift/or.
+template <class Arch>
+static MOZ_ALWAYS_INLINE xsimd::batch<uint16_t, Arch> PremultiplySwapRB_SIMD(
+    const xsimd::batch<uint16_t, Arch>& aRb) {
+  auto rb32 = xsimd::bitwise_cast<uint32_t>(aRb);
+  return xsimd::bitwise_cast<uint16_t>((rb32 << 16) | (rb32 >> 16));
+}
+
 // Premultiply a vector of pixels providing swaps and opaquifying.
 template <class Arch, bool aSwapRB, bool aOpaqueAlpha>
 static MOZ_ALWAYS_INLINE xsimd::batch<uint8_t, Arch> PremultiplyVector_SIMD(
@@ -184,12 +195,9 @@ static MOZ_ALWAYS_INLINE xsimd::batch<uint8_t, Arch> PremultiplyVector_SIMD(
   rb = (rb + (rb >> 8)) >> 8;
   ga = xsimd::fma(ga, a16, xsimd::batch<uint16_t, Arch>(0xFF));
   ga = (ga + (ga >> 8)) >> 8;
-  // Swap R and B by exchanging the two channels held in each pixel's rb lanes
-  // (a 16-bit rotate of each 32-bit lane), avoiding a byte shuffle which has no
-  // vectorized form on 32-bit NEON.
+  // Swap R and B (see PremultiplySwapRB_SIMD).
   if constexpr (aSwapRB) {
-    auto rb32 = xsimd::bitwise_cast<uint32_t>(rb);
-    rb = xsimd::bitwise_cast<uint16_t>((rb32 << 16) | (rb32 >> 16));
+    rb = PremultiplySwapRB_SIMD<Arch>(rb);
   }
   // Recombine the two channels back into each 16-bit lane.
   auto px = xsimd::bitwise_cast<uint8_t>(rb | (ga << 8));
