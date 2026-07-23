@@ -1011,3 +1011,171 @@ TEST(Moz2D, UnpackRowRGB24Sweep)
   CheckUnpackRowSweep(SurfaceFormat::B8G8R8X8);
   CheckUnpackRowSweep(SurfaceFormat::X8R8G8B8);
 }
+
+class Moz2D_SwizzleBench : public ::testing::Test {
+ public:
+  static constexpr int32_t kWidth = 513;
+  static constexpr int32_t kGap = 0;
+  static constexpr int32_t kStride = kWidth * 4 + kGap;
+  static constexpr int32_t kHeight = 512;
+  static constexpr int32_t kBufLen = kStride * kHeight;
+
+  Moz2D_SwizzleBench() = default;
+  ~Moz2D_SwizzleBench() = default;
+
+  void SetUp() final {
+    mSrc = MakeUniqueFallible<uint8_t[]>(kBufLen);
+    if (!mSrc) {
+      return;
+    }
+    mDst = MakeUniqueFallible<uint8_t[]>(kBufLen);
+    if (!mDst) {
+      mSrc.reset();
+      return;
+    }
+    memset(mSrc.get(), 0x2A, kBufLen);
+    memset(mDst.get(), 0x0, kBufLen);
+  }
+
+  bool Swizzle(SwizzleOp aOp, SurfaceFormat aSrcFormat,
+               SurfaceFormat aDstFormat, SwizzleArch aArch) {
+    if (!mSrc || !mDst) {
+      return false;
+    }
+
+    SwizzleRowFn func = RowFnFor(aOp, aSrcFormat, aDstFormat, aArch);
+    if (!func) {
+      return false;
+    }
+
+    int32_t srcStride = BytesPerPixel(aSrcFormat) * kWidth + kGap;
+    int32_t dstStride = BytesPerPixel(aDstFormat) * kWidth + kGap;
+    MOZ_ASSERT(srcStride <= kStride);
+    MOZ_ASSERT(dstStride <= kStride);
+
+    uint8_t* src = mSrc.get();
+    uint8_t* dst = mDst.get();
+    for (int32_t i = 0; i < kHeight; ++i) {
+      func(src, dst, kWidth);
+      src += srcStride;
+      dst += dstStride;
+    }
+    return true;
+  }
+
+  void TearDown() final {
+    mSrc.reset();
+    mDst.reset();
+  }
+
+ private:
+  UniquePtr<uint8_t[]> mSrc;
+  UniquePtr<uint8_t[]> mDst;
+};
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Unpack_RGB_BGRX_Fallback,
+                  [this]() -> bool {
+                    return Swizzle(SwizzleOp::Copy, SurfaceFormat::R8G8B8,
+                                   SurfaceFormat::B8G8R8X8,
+                                   SwizzleArch::eFallback);
+                  });
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Unpack_RGB_BGRX_NEON, [this]() -> bool {
+  return Swizzle(SwizzleOp::Copy, SurfaceFormat::R8G8B8,
+                 SurfaceFormat::B8G8R8X8, SwizzleArch::eNEON);
+});
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Unpack_RGB_BGRX_SSSE3, [this]() -> bool {
+  return Swizzle(SwizzleOp::Copy, SurfaceFormat::R8G8B8,
+                 SurfaceFormat::B8G8R8X8, SwizzleArch::eSSSE3);
+});
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Unpack_RGB_BGRX_AVX2, [this]() -> bool {
+  return Swizzle(SwizzleOp::Copy, SurfaceFormat::R8G8B8,
+                 SurfaceFormat::B8G8R8X8, SwizzleArch::eAVX2);
+});
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Swizzle_RGBA_BGRX_Fallback,
+                  [this]() -> bool {
+                    return Swizzle(SwizzleOp::Copy, SurfaceFormat::R8G8B8A8,
+                                   SurfaceFormat::B8G8R8X8,
+                                   SwizzleArch::eFallback);
+                  });
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Swizzle_RGBA_BGRX_NEON, [this]() -> bool {
+  return Swizzle(SwizzleOp::Copy, SurfaceFormat::R8G8B8A8,
+                 SurfaceFormat::B8G8R8X8, SwizzleArch::eNEON);
+});
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Swizzle_RGBA_BGRX_SSE2, [this]() -> bool {
+  return Swizzle(SwizzleOp::Copy, SurfaceFormat::R8G8B8A8,
+                 SurfaceFormat::B8G8R8X8, SwizzleArch::eSSE2);
+});
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Swizzle_RGBA_BGRX_SSSE3,
+                  [this]() -> bool {
+                    return Swizzle(SwizzleOp::Copy, SurfaceFormat::R8G8B8A8,
+                                   SurfaceFormat::B8G8R8X8,
+                                   SwizzleArch::eSSSE3);
+                  });
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Swizzle_RGBA_BGRX_AVX2, [this]() -> bool {
+  return Swizzle(SwizzleOp::Copy, SurfaceFormat::R8G8B8A8,
+                 SurfaceFormat::B8G8R8X8, SwizzleArch::eAVX2);
+});
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Premultiply_RGBA_BGRA_Fallback,
+                  [this]() -> bool {
+                    return Swizzle(
+                        SwizzleOp::Premultiply, SurfaceFormat::R8G8B8A8,
+                        SurfaceFormat::B8G8R8A8, SwizzleArch::eFallback);
+                  });
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Premultiply_RGBA_BGRA_NEON,
+                  [this]() -> bool {
+                    return Swizzle(SwizzleOp::Premultiply,
+                                   SurfaceFormat::R8G8B8A8,
+                                   SurfaceFormat::B8G8R8A8, SwizzleArch::eNEON);
+                  });
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Premultiply_RGBA_BGRA_SSE2,
+                  [this]() -> bool {
+                    return Swizzle(SwizzleOp::Premultiply,
+                                   SurfaceFormat::R8G8B8A8,
+                                   SurfaceFormat::B8G8R8A8, SwizzleArch::eSSE2);
+                  });
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Premultiply_RGBA_BGRA_AVX2,
+                  [this]() -> bool {
+                    return Swizzle(SwizzleOp::Premultiply,
+                                   SurfaceFormat::R8G8B8A8,
+                                   SurfaceFormat::B8G8R8A8, SwizzleArch::eAVX2);
+                  });
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Unpremultiply_RGBA_BGRA_Fallback,
+                  [this]() -> bool {
+                    return Swizzle(
+                        SwizzleOp::Unpremultiply, SurfaceFormat::R8G8B8A8,
+                        SurfaceFormat::B8G8R8A8, SwizzleArch::eFallback);
+                  });
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Unpremultiply_RGBA_BGRA_NEON,
+                  [this]() -> bool {
+                    return Swizzle(SwizzleOp::Unpremultiply,
+                                   SurfaceFormat::R8G8B8A8,
+                                   SurfaceFormat::B8G8R8A8, SwizzleArch::eNEON);
+                  });
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Unpremultiply_RGBA_BGRA_SSE2,
+                  [this]() -> bool {
+                    return Swizzle(SwizzleOp::Unpremultiply,
+                                   SurfaceFormat::R8G8B8A8,
+                                   SurfaceFormat::B8G8R8A8, SwizzleArch::eSSE2);
+                  });
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Unpremultiply_RGBA_BGRA_AVX2,
+                  [this]() -> bool {
+                    return Swizzle(SwizzleOp::Unpremultiply,
+                                   SurfaceFormat::R8G8B8A8,
+                                   SurfaceFormat::B8G8R8A8, SwizzleArch::eAVX2);
+                  });
