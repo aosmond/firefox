@@ -202,7 +202,7 @@ void PremultiplyRow_AVX2(const uint8_t*, uint8_t*, int32_t);
 #  define PREMULTIPLY_ROW_AVX2(aSrcFormat, aDstFormat)            \
     FORMAT_CASE_ROW(                                              \
         aSrcFormat, aDstFormat,                                   \
-        PremultiplyRow_SSE2<ShouldSwapRB(aSrcFormat, aDstFormat), \
+        PremultiplyRow_AVX2<ShouldSwapRB(aSrcFormat, aDstFormat), \
                             ShouldForceOpaque(aSrcFormat, aDstFormat)>)
 
 template <bool aSwapRB>
