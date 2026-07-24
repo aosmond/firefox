@@ -198,21 +198,6 @@ bool GetActualReadFormats(GLContext* gl, GLenum destFormat, GLenum destType,
   }
 }
 
-void SwapRAndBComponents(DataSourceSurface* surf) {
-  DataSourceSurface::MappedSurface map;
-  if (!surf->Map(DataSourceSurface::MapType::READ_WRITE, &map)) {
-    MOZ_ASSERT(false, "SwapRAndBComponents: Failed to map surface.");
-    return;
-  }
-  MOZ_ASSERT(map.mStride >= 0);
-
-  // Swap the R and B channels in place (BGRA <-> RGBA).
-  SwizzleData(map.mData, map.mStride, SurfaceFormat::B8G8R8A8, map.mData,
-              map.mStride, SurfaceFormat::R8G8B8A8, surf->GetSize());
-
-  surf->Unmap();
-}
-
 static int CalcRowStride(int width, int pixelSize, int alignment) {
   MOZ_ASSERT(alignment);
 
@@ -378,37 +363,6 @@ void ReadPixelsIntoDataSurface(GLContext* gl, DataSourceSurface* dest) {
                        dest->GetFormat());
 }
 
-already_AddRefed<gfx::DataSourceSurface> YInvertImageSurface(
-    gfx::DataSourceSurface* aSurf, uint32_t aStride) {
-  RefPtr<DataSourceSurface> temp = Factory::CreateDataSourceSurfaceWithStride(
-      aSurf->GetSize(), aSurf->GetFormat(), aStride);
-  if (NS_WARN_IF(!temp)) {
-    return nullptr;
-  }
-
-  DataSourceSurface::MappedSurface map;
-  if (!temp->Map(DataSourceSurface::MapType::WRITE, &map)) {
-    return nullptr;
-  }
-
-  RefPtr<DrawTarget> dt = Factory::CreateDrawTargetForData(
-      BackendType::CAIRO, map.mData, temp->GetSize(), map.mStride,
-      temp->GetFormat());
-  if (!dt) {
-    temp->Unmap();
-    return nullptr;
-  }
-
-  dt->SetTransform(Matrix::Scaling(1.0, -1.0) *
-                   Matrix::Translation(0.0, aSurf->GetSize().height));
-  Rect rect(0, 0, aSurf->GetSize().width, aSurf->GetSize().height);
-  dt->DrawSurface(
-      aSurf, rect, rect, DrawSurfaceOptions(),
-      DrawOptions(1.0, CompositionOp::OP_SOURCE, AntialiasMode::NONE));
-  temp->Unmap();
-  return temp.forget();
-}
-
 already_AddRefed<DataSourceSurface> ReadBackSurface(GLContext* gl,
                                                     GLuint aTexture,
                                                     bool aYInvert,
@@ -442,21 +396,36 @@ already_AddRefed<DataSourceSurface> ReadBackSurface(GLContext* gl,
     gl->fPixelStorei(LOCAL_GL_PACK_ALIGNMENT, 4);
   }
 
-  DataSourceSurface::ScopedMap map(surf, DataSourceSurface::READ);
-  gl->fGetTexImage(LOCAL_GL_TEXTURE_2D, 0, LOCAL_GL_RGBA,
-                   LOCAL_GL_UNSIGNED_BYTE, map.GetData());
+  // The texture is read as RGBA into our B8G8R8A8 surface. Convert to the
+  // requested channel order (a R<->B swap for R8G8B8A8/R8G8B8X8) and, when
+  // requested, flip vertically -- folding both into a single in-place pass.
+  const bool swapRB =
+      aFormat == SurfaceFormat::R8G8B8A8 || aFormat == SurfaceFormat::R8G8B8X8;
+  const SurfaceFormat dstFormat =
+      swapRB ? SurfaceFormat::R8G8B8A8 : SurfaceFormat::B8G8R8A8;
 
-  if (currentPackAlignment != 4) {
-    gl->fPixelStorei(LOCAL_GL_PACK_ALIGNMENT, currentPackAlignment);
+  bool ok = true;
+  {
+    DataSourceSurface::ScopedMap map(surf, DataSourceSurface::READ_WRITE);
+    gl->fGetTexImage(LOCAL_GL_TEXTURE_2D, 0, LOCAL_GL_RGBA,
+                     LOCAL_GL_UNSIGNED_BYTE, map.GetData());
+
+    if (currentPackAlignment != 4) {
+      gl->fPixelStorei(LOCAL_GL_PACK_ALIGNMENT, currentPackAlignment);
+    }
+
+    if (aYInvert) {
+      ok = SwizzleYFlipData(map.GetData(), map.GetStride(),
+                            SurfaceFormat::B8G8R8A8, map.GetData(),
+                            map.GetStride(), dstFormat, size);
+    } else if (swapRB) {
+      ok = SwizzleData(map.GetData(), map.GetStride(), SurfaceFormat::B8G8R8A8,
+                       map.GetData(), map.GetStride(), dstFormat, size);
+    }
   }
 
-  if (aFormat == SurfaceFormat::R8G8B8A8 ||
-      aFormat == SurfaceFormat::R8G8B8X8) {
-    SwapRAndBComponents(surf);
-  }
-
-  if (aYInvert) {
-    surf = YInvertImageSurface(surf, map.GetStride());
+  if (!ok) {
+    return nullptr;
   }
 
   return surf.forget();
