@@ -30,6 +30,10 @@ UNIFIED_SOURCES += [
     "TestYUVtoRGB32.cpp",
 ]
 
+SOURCES += [
+    "SwizzleGeneric.cpp",
+]
+
 if CONFIG["OS_TARGET"] != "Android":
     UNIFIED_SOURCES += [
         "TestRect.cpp",
@@ -77,6 +81,7 @@ LOCAL_INCLUDES += [
     "/gfx/qcms",
     "/gfx/thebes",
     "/layout/base",
+    "/third_party/xsimd/include",
 ]
 
 FINAL_LIBRARY = "xul-gtest"
