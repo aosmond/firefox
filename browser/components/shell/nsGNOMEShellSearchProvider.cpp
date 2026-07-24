@@ -8,6 +8,7 @@
 #include "base/message_loop.h"  // for MessageLoop
 #include "base/task.h"          // for NewRunnableMethod, etc
 #include "mozilla/gfx/2D.h"
+#include "mozilla/gfx/Swizzle.h"
 #include "nsComponentManagerUtils.h"
 #include "nsIIOService.h"
 #include "nsIURI.h"
@@ -77,13 +78,12 @@ static UniquePtr<uint8_t[]> SurfaceToPackedRGBA(DataSourceSurface* aSurface) {
     return nullptr;
   }
 
-  // Convert BGRA to RGBA
-  uint32_t* aSrc = (uint32_t*)map.mData;
-  uint32_t* aDst = (uint32_t*)imageBuffer.get();
-  for (int i = 0; i < size.width * size.height; i++, aDst++, aSrc++) {
-    *aDst = *aSrc & 0xff00ff00;
-    *aDst |= (*aSrc & 0xff) << 16;
-    *aDst |= (*aSrc & 0xff0000) >> 16;
+  // Convert BGRA to RGBA into the packed output buffer.
+  if (!SwizzleData(map.mData, map.mStride, SurfaceFormat::B8G8R8A8,
+                   imageBuffer.get(), size.width * 4, SurfaceFormat::R8G8B8A8,
+                   size)) {
+    aSurface->Unmap();
+    return nullptr;
   }
 
   aSurface->Unmap();

@@ -952,13 +952,9 @@ void nsPNGEncoder::ConvertHostARGBRow(const uint8_t* aSrc, uint8_t* aDest,
 
 void nsPNGEncoder::StripAlpha(const uint8_t* aSrc, uint8_t* aDest,
                               uint32_t aPixelWidth) {
-  for (uint32_t x = 0; x < aPixelWidth; x++) {
-    const uint8_t* pixelIn = &aSrc[x * 4];
-    uint8_t* pixelOut = &aDest[x * 3];
-    pixelOut[0] = pixelIn[0];
-    pixelOut[1] = pixelIn[1];
-    pixelOut[2] = pixelIn[2];
-  }
+  gfx::SwizzleData(aSrc, aPixelWidth * 4, gfx::SurfaceFormat::R8G8B8A8, aDest,
+                   aPixelWidth * 3, gfx::SurfaceFormat::R8G8B8,
+                   gfx::IntSize(aPixelWidth, 1));
 }
 
 // nsPNGEncoder::WarningCallback
