@@ -181,6 +181,21 @@ static MOZ_ALWAYS_INLINE xsimd::batch<uint16_t, Arch> PremultiplySwapRB_SIMD(
 }
 
 template <class Arch>
+  requires std::same_as<Arch, xsimd::sse2>
+static MOZ_ALWAYS_INLINE xsimd::batch<uint8_t, Arch> SwizzleSwapRB_SIMD(
+    const xsimd::batch<uint8_t, Arch>& aPx) {
+  // Swap R<->B (bytes 0 and 2 of each pixel) with a 32-bit rotate + masks rather
+  // than a byte permute. SSE2 has no pshufb, so xsimd's portable byte shuffle
+  // emulates it via unpack/pshuflw/pshufhw/packuswb -- 7 ops all on the single
+  // shuffle port. The shift/mask/or form spreads across ports 0/1/5 and matches
+  // the code clang auto-vectorizes the scalar fallback into.
+  auto x = xsimd::bitwise_cast<uint32_t>(aPx);
+  auto rb = ((x << 16) | (x >> 16)) & xsimd::batch<uint32_t, Arch>(0x00FF00FFu);
+  auto ga = x & xsimd::batch<uint32_t, Arch>(0xFF00FF00u);
+  return xsimd::bitwise_cast<uint8_t>(rb | ga);
+}
+
+template <class Arch>
   requires std::same_as<Arch, xsimd::sse2> || std::same_as<Arch, xsimd::ssse3>
 static MOZ_ALWAYS_INLINE xsimd::batch<uint32_t, Arch> UnpremultiplyLookup_SIMD(
     const xsimd::batch<uint8_t, Arch>& aSrc,

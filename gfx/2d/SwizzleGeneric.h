@@ -120,6 +120,20 @@ struct SwizzleVectorSwapRbMask {
   }
 };
 
+// Swap the R and B bytes within each pixel (exchange byte 0 and byte 2 of each
+// 32-bit lane). The portable form is a byte shuffle, which lowers to a single
+// (v)pshufb on SSSE3/AVX2 and tbl on NEON. SSE2 has no byte shuffle, so it
+// specializes this to a 32-bit rotate + masks (SwizzleSSE2.h): xsimd's portable
+// byte shuffle would otherwise emulate the permute with
+// unpack/pshuflw/pshufhw/packuswb -- 7 ops all bound to the single shuffle port.
+template <class Arch>
+static MOZ_ALWAYS_INLINE xsimd::batch<uint8_t, Arch> SwizzleSwapRB_SIMD(
+    const xsimd::batch<uint8_t, Arch>& aPx) {
+  constexpr auto swapRbMask =
+      xsimd::make_batch_constant<uint8_t, SwizzleVectorSwapRbMask, Arch>();
+  return xsimd::shuffle(aPx, aPx, swapRbMask);
+}
+
 // Swizzle a vector of pixels providing swaps and opaquifying.
 template <class Arch, bool aSwapRB, bool aOpaqueAlpha>
 static MOZ_ALWAYS_INLINE xsimd::batch<uint8_t, Arch> SwizzleVector_SIMD(
@@ -127,9 +141,7 @@ static MOZ_ALWAYS_INLINE xsimd::batch<uint8_t, Arch> SwizzleVector_SIMD(
   auto px = aSrc;
   // Swap R and B.
   if constexpr (aSwapRB) {
-    constexpr auto swapRbMask =
-        xsimd::make_batch_constant<uint8_t, SwizzleVectorSwapRbMask, Arch>();
-    px = xsimd::shuffle(px, px, swapRbMask);
+    px = SwizzleSwapRB_SIMD<Arch>(px);
   }
   // Force alpha to 255 if necessary.
   if constexpr (aOpaqueAlpha) {
