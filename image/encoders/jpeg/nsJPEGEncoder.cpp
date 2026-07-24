@@ -7,6 +7,7 @@
 #include "gfxColor.h"
 #include "mozilla/CheckedInt.h"
 #include "mozilla/UniquePtrExtensions.h"
+#include "mozilla/gfx/Swizzle.h"
 #include "nsStreamUtils.h"
 #include "nsString.h"
 #include "prprf.h"
@@ -386,14 +387,9 @@ nsJPEGEncoder::CloseWithStatus(nsresult aStatus) { return Close(); }
 //    See gfx/cairo/cairo/src/cairo-png.c
 void nsJPEGEncoder::ConvertHostARGBRow(const uint8_t* aSrc, uint8_t* aDest,
                                        uint32_t aPixelWidth) {
-  for (uint32_t x = 0; x < aPixelWidth; x++) {
-    const uint32_t& pixelIn = ((const uint32_t*)(aSrc))[x];
-    uint8_t* pixelOut = &aDest[x * 3];
-
-    pixelOut[0] = (pixelIn & 0xff0000) >> 16;
-    pixelOut[1] = (pixelIn & 0x00ff00) >> 8;
-    pixelOut[2] = (pixelIn & 0x0000ff) >> 0;
-  }
+  gfx::SwizzleData(aSrc, aPixelWidth * 4, gfx::SurfaceFormat::B8G8R8A8, aDest,
+                   aPixelWidth * 3, gfx::SurfaceFormat::R8G8B8,
+                   gfx::IntSize(aPixelWidth, 1));
 }
 
 /**
