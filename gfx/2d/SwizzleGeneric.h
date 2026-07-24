@@ -51,8 +51,25 @@ static MOZ_ALWAYS_INLINE void ProcessChunk_SIMD(const uint8_t*& aSrc,
                                                 int32_t aRemainder) {
   static constexpr int32_t batchBytes = xsimd::batch<uint8_t, Arch>::size;
 
-  // Process all pixel chunks as one vector.
-  for (const uint8_t* end = aSrc + aAlignedRow; aSrc < end;) {
+  const uint8_t* end = aSrc + aAlignedRow;
+  // Process two vectors per iteration. This gives the compiler two independent
+  // dependency chains to fill the execution ports and halves the loop/branch
+  // overhead per pixel, matching what it does when auto-vectorizing the scalar
+  // fallback.
+  const uint8_t* end2 = aSrc + (aAlignedRow & ~(2 * batchBytes - 1));
+  while (aSrc < end2) {
+    auto px0 = xsimd::batch<uint8_t, Arch>::load_unaligned(aSrc);
+    auto px1 = xsimd::batch<uint8_t, Arch>::load_unaligned(aSrc + batchBytes);
+    px0 = Op(px0);
+    px1 = Op(px1);
+    px0.store_unaligned(aDst);
+    px1.store_unaligned(aDst + batchBytes);
+    aSrc += 2 * batchBytes;
+    aDst += 2 * batchBytes;
+  }
+
+  // Process a trailing full vector, if the aligned row was an odd multiple.
+  if (aSrc < end) {
     auto px = xsimd::batch<uint8_t, Arch>::load_unaligned(aSrc);
     px = Op(px);
     px.store_unaligned(aDst);
