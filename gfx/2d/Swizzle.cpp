@@ -498,13 +498,24 @@ SwizzleRowFn PremultiplyRow(SurfaceFormat aSrcFormat, SurfaceFormat aDstFormat,
  */
 
 // Generate a table of 8.16 fixed-point reciprocals representing 1/alpha.
+// This generates a table of 8.16 fixed-point reciprocals representing 1/alpha,
+// identical to the scalar fallback's sUnpremultiplyTable (0xFF00FF / alpha).
+// The full reciprocal can need up to 24 bits, so it does not fit in a single
+// 16-bit lane; UnpremultiplyVector_SSE2 splits each entry into a high and low
+// 16-bit half at runtime and computes an exact (channel * reciprocal) >> 16
+// with two 16-bit multiplies. A previous implementation squeezed the reciprocal
+// into 16 bits by scaling it down (by 8 or 0x100), which lost precision and
+// rounded down by 1 LSB on a subset of anti-aliased / alpha pixels, making
+// getImageData() differ by CPU architecture (x86 SSE2 vs scalar/NEON). Using
+// the full reciprocal makes the SSE2 output bit-identical to the scalar/NEON
+// paths.
 #define UNPREMULQ(x) (0xFF00FFU / (x))
 #define UNPREMULQ_2(x) UNPREMULQ(x), UNPREMULQ((x) + 1)
 #define UNPREMULQ_4(x) UNPREMULQ_2(x), UNPREMULQ_2((x) + 2)
 #define UNPREMULQ_8(x) UNPREMULQ_4(x), UNPREMULQ_4((x) + 4)
 #define UNPREMULQ_16(x) UNPREMULQ_8(x), UNPREMULQ_8((x) + 8)
 #define UNPREMULQ_32(x) UNPREMULQ_16(x), UNPREMULQ_16((x) + 16)
-static const uint32_t sUnpremultiplyTable[256] = {0,
+extern const uint32_t sUnpremultiplyTable[256] = {0,
                                                   UNPREMULQ(1),
                                                   UNPREMULQ_2(2),
                                                   UNPREMULQ_4(4),
