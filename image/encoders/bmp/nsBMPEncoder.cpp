@@ -8,6 +8,7 @@
 #include "mozilla/CheckedInt.h"
 #include "mozilla/EndianUtils.h"
 #include "mozilla/UniquePtrExtensions.h"
+#include "mozilla/gfx/Swizzle.h"
 #include "nsCRT.h"
 #include "nsStreamUtils.h"
 #include "nsString.h"
@@ -426,27 +427,14 @@ nsBMPEncoder::CloseWithStatus(nsresult aStatus) { return Close(); }
 void nsBMPEncoder::ConvertHostARGBRow(const uint8_t* aSrc,
                                       const UniquePtr<uint8_t[]>& aDest,
                                       uint32_t aPixelWidth) {
-  uint16_t bytes = BytesPerPixel(mBMPInfoHeader.bpp);
-
   if (mBMPInfoHeader.bpp == 32) {
-    for (uint32_t x = 0; x < aPixelWidth; x++) {
-      const uint32_t& pixelIn = ((const uint32_t*)(aSrc))[x];
-      uint8_t* pixelOut = &aDest[x * bytes];
-
-      pixelOut[0] = (pixelIn & 0x00ff0000) >> 16;
-      pixelOut[1] = (pixelIn & 0x0000ff00) >> 8;
-      pixelOut[2] = (pixelIn & 0x000000ff) >> 0;
-      pixelOut[3] = (pixelIn & 0xff000000) >> 24;
-    }
+    gfx::SwizzleData(aSrc, aPixelWidth * 4, gfx::SurfaceFormat::B8G8R8A8,
+                     aDest.get(), aPixelWidth * 4, gfx::SurfaceFormat::R8G8B8A8,
+                     gfx::IntSize(aPixelWidth, 1));
   } else {
-    for (uint32_t x = 0; x < aPixelWidth; x++) {
-      const uint32_t& pixelIn = ((const uint32_t*)(aSrc))[x];
-      uint8_t* pixelOut = &aDest[x * bytes];
-
-      pixelOut[0] = (pixelIn & 0xff0000) >> 16;
-      pixelOut[1] = (pixelIn & 0x00ff00) >> 8;
-      pixelOut[2] = (pixelIn & 0x0000ff) >> 0;
-    }
+    gfx::SwizzleData(aSrc, aPixelWidth * 4, gfx::SurfaceFormat::B8G8R8A8,
+                     aDest.get(), aPixelWidth * 3, gfx::SurfaceFormat::R8G8B8,
+                     gfx::IntSize(aPixelWidth, 1));
   }
 }
 
