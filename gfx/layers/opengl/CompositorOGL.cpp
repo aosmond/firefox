@@ -159,14 +159,9 @@ bool AsyncReadbackBufferOGL::MapAndCopyInto(DataSourceSurface* aSurface,
   uint8_t* destData = map.GetData();
   int32_t destStride = map.GetStride();
   SurfaceFormat destFormat = aSurface->GetFormat();
-  for (int32_t destRow = 0; destRow < aReadSize.height; destRow++) {
-    // Turn srcData upside down during the copy.
-    int32_t srcRow = aReadSize.height - 1 - destRow;
-    const uint8_t* src = &srcData[srcRow * srcStride];
-    uint8_t* dest = &destData[destRow * destStride];
-    SwizzleData(src, srcStride, SurfaceFormat::R8G8B8A8, dest, destStride,
-                destFormat, IntSize(aReadSize.width, 1));
-  }
+  // Swizzle to the destination format and flip vertically in one pass.
+  SwizzleYFlipData(srcData, srcStride, SurfaceFormat::R8G8B8A8, destData,
+                   destStride, destFormat, aReadSize);
 
   mGL->fUnmapBuffer(LOCAL_GL_PIXEL_PACK_BUFFER);
 

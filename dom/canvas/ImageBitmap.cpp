@@ -381,20 +381,12 @@ static DataSourceSurface* FlipYDataSourceSurface(DataSourceSurface* aSurface) {
     return nullptr;
   }
 
-  const int bpp = BytesPerPixel(aSurface->GetFormat());
-  const IntSize srcSize = aSurface->GetSize();
-  uint8_t* srcBufferPtr = srcMap.GetData();
-  const uint32_t stride = srcMap.GetStride();
-
-  CheckedInt<uint32_t> copiedBytesPerRaw = CheckedInt<uint32_t>(stride);
-  if (!copiedBytesPerRaw.isValid()) {
+  const SurfaceFormat format = aSurface->GetFormat();
+  uint8_t* data = srcMap.GetData();
+  const int32_t stride = srcMap.GetStride();
+  if (NS_WARN_IF(!SwizzleYFlipData(data, stride, format, data, stride, format,
+                                   aSurface->GetSize()))) {
     return nullptr;
-  }
-
-  for (int i = 0; i < srcSize.height / 2; ++i) {
-    std::swap_ranges(srcBufferPtr + stride * i,
-                     srcBufferPtr + stride * i + srcSize.width * bpp,
-                     srcBufferPtr + stride * (srcSize.height - 1 - i));
   }
 
   return aSurface;
