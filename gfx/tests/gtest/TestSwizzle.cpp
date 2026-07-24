@@ -17,6 +17,24 @@ using namespace mozilla;
 using namespace mozilla::gfx;
 using namespace mozilla::image;
 
+namespace mozilla::gfx {
+
+// These are implementations of the row methods using SwizzleGeneric.h without
+// any architecture specific specialization. This allows us to test the generics
+// without any of the architecture specific template specializations and instead
+// use only the pure generics. This is useful to test because if a new target
+// doesn't use any specializations for the actual operations, we want to keep it
+// working.
+SwizzleRowFn PremultiplyRowGeneric(SurfaceFormat aSrcFormat,
+                                   SurfaceFormat aDstFormat, SwizzleArch aArch);
+SwizzleRowFn UnpremultiplyRowGeneric(SurfaceFormat aSrcFormat,
+                                     SurfaceFormat aDstFormat,
+                                     SwizzleArch aArch);
+SwizzleRowFn SwizzleRowGeneric(SurfaceFormat aSrcFormat,
+                               SurfaceFormat aDstFormat, SwizzleArch aArch);
+
+}  // namespace mozilla::gfx
+
 enum class SwizzleOp {
   Copy,
   YFlip,
@@ -34,7 +52,7 @@ constexpr int32_t kMaxSweepPixels = 8 * 3;
 // If the arch isn't available on this machine, the swizzle will just not
 // happen, and then we will try the next one.
 constexpr SwizzleArch kSwizzleArchs[] = {
-    SwizzleArch::eAny,  SwizzleArch::eFallback,
+    SwizzleArch::eAny,  SwizzleArch::eFallback, SwizzleArch::eGeneric,
 #ifdef USE_SSE2
     SwizzleArch::eSSE2, SwizzleArch::eSSSE3,    SwizzleArch::eAVX2,
 #endif
@@ -147,11 +165,11 @@ static SwizzleRowFn RowFnFor(SwizzleOp aOp, SurfaceFormat aSrc,
                              SurfaceFormat aDst, SwizzleArch aArch) {
   switch (aOp) {
     case SwizzleOp::Premultiply:
-      return PremultiplyRow(aSrc, aDst, aArch);
+      return PremultiplyRowGeneric(aSrc, aDst, aArch);
     case SwizzleOp::Unpremultiply:
-      return UnpremultiplyRow(aSrc, aDst, aArch);
+      return UnpremultiplyRowGeneric(aSrc, aDst, aArch);
     case SwizzleOp::Copy:
-      return SwizzleRow(aSrc, aDst, aArch);
+      return SwizzleRowGeneric(aSrc, aDst, aArch);
     default:
       MOZ_ASSERT_UNREACHABLE("Unhandled row SwizzleOp!");
       break;
@@ -1305,6 +1323,13 @@ MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Unpack_RGB_BGRX_Fallback,
                                       SwizzleArch::eFallback);
                   });
 
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Unpack_RGB_BGRX_Generic,
+                  [this]() -> bool {
+                    return SwizzleRow(SwizzleOp::Copy, SurfaceFormat::R8G8B8,
+                                      SurfaceFormat::B8G8R8X8,
+                                      SwizzleArch::eGeneric);
+                  });
+
 MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Unpack_RGB_BGRX_NEON, [this]() -> bool {
   return SwizzleRow(SwizzleOp::Copy, SurfaceFormat::R8G8B8,
                     SurfaceFormat::B8G8R8X8, SwizzleArch::eNEON);
@@ -1325,6 +1350,13 @@ MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Swizzle_RGBA_BGRX_Fallback,
                     return SwizzleData(SwizzleOp::Copy, SurfaceFormat::R8G8B8A8,
                                        SurfaceFormat::B8G8R8X8,
                                        SwizzleArch::eFallback);
+                  });
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Swizzle_RGBA_BGRX_Generic,
+                  [this]() -> bool {
+                    return SwizzleRow(SwizzleOp::Copy, SurfaceFormat::R8G8B8A8,
+                                      SurfaceFormat::B8G8R8X8,
+                                      SwizzleArch::eGeneric);
                   });
 
 MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Swizzle_RGBA_BGRX_NEON, [this]() -> bool {
@@ -1356,6 +1388,13 @@ MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Premultiply_RGBA_BGRA_Fallback,
                         SurfaceFormat::B8G8R8A8, SwizzleArch::eFallback);
                   });
 
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Premultiply_RGBA_BGRA_Generic,
+                  [this]() -> bool {
+                    return SwizzleRow(
+                        SwizzleOp::Premultiply, SurfaceFormat::R8G8B8A8,
+                        SurfaceFormat::B8G8R8A8, SwizzleArch::eGeneric);
+                  });
+
 MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Premultiply_RGBA_BGRA_NEON,
                   [this]() -> bool {
                     return SwizzleData(
@@ -1382,6 +1421,13 @@ MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Unpremultiply_RGBA_BGRA_Fallback,
                     return SwizzleData(
                         SwizzleOp::Unpremultiply, SurfaceFormat::R8G8B8A8,
                         SurfaceFormat::B8G8R8A8, SwizzleArch::eFallback);
+                  });
+
+MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Unpremultiply_RGBA_BGRA_Generic,
+                  [this]() -> bool {
+                    return SwizzleRow(
+                        SwizzleOp::Unpremultiply, SurfaceFormat::R8G8B8A8,
+                        SurfaceFormat::B8G8R8A8, SwizzleArch::eGeneric);
                   });
 
 MOZ_GTEST_BENCH_F(Moz2D_SwizzleBench, Unpremultiply_RGBA_BGRA_NEON,
