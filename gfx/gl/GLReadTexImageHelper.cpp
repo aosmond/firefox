@@ -206,29 +206,9 @@ void SwapRAndBComponents(DataSourceSurface* surf) {
   }
   MOZ_ASSERT(map.mStride >= 0);
 
-  const size_t rowBytes = surf->GetSize().width * 4;
-  const size_t rowHole = map.mStride - rowBytes;
-
-  uint8_t* row = map.mData;
-  if (!row) {
-    MOZ_ASSERT(false,
-               "SwapRAndBComponents: Failed to get data from"
-               " DataSourceSurface.");
-    surf->Unmap();
-    return;
-  }
-
-  const size_t rows = surf->GetSize().height;
-  for (size_t i = 0; i < rows; i++) {
-    const uint8_t* rowEnd = row + rowBytes;
-
-    while (row != rowEnd) {
-      std::swap(row[0], row[2]);
-      row += 4;
-    }
-
-    row += rowHole;
-  }
+  // Swap the R and B channels in place (BGRA <-> RGBA).
+  SwizzleData(map.mData, map.mStride, SurfaceFormat::B8G8R8A8, map.mData,
+              map.mStride, SurfaceFormat::R8G8B8A8, surf->GetSize());
 
   surf->Unmap();
 }
