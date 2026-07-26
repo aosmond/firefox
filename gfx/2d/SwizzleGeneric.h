@@ -136,7 +136,7 @@ void MOZ_ALWAYS_INLINE ProcessYFlip_SIMD(const uint8_t* aSrc, int32_t aSrcGap,
 
   if (aSrc != aDst) {
     // Swizzle and swap the top and bottom rows.
-    uint8_t* top = aDst;
+    const uint8_t* top = aSrc;
     uint8_t* bottom = aDst + (aSize.height - 1) * dstStride;
     for (int32_t row = 0; row < aSize.height; ++row) {
       ProcessChunk_SIMD<Arch, Op, Unroll>(top, bottom, alignedRow, remainder);
@@ -178,7 +178,8 @@ void MOZ_ALWAYS_INLINE ProcessYFlip_SIMD(const uint8_t* aSrc, int32_t aSrcGap,
 
   // If there is an odd numbered row, we haven't swizzled it yet.
   if (aSize.height % 2 == 1) {
-    ProcessChunk_SIMD<Arch, Op, Unroll>(top, top, alignedRow, remainder);
+    const uint8_t* topSrc = top;
+    ProcessChunk_SIMD<Arch, Op, Unroll>(topSrc, bottom, alignedRow, remainder);
   }
 }
 

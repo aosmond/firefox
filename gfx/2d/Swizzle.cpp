@@ -261,6 +261,15 @@ void Premultiply_NEON(const uint8_t*, int32_t, uint8_t*, int32_t, IntSize);
                                  ShouldForceOpaque(aSrcFormat, aDstFormat)>)
 
 template <bool aSwapRB, bool aOpaqueAlpha>
+void PremultiplyYFlip_NEON(const uint8_t*, int32_t, uint8_t*, int32_t, IntSize);
+
+#  define PREMULTIPLY_YFLIP_NEON(aSrcFormat, aDstFormat)            \
+    FORMAT_CASE(                                                    \
+        aSrcFormat, aDstFormat,                                     \
+        PremultiplyYFlip_NEON<ShouldSwapRB(aSrcFormat, aDstFormat), \
+                              ShouldForceOpaque(aSrcFormat, aDstFormat)>)
+
+template <bool aSwapRB, bool aOpaqueAlpha>
 void PremultiplyRow_NEON(const uint8_t*, uint8_t*, int32_t);
 
 #  define PREMULTIPLY_ROW_NEON(aSrcFormat, aDstFormat)            \
@@ -291,6 +300,14 @@ void Swizzle_NEON(const uint8_t*, int32_t, uint8_t*, int32_t, IntSize);
     FORMAT_CASE(aSrcFormat, aDstFormat,                            \
                 Swizzle_NEON<ShouldSwapRB(aSrcFormat, aDstFormat), \
                              ShouldForceOpaque(aSrcFormat, aDstFormat)>)
+
+template <bool aSwapRB, bool aOpaqueAlpha>
+void SwizzleYFlip_NEON(const uint8_t*, int32_t, uint8_t*, int32_t, IntSize);
+
+#  define SWIZZLE_YFLIP_NEON(aSrcFormat, aDstFormat)                    \
+    FORMAT_CASE(aSrcFormat, aDstFormat,                                 \
+                SwizzleYFlip_NEON<ShouldSwapRB(aSrcFormat, aDstFormat), \
+                                  ShouldForceOpaque(aSrcFormat, aDstFormat)>)
 
 template <bool aSwapRB, bool aOpaqueAlpha>
 void SwizzleRow_NEON(const uint8_t*, uint8_t*, int32_t);
@@ -1450,6 +1467,37 @@ bool SwizzleYFlipData(const uint8_t* aSrc, int32_t aSrcStride,
                       int32_t aDstStride, SurfaceFormat aDstFormat,
                       const IntSize& aSize,
                       SwizzleArch aArch /* = SwizzleArch::eAny */) {
+  if (aSize.IsEmpty()) {
+    return true;
+  }
+  IntSize size = CollapseSize(aSize, aSrcStride, aDstStride);
+  // Find gap from end of row to the start of the next row.
+  int32_t srcGap = GetStrideGap(aSize.width, aSrcFormat, aSrcStride);
+  int32_t dstGap = GetStrideGap(aSize.width, aDstFormat, aDstStride);
+  MOZ_ASSERT(srcGap >= 0 && dstGap >= 0);
+  if (srcGap < 0 || dstGap < 0) {
+    return false;
+  }
+
+#define FORMAT_CASE_CALL(...) __VA_ARGS__(aSrc, srcGap, aDst, dstGap, size)
+
+#ifdef USE_NEON
+  if (aArch & SwizzleArch::eNEON && mozilla::supports_neon())
+    switch (FORMAT_KEY(aSrcFormat, aDstFormat)) {
+      SWIZZLE_YFLIP_NEON(SurfaceFormat::B8G8R8A8, SurfaceFormat::B8G8R8X8)
+      SWIZZLE_YFLIP_NEON(SurfaceFormat::B8G8R8A8, SurfaceFormat::R8G8B8A8)
+      SWIZZLE_YFLIP_NEON(SurfaceFormat::B8G8R8A8, SurfaceFormat::R8G8B8X8)
+      SWIZZLE_YFLIP_NEON(SurfaceFormat::R8G8B8A8, SurfaceFormat::R8G8B8A8)
+      SWIZZLE_YFLIP_NEON(SurfaceFormat::R8G8B8A8, SurfaceFormat::R8G8B8X8)
+      SWIZZLE_YFLIP_NEON(SurfaceFormat::R8G8B8A8, SurfaceFormat::B8G8R8A8)
+      SWIZZLE_YFLIP_NEON(SurfaceFormat::R8G8B8A8, SurfaceFormat::B8G8R8X8)
+      default:
+        break;
+    }
+#endif
+
+#undef FORMAT_CASE_CALL
+
   return SwizzleYFlipDataInternal(aSrc, aSrcStride, aSrcFormat, aDst,
                                   aDstStride, aDstFormat, aSize,
                                   SwizzleRow(aSrcFormat, aDstFormat, aArch));
@@ -1460,6 +1508,38 @@ bool PremultiplyYFlipData(const uint8_t* aSrc, int32_t aSrcStride,
                           int32_t aDstStride, SurfaceFormat aDstFormat,
                           const IntSize& aSize,
                           SwizzleArch aArch /* = SwizzleArch::eAny */) {
+  if (aSize.IsEmpty()) {
+    return true;
+  }
+  IntSize size = CollapseSize(aSize, aSrcStride, aDstStride);
+  // Find gap from end of row to the start of the next row.
+  int32_t srcGap = GetStrideGap(aSize.width, aSrcFormat, aSrcStride);
+  int32_t dstGap = GetStrideGap(aSize.width, aDstFormat, aDstStride);
+  MOZ_ASSERT(srcGap >= 0 && dstGap >= 0);
+  if (srcGap < 0 || dstGap < 0) {
+    return false;
+  }
+
+#define FORMAT_CASE_CALL(...) __VA_ARGS__(aSrc, srcGap, aDst, dstGap, size)
+
+#ifdef USE_NEON
+  if (aArch & SwizzleArch::eNEON && mozilla::supports_neon())
+    switch (FORMAT_KEY(aSrcFormat, aDstFormat)) {
+      PREMULTIPLY_YFLIP_NEON(SurfaceFormat::B8G8R8A8, SurfaceFormat::B8G8R8A8)
+      PREMULTIPLY_YFLIP_NEON(SurfaceFormat::B8G8R8A8, SurfaceFormat::B8G8R8X8)
+      PREMULTIPLY_YFLIP_NEON(SurfaceFormat::B8G8R8A8, SurfaceFormat::R8G8B8A8)
+      PREMULTIPLY_YFLIP_NEON(SurfaceFormat::B8G8R8A8, SurfaceFormat::R8G8B8X8)
+      PREMULTIPLY_YFLIP_NEON(SurfaceFormat::R8G8B8A8, SurfaceFormat::R8G8B8A8)
+      PREMULTIPLY_YFLIP_NEON(SurfaceFormat::R8G8B8A8, SurfaceFormat::R8G8B8X8)
+      PREMULTIPLY_YFLIP_NEON(SurfaceFormat::R8G8B8A8, SurfaceFormat::B8G8R8A8)
+      PREMULTIPLY_YFLIP_NEON(SurfaceFormat::R8G8B8A8, SurfaceFormat::B8G8R8X8)
+      default:
+        break;
+    }
+#endif
+
+#undef FORMAT_CASE_CALL
+
   return SwizzleYFlipDataInternal(
       aSrc, aSrcStride, aSrcFormat, aDst, aDstStride, aDstFormat, aSize,
       PremultiplyRow(aSrcFormat, aDstFormat, aArch));

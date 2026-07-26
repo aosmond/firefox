@@ -22,6 +22,13 @@ void Premultiply_NEON(const uint8_t* aSrc, int32_t aSrcGap, uint8_t* aDst,
                                                    aSize);
 }
 
+template <bool aSwapRB, bool aOpaqueAlpha>
+void PremultiplyYFlip_NEON(const uint8_t* aSrc, int32_t aSrcGap, uint8_t* aDst,
+                           int32_t aDstGap, IntSize aSize) {
+  PremultiplyYFlip_SIMD<mozneon, aSwapRB, aOpaqueAlpha>(aSrc, aSrcGap, aDst,
+                                                        aDstGap, aSize);
+}
+
 // Force instantiation of premultiply variants here.
 template void PremultiplyRow_NEON<false, false>(const uint8_t*, uint8_t*,
                                                 int32_t);
@@ -39,6 +46,14 @@ template void Premultiply_NEON<true, false>(const uint8_t*, int32_t, uint8_t*,
                                             int32_t, IntSize);
 template void Premultiply_NEON<true, true>(const uint8_t*, int32_t, uint8_t*,
                                            int32_t, IntSize);
+template void PremultiplyYFlip_NEON<false, false>(const uint8_t*, int32_t,
+                                                  uint8_t*, int32_t, IntSize);
+template void PremultiplyYFlip_NEON<false, true>(const uint8_t*, int32_t,
+                                                 uint8_t*, int32_t, IntSize);
+template void PremultiplyYFlip_NEON<true, false>(const uint8_t*, int32_t,
+                                                 uint8_t*, int32_t, IntSize);
+template void PremultiplyYFlip_NEON<true, true>(const uint8_t*, int32_t,
+                                                uint8_t*, int32_t, IntSize);
 
 // This generates a table of fixed-point reciprocals representing 1/alpha
 // similar to the fallback implementation. However, the reciprocal must
@@ -101,6 +116,13 @@ void Swizzle_NEON(const uint8_t* aSrc, int32_t aSrcGap, uint8_t* aDst,
                                                aSize);
 }
 
+template <bool aSwapRB, bool aOpaqueAlpha>
+void SwizzleYFlip_NEON(const uint8_t* aSrc, int32_t aSrcGap, uint8_t* aDst,
+                       int32_t aDstGap, IntSize aSize) {
+  SwizzleYFlip_SIMD<mozneon, aSwapRB, aOpaqueAlpha>(aSrc, aSrcGap, aDst,
+                                                    aDstGap, aSize);
+}
+
 // Force instantiation of swizzle variants here.
 template void SwizzleRow_NEON<true, false>(const uint8_t*, uint8_t*, int32_t);
 template void SwizzleRow_NEON<true, true>(const uint8_t*, uint8_t*, int32_t);
@@ -108,6 +130,14 @@ template void Swizzle_NEON<true, false>(const uint8_t*, int32_t, uint8_t*,
                                         int32_t, IntSize);
 template void Swizzle_NEON<true, true>(const uint8_t*, int32_t, uint8_t*,
                                        int32_t, IntSize);
+template void SwizzleYFlip_NEON<false, false>(const uint8_t*, int32_t, uint8_t*,
+                                              int32_t, IntSize);
+template void SwizzleYFlip_NEON<false, true>(const uint8_t*, int32_t, uint8_t*,
+                                             int32_t, IntSize);
+template void SwizzleYFlip_NEON<true, false>(const uint8_t*, int32_t, uint8_t*,
+                                             int32_t, IntSize);
+template void SwizzleYFlip_NEON<true, true>(const uint8_t*, int32_t, uint8_t*,
+                                            int32_t, IntSize);
 
 template <bool aSwapRB>
 void UnpackRowRGB24_NEON(const uint8_t* aSrc, uint8_t* aDst, int32_t aLength) {
