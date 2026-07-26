@@ -118,5 +118,16 @@ void UnpackRowRGB24_NEON(const uint8_t* aSrc, uint8_t* aDst, int32_t aLength) {
 template void UnpackRowRGB24_NEON<false>(const uint8_t*, uint8_t*, int32_t);
 template void UnpackRowRGB24_NEON<true>(const uint8_t*, uint8_t*, int32_t);
 
+template <bool aSwapRB, bool aInverted>
+void SwizzleCmykRow_NEON(const uint8_t* aSrc, uint8_t* aDst, int32_t aLength) {
+  SwizzleCmykRow_SIMD<mozneon, aSwapRB, aInverted>(aSrc, aDst, aLength);
+}
+
+// Force instantiation of swizzle variants here.
+template void SwizzleCmykRow_NEON<true, false>(const uint8_t*, uint8_t*,
+                                               int32_t);
+template void SwizzleCmykRow_NEON<true, true>(const uint8_t*, uint8_t*,
+                                              int32_t);
+
 }  // namespace gfx
 }  // namespace mozilla

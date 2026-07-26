@@ -81,6 +81,14 @@ void SwizzleRow_SSE2(const uint8_t*, uint8_t*, int32_t);
         SwizzleRow_SSE2<ShouldSwapRB(aSrcFormat, aDstFormat), \
                         ShouldForceOpaque(aSrcFormat, aDstFormat)>)
 
+template <bool aSwapRB, bool aInverted>
+void SwizzleCmykRow_SSE2(const uint8_t*, uint8_t*, int32_t);
+
+#  define SWIZZLE_CMYK_ROW_SSE2(aSrcFormat, aDstFormat)                       \
+    FORMAT_CASE_ROW(aSrcFormat, aDstFormat,                                   \
+                    SwizzleCmykRow_SSE2<ShouldSwapRB(aSrcFormat, aDstFormat), \
+                                        ShouldInvert(aSrcFormat)>)
+
 template <bool aSwapRB, bool aOpaqueAlpha>
 void Swizzle_SSSE3(const uint8_t*, int32_t, uint8_t*, int32_t, IntSize);
 
@@ -165,6 +173,14 @@ void UnpackRowRGB24_AVX2(const uint8_t*, uint8_t*, int32_t);
 
 #endif
 
+template <bool aSwapRB, bool aInverted>
+void SwizzleCmykRow_AVX2(const uint8_t*, uint8_t*, int32_t);
+
+#define SWIZZLE_CMYK_ROW_AVX2(aSrcFormat, aDstFormat)                       \
+  FORMAT_CASE_ROW(aSrcFormat, aDstFormat,                                   \
+                  SwizzleCmykRow_AVX2<ShouldSwapRB(aSrcFormat, aDstFormat), \
+                                      ShouldInvert(aSrcFormat)>)
+
 #ifdef USE_NEON
 /**
  * ARM NEON optimizations
@@ -226,6 +242,14 @@ void UnpackRowRGB24_NEON(const uint8_t*, uint8_t*, int32_t);
     FORMAT_CASE_ROW(                       \
         SurfaceFormat::R8G8B8, aDstFormat, \
         UnpackRowRGB24_NEON<ShouldSwapRB(SurfaceFormat::R8G8B8, aDstFormat)>)
+
+template <bool aSwapRB, bool aInverted>
+void SwizzleCmykRow_NEON(const uint8_t*, uint8_t*, int32_t);
+
+#  define SWIZZLE_CMYK_ROW_NEON(aSrcFormat, aDstFormat)                       \
+    FORMAT_CASE_ROW(aSrcFormat, aDstFormat,                                   \
+                    SwizzleCmykRow_NEON<ShouldSwapRB(aSrcFormat, aDstFormat), \
+                                        ShouldInvert(aSrcFormat)>)
 #endif
 
 /**
@@ -1477,6 +1501,12 @@ SwizzleRowFn SwizzleRow(SurfaceFormat aSrcFormat, SurfaceFormat aDstFormat,
       UNPACK_ROW_RGB_AVX2(SurfaceFormat::R8G8B8A8)
       UNPACK_ROW_RGB_AVX2(SurfaceFormat::B8G8R8X8)
       UNPACK_ROW_RGB_AVX2(SurfaceFormat::B8G8R8A8)
+      SWIZZLE_CMYK_ROW_AVX2(SurfaceFormat::CMYK, SurfaceFormat::B8G8R8X8)
+      SWIZZLE_CMYK_ROW_AVX2(SurfaceFormat::CMYK, SurfaceFormat::B8G8R8A8)
+      SWIZZLE_CMYK_ROW_AVX2(SurfaceFormat::InvertedCMYK,
+                            SurfaceFormat::B8G8R8X8)
+      SWIZZLE_CMYK_ROW_AVX2(SurfaceFormat::InvertedCMYK,
+                            SurfaceFormat::B8G8R8A8)
       default:
         break;
     }
@@ -1509,6 +1539,12 @@ SwizzleRowFn SwizzleRow(SurfaceFormat aSrcFormat, SurfaceFormat aDstFormat,
       SWIZZLE_ROW_SSE2(SurfaceFormat::R8G8B8X8, SurfaceFormat::B8G8R8X8)
       SWIZZLE_ROW_SSE2(SurfaceFormat::R8G8B8A8, SurfaceFormat::B8G8R8X8)
       SWIZZLE_ROW_SSE2(SurfaceFormat::R8G8B8X8, SurfaceFormat::B8G8R8A8)
+      SWIZZLE_CMYK_ROW_SSE2(SurfaceFormat::CMYK, SurfaceFormat::B8G8R8X8)
+      SWIZZLE_CMYK_ROW_SSE2(SurfaceFormat::CMYK, SurfaceFormat::B8G8R8A8)
+      SWIZZLE_CMYK_ROW_SSE2(SurfaceFormat::InvertedCMYK,
+                            SurfaceFormat::B8G8R8X8)
+      SWIZZLE_CMYK_ROW_SSE2(SurfaceFormat::InvertedCMYK,
+                            SurfaceFormat::B8G8R8A8)
       default:
         break;
     }
@@ -1529,6 +1565,12 @@ SwizzleRowFn SwizzleRow(SurfaceFormat aSrcFormat, SurfaceFormat aDstFormat,
       SWIZZLE_ROW_NEON(SurfaceFormat::R8G8B8X8, SurfaceFormat::B8G8R8X8)
       SWIZZLE_ROW_NEON(SurfaceFormat::R8G8B8A8, SurfaceFormat::B8G8R8X8)
       SWIZZLE_ROW_NEON(SurfaceFormat::R8G8B8X8, SurfaceFormat::B8G8R8A8)
+      SWIZZLE_CMYK_ROW_NEON(SurfaceFormat::CMYK, SurfaceFormat::B8G8R8X8)
+      SWIZZLE_CMYK_ROW_NEON(SurfaceFormat::CMYK, SurfaceFormat::B8G8R8A8)
+      SWIZZLE_CMYK_ROW_NEON(SurfaceFormat::InvertedCMYK,
+                            SurfaceFormat::B8G8R8X8)
+      SWIZZLE_CMYK_ROW_NEON(SurfaceFormat::InvertedCMYK,
+                            SurfaceFormat::B8G8R8A8)
       default:
         break;
     }

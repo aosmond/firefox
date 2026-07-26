@@ -89,4 +89,15 @@ void UnpackRowRGB24_AVX2(const uint8_t* aSrc, uint8_t* aDst, int32_t aLength) {
 template void UnpackRowRGB24_AVX2<false>(const uint8_t*, uint8_t*, int32_t);
 template void UnpackRowRGB24_AVX2<true>(const uint8_t*, uint8_t*, int32_t);
 
+template <bool aSwapRB, bool aInverted>
+void SwizzleCmykRow_AVX2(const uint8_t* aSrc, uint8_t* aDst, int32_t aLength) {
+  SwizzleCmykRow_SIMD<xsimd::avx2, aSwapRB, aInverted>(aSrc, aDst, aLength);
+}
+
+// Force instantiation of swizzle variants here.
+template void SwizzleCmykRow_AVX2<true, false>(const uint8_t*, uint8_t*,
+                                               int32_t);
+template void SwizzleCmykRow_AVX2<true, true>(const uint8_t*, uint8_t*,
+                                              int32_t);
+
 }  // namespace mozilla::gfx
