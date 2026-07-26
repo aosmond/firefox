@@ -80,4 +80,15 @@ template void Swizzle_SSE2<true, false>(const uint8_t*, int32_t, uint8_t*,
 template void Swizzle_SSE2<true, true>(const uint8_t*, int32_t, uint8_t*,
                                        int32_t, IntSize);
 
+template <bool aSwapRB, bool aInverted>
+void SwizzleCmykRow_SSE2(const uint8_t* aSrc, uint8_t* aDst, int32_t aLength) {
+  SwizzleCmykRow_SIMD<xsimd::sse2, aSwapRB, aInverted>(aSrc, aDst, aLength);
+}
+
+// Force instantiation of swizzle variants here.
+template void SwizzleCmykRow_SSE2<true, false>(const uint8_t*, uint8_t*,
+                                               int32_t);
+template void SwizzleCmykRow_SSE2<true, true>(const uint8_t*, uint8_t*,
+                                              int32_t);
+
 }  // namespace mozilla::gfx
