@@ -132,17 +132,20 @@ void MOZ_ALWAYS_INLINE ProcessYFlip_SIMD(const uint8_t* aSrc, int32_t aSrcGap,
   // Fold remainder into stride gap.
   aSrcGap += 4 * remainder;
   aDstGap += 4 * remainder;
-  int32_t dstStride = alignedRow + aSrcGap;
+  int32_t dstStride = alignedRow + aDstGap;
 
   if (aSrc != aDst) {
-    // Swizzle and swap the top and bottom rows.
+    // Swizzle each source row into the destination in reverse row order.
     const uint8_t* top = aSrc;
     uint8_t* bottom = aDst + (aSize.height - 1) * dstStride;
     for (int32_t row = 0; row < aSize.height; ++row) {
+      // ProcessChunk_SIMD advances top/bottom past the aligned portion only;
+      // adding the gap (which folds in the remainder) reaches the next row,
+      // then bottom steps back up two rows to walk the destination in reverse.
       ProcessChunk_SIMD<Arch, Op, Unroll>(top, bottom, alignedRow, remainder);
-      aSrc += aSrcGap;
-      aDst += aDstGap;
-      aDst -= 2 * dstStride;
+      top += aSrcGap;
+      bottom += aDstGap;
+      bottom -= 2 * dstStride;
     }
     return;
   }

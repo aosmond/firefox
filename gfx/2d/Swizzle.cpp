@@ -1470,8 +1470,10 @@ bool SwizzleYFlipData(const uint8_t* aSrc, int32_t aSrcStride,
   if (aSize.IsEmpty()) {
     return true;
   }
-  IntSize size = CollapseSize(aSize, aSrcStride, aDstStride);
-  // Find gap from end of row to the start of the next row.
+  // Find gap from end of row to the start of the next row. Unlike the
+  // row-order-independent ops, we must not CollapseSize() here: a y-flip is
+  // defined by reordering rows, so flattening contiguous rows into one would
+  // discard the flip entirely.
   int32_t srcGap = GetStrideGap(aSize.width, aSrcFormat, aSrcStride);
   int32_t dstGap = GetStrideGap(aSize.width, aDstFormat, aDstStride);
   MOZ_ASSERT(srcGap >= 0 && dstGap >= 0);
@@ -1479,7 +1481,7 @@ bool SwizzleYFlipData(const uint8_t* aSrc, int32_t aSrcStride,
     return false;
   }
 
-#define FORMAT_CASE_CALL(...) __VA_ARGS__(aSrc, srcGap, aDst, dstGap, size)
+#define FORMAT_CASE_CALL(...) __VA_ARGS__(aSrc, srcGap, aDst, dstGap, aSize)
 
 #ifdef USE_NEON
   if (aArch & SwizzleArch::eNEON && mozilla::supports_neon())
@@ -1511,8 +1513,10 @@ bool PremultiplyYFlipData(const uint8_t* aSrc, int32_t aSrcStride,
   if (aSize.IsEmpty()) {
     return true;
   }
-  IntSize size = CollapseSize(aSize, aSrcStride, aDstStride);
-  // Find gap from end of row to the start of the next row.
+  // Find gap from end of row to the start of the next row. Unlike the
+  // row-order-independent ops, we must not CollapseSize() here: a y-flip is
+  // defined by reordering rows, so flattening contiguous rows into one would
+  // discard the flip entirely.
   int32_t srcGap = GetStrideGap(aSize.width, aSrcFormat, aSrcStride);
   int32_t dstGap = GetStrideGap(aSize.width, aDstFormat, aDstStride);
   MOZ_ASSERT(srcGap >= 0 && dstGap >= 0);
@@ -1520,7 +1524,7 @@ bool PremultiplyYFlipData(const uint8_t* aSrc, int32_t aSrcStride,
     return false;
   }
 
-#define FORMAT_CASE_CALL(...) __VA_ARGS__(aSrc, srcGap, aDst, dstGap, size)
+#define FORMAT_CASE_CALL(...) __VA_ARGS__(aSrc, srcGap, aDst, dstGap, aSize)
 
 #ifdef USE_NEON
   if (aArch & SwizzleArch::eNEON && mozilla::supports_neon())
