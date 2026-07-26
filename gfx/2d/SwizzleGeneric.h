@@ -155,7 +155,34 @@ void MOZ_ALWAYS_INLINE ProcessYFlip_SIMD(const uint8_t* aSrc, int32_t aSrcGap,
   uint8_t* top = aDst;
   uint8_t* bottom = aDst + (aSize.height - 1) * dstStride;
   for (int32_t row = 0; row < middleRow; ++row) {
-    for (const uint8_t* topEnd = top + alignedRow; top < topEnd;) {
+    const uint8_t* topEnd = top + alignedRow;
+    if constexpr (Unroll) {
+      // Process two batches of each row per pass. The loop already runs two
+      // independent chains (top and bottom); this widens it to four and halves
+      // the loop/branch overhead. Gated on Unroll so the heavier premultiply
+      // kernel stays at one batch and avoids extra register pressure.
+      for (const uint8_t* topEnd2 = top + (alignedRow & ~(2 * batchBytes - 1));
+           top < topEnd2;) {
+        auto top0 = xsimd::batch<uint8_t, Arch>::load_unaligned(top);
+        auto top1 =
+            xsimd::batch<uint8_t, Arch>::load_unaligned(top + batchBytes);
+        auto bottom0 = xsimd::batch<uint8_t, Arch>::load_unaligned(bottom);
+        auto bottom1 =
+            xsimd::batch<uint8_t, Arch>::load_unaligned(bottom + batchBytes);
+        top0 = Op(top0);
+        top1 = Op(top1);
+        bottom0 = Op(bottom0);
+        bottom1 = Op(bottom1);
+        top0.store_unaligned(bottom);
+        top1.store_unaligned(bottom + batchBytes);
+        bottom0.store_unaligned(top);
+        bottom1.store_unaligned(top + batchBytes);
+        top += 2 * batchBytes;
+        bottom += 2 * batchBytes;
+      }
+    }
+    // Process a trailing full vector (all vectors when not unrolling).
+    while (top < topEnd) {
       auto topPx = xsimd::batch<uint8_t, Arch>::load_unaligned(top);
       auto bottomPx = xsimd::batch<uint8_t, Arch>::load_unaligned(bottom);
       topPx = Op(topPx);
