@@ -121,6 +121,67 @@ void MOZ_ALWAYS_INLINE Process_SIMD(const uint8_t* aSrc, int32_t aSrcGap,
   }
 }
 
+template <class Arch, auto Op, bool Unroll = false>
+void MOZ_ALWAYS_INLINE ProcessYFlip_SIMD(const uint8_t* aSrc, int32_t aSrcGap,
+                                         uint8_t* aDst, int32_t aDstGap,
+                                         IntSize aSize) {
+  static constexpr int32_t batchPixels = xsimd::batch<uint32_t, Arch>::size;
+  static constexpr int32_t batchBytes = xsimd::batch<uint8_t, Arch>::size;
+  int32_t alignedRow = 4 * (aSize.width & ~(batchPixels - 1));
+  int32_t remainder = aSize.width & (batchPixels - 1);
+  // Fold remainder into stride gap.
+  aSrcGap += 4 * remainder;
+  aDstGap += 4 * remainder;
+  int32_t dstStride = alignedRow + aSrcGap;
+
+  if (aSrc != aDst) {
+    // Swizzle and swap the top and bottom rows.
+    uint8_t* top = aDst;
+    uint8_t* bottom = aDst + (aSize.height - 1) * dstStride;
+    for (int32_t row = 0; row < aSize.height; ++row) {
+      ProcessChunk_SIMD<Arch, Op, Unroll>(top, bottom, alignedRow, remainder);
+      aSrc += aSrcGap;
+      aDst += aDstGap;
+      aDst -= 2 * dstStride;
+    }
+    return;
+  }
+
+  // Swizzle and swap the top and bottom rows until we meet in the middle.
+  int32_t middleRow = aSize.height / 2;
+  uint8_t* top = aDst;
+  uint8_t* bottom = aDst + (aSize.height - 1) * dstStride;
+  for (int32_t row = 0; row < middleRow; ++row) {
+    for (const uint8_t* topEnd = top + alignedRow; top < topEnd;) {
+      auto topPx = xsimd::batch<uint8_t, Arch>::load_unaligned(top);
+      auto bottomPx = xsimd::batch<uint8_t, Arch>::load_unaligned(bottom);
+      topPx = Op(topPx);
+      bottomPx = Op(bottomPx);
+      topPx.store_unaligned(bottom);
+      bottomPx.store_unaligned(top);
+      top += batchBytes;
+      bottom += batchBytes;
+    }
+    // Handle any remaining pixels that could not fit in one vector.
+    if (remainder) {
+      auto topPx = LoadRemainder_SIMD<Arch>(top, remainder);
+      auto bottomPx = LoadRemainder_SIMD<Arch>(bottom, remainder);
+      topPx = Op(topPx);
+      bottomPx = Op(bottomPx);
+      StoreRemainder_SIMD<Arch>(bottom, remainder, topPx);
+      StoreRemainder_SIMD<Arch>(top, remainder, bottomPx);
+    }
+    top += aDstGap;
+    bottom += aDstGap;
+    bottom -= dstStride * 2;
+  }
+
+  // If there is an odd numbered row, we haven't swizzled it yet.
+  if (aSize.height % 2 == 1) {
+    ProcessChunk_SIMD<Arch, Op, Unroll>(top, top, alignedRow, remainder);
+  }
+}
+
 struct SwizzleVectorSwapRbMask {
   static constexpr uint8_t get(uint8_t i, uint8_t) {
     uint8_t channel = i % 4;
@@ -192,6 +253,14 @@ void MOZ_ALWAYS_INLINE Swizzle_SIMD(const uint8_t* aSrc, int32_t aSrcGap,
                /* Unroll */ true>(aSrc, aSrcGap, aDst, aDstGap, aSize);
 }
 
+template <class Arch, bool aSwapRB, bool aOpaqueAlpha>
+void MOZ_ALWAYS_INLINE SwizzleYFlip_SIMD(const uint8_t* aSrc, int32_t aSrcGap,
+                                         uint8_t* aDst, int32_t aDstGap,
+                                         IntSize aSize) {
+  ProcessYFlip_SIMD<Arch, SwizzleVector_SIMD<Arch, aSwapRB, aOpaqueAlpha>,
+                    /* Unroll */ true>(aSrc, aSrcGap, aDst, aDstGap, aSize);
+}
+
 // Premultiply a vector of pixels, swapping and making opaque as desired.
 template <class Arch, bool aSwapRB, bool aOpaqueAlpha>
 static MOZ_ALWAYS_INLINE xsimd::batch<uint8_t, Arch> PremultiplyVector_SIMD(
@@ -238,6 +307,14 @@ void MOZ_ALWAYS_INLINE Premultiply_SIMD(const uint8_t* aSrc, int32_t aSrcGap,
                                         uint8_t* aDst, int32_t aDstGap,
                                         IntSize aSize) {
   Process_SIMD<Arch, PremultiplyVector_SIMD<Arch, aSwapRB, aOpaqueAlpha>>(
+      aSrc, aSrcGap, aDst, aDstGap, aSize);
+}
+
+template <class Arch, bool aSwapRB, bool aOpaqueAlpha>
+void MOZ_ALWAYS_INLINE PremultiplyYFlip_SIMD(const uint8_t* aSrc,
+                                             int32_t aSrcGap, uint8_t* aDst,
+                                             int32_t aDstGap, IntSize aSize) {
+  ProcessYFlip_SIMD<Arch, PremultiplyVector_SIMD<Arch, aSwapRB, aOpaqueAlpha>>(
       aSrc, aSrcGap, aDst, aDstGap, aSize);
 }
 
