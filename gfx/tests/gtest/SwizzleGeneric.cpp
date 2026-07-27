@@ -57,6 +57,18 @@ void UnpackRowRGB24_Generic(const uint8_t* aSrc, uint8_t* aDst,
 template void UnpackRowRGB24_Generic<false>(const uint8_t*, uint8_t*, int32_t);
 template void UnpackRowRGB24_Generic<true>(const uint8_t*, uint8_t*, int32_t);
 
+template <bool aSwapRB, bool aInverted>
+void SwizzleCmykRow_Generic(const uint8_t* aSrc, uint8_t* aDst,
+                            int32_t aLength) {
+  SwizzleCmykRow_SIMD<mozgeneric, aSwapRB, aInverted>(aSrc, aDst, aLength);
+}
+
+// Force instantiation of swizzle variants here.
+template void SwizzleCmykRow_Generic<true, false>(const uint8_t*, uint8_t*,
+                                                  int32_t);
+template void SwizzleCmykRow_Generic<true, true>(const uint8_t*, uint8_t*,
+                                                 int32_t);
+
 #define PREMULTIPLY_ROW_GENERIC(aSrcFormat, aDstFormat)            \
   FORMAT_CASE_ROW(                                                 \
       aSrcFormat, aDstFormat,                                      \
@@ -78,6 +90,11 @@ template void UnpackRowRGB24_Generic<true>(const uint8_t*, uint8_t*, int32_t);
   FORMAT_CASE_ROW(                         \
       SurfaceFormat::R8G8B8, aDstFormat,   \
       UnpackRowRGB24_Generic<ShouldSwapRB(SurfaceFormat::R8G8B8, aDstFormat)>)
+
+#define SWIZZLE_CMYK_ROW_GENERIC(aSrcFormat, aDstFormat)                       \
+  FORMAT_CASE_ROW(aSrcFormat, aDstFormat,                                      \
+                  SwizzleCmykRow_Generic<ShouldSwapRB(aSrcFormat, aDstFormat), \
+                                         ShouldInvert(aSrcFormat)>)
 
 SwizzleRowFn PremultiplyRowGeneric(SurfaceFormat aSrcFormat,
                                    SurfaceFormat aDstFormat,
@@ -135,6 +152,12 @@ SwizzleRowFn SwizzleRowGeneric(SurfaceFormat aSrcFormat,
       UNPACK_ROW_RGB_GENERIC(SurfaceFormat::R8G8B8A8)
       UNPACK_ROW_RGB_GENERIC(SurfaceFormat::B8G8R8X8)
       UNPACK_ROW_RGB_GENERIC(SurfaceFormat::B8G8R8A8)
+      SWIZZLE_CMYK_ROW_GENERIC(SurfaceFormat::CMYK, SurfaceFormat::B8G8R8X8)
+      SWIZZLE_CMYK_ROW_GENERIC(SurfaceFormat::CMYK, SurfaceFormat::B8G8R8A8)
+      SWIZZLE_CMYK_ROW_GENERIC(SurfaceFormat::InvertedCMYK,
+                               SurfaceFormat::B8G8R8X8)
+      SWIZZLE_CMYK_ROW_GENERIC(SurfaceFormat::InvertedCMYK,
+                               SurfaceFormat::B8G8R8A8)
       default:
         break;
     }
