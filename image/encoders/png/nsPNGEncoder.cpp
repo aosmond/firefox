@@ -10,14 +10,13 @@
 #include "ImageLogging.h"
 #include "mozilla/CheckedInt.h"
 #include "mozilla/UniquePtrExtensions.h"
+#include "mozilla/gfx/Swizzle.h"
 #include "nsCRT.h"
 #include "nsStreamUtils.h"
 #include "nsString.h"
 #include "prprf.h"
 
 using namespace mozilla;
-
-#include "mozilla/gfx/Swizzle.h"
 
 static LazyLogModule sPNGEncoderLog("PNGEncoder");
 
@@ -401,13 +400,18 @@ nsPNGEncoder::AddImageFrame(const uint8_t* aData,
       png_write_row(mPNG, row.get());
     }
   } else if (aInputFormat == INPUT_FORMAT_RGBA && !useTransparency) {
-    // RBGA, but we need to strip the alpha
+    // RBGA, but we need to strip the alpha by packing it as RGB.
     UniquePtr<uint8_t[]> row = MakeUniqueFallible<uint8_t[]>(aWidth * 4);
     if (NS_WARN_IF(!row)) {
       return NS_ERROR_OUT_OF_MEMORY;
     }
+    auto packFunc = gfx::SwizzleRow(gfx::SurfaceFormat::R8G8B8A8,
+                                    gfx::SurfaceFormat::R8G8B8);
+    if (NS_WARN_IF(!packFunc)) {
+      return NS_ERROR_FAILURE;
+    }
     for (uint32_t y = 0; y < aHeight; y++) {
-      StripAlpha(&aData[y * aStride], row.get(), aWidth);
+      packFunc(&aData[y * aStride], row.get(), aWidth);
       png_write_row(mPNG, row.get());
     }
   } else if (aInputFormat == INPUT_FORMAT_RGB ||
@@ -943,21 +947,6 @@ void nsPNGEncoder::ConvertHostARGBRow(const uint8_t* aSrc, uint8_t* aDest,
       pixelOut[1] = (((pixelIn & 0x00ff00) >> 8) * 255 + alpha / 2) / alpha;
       pixelOut[2] = (((pixelIn & 0x0000ff)) * 255 + alpha / 2) / alpha;
     }
-  }
-}
-
-// nsPNGEncoder::StripAlpha
-//
-//    Input is RGBA, output is RGB
-
-void nsPNGEncoder::StripAlpha(const uint8_t* aSrc, uint8_t* aDest,
-                              uint32_t aPixelWidth) {
-  for (uint32_t x = 0; x < aPixelWidth; x++) {
-    const uint8_t* pixelIn = &aSrc[x * 4];
-    uint8_t* pixelOut = &aDest[x * 3];
-    pixelOut[0] = pixelIn[0];
-    pixelOut[1] = pixelIn[1];
-    pixelOut[2] = pixelIn[2];
   }
 }
 

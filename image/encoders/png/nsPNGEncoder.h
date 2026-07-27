@@ -44,7 +44,6 @@ class nsPNGEncoder final : public imgIEncoder {
                         uint32_t* offsetY);
   void ConvertHostARGBRow(const uint8_t* aSrc, uint8_t* aDest,
                           uint32_t aPixelWidth, bool aUseTransparency);
-  void StripAlpha(const uint8_t* aSrc, uint8_t* aDest, uint32_t aPixelWidth);
   static void WarningCallback(png_structp png_ptr, png_const_charp warning_msg);
   static void ErrorCallback(png_structp png_ptr, png_const_charp error_msg);
   static void WriteCallback(png_structp png, png_bytep data, png_size_t size);
