@@ -39,6 +39,11 @@ namespace mozilla::gfx {
  * Constexpr functions for analyzing format attributes in templates.
  */
 
+// Whether the CMYK needs to be inverted first.
+static constexpr bool ShouldInvert(SurfaceFormat aFormat) {
+  return aFormat == SurfaceFormat::InvertedCMYK;
+}
+
 // Whether B comes before R in pixel memory layout.
 static constexpr MOZ_ALWAYS_INLINE bool IsBGRFormat(SurfaceFormat aFormat) {
   return aFormat == SurfaceFormat::B8G8R8A8 ||
