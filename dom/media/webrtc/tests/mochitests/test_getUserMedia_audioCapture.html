@@ -99,24 +99,29 @@
       micTone.play(),
     ]);
 
-    let frequencyBytes;
+    let mutedDecoderPeak = 0;
+    let mutedStreamPeak = 0;
+    let tonesSeen = false;
+    let settleFrames = 0;
     try {
       analyser.enableDebugCanvas();
       await analyser.waitForAnalysisSuccess(array => {
+        mutedDecoderPeak = Math.max(mutedDecoderPeak, array[40]);
+        mutedStreamPeak = Math.max(mutedStreamPeak, array[250]);
         // We want to find three frequency components here.
         // Frequencies are logarithmic. Also make sure we have low
         // energy in between, not just a flat white noise.
-        if (array[10]  == 0 &&
-            array[20]  == 255 &&
-            array[70]  == 0 &&
-            array[100] == 255 &&
-            array[150] == 0 &&
-            array[200] == 255 &&
-            array[300] >  240) {
-          frequencyBytes = new Uint8Array(array);
-          return true;
-        }
-        return false;
+        tonesSeen ||= array[10]  == 0 &&
+                      array[20]  == 255 &&
+                      array[70]  == 0 &&
+                      array[100] == 255 &&
+                      array[150] == 0 &&
+                      array[200] == 255 &&
+                      array[300] >  240;
+        // The muted sources reach the capture by the same path as the unmuted
+        // tones above, so keep sampling after those arrive to give them the
+        // same chance to show up in the peaks.
+        return tonesSeen && ++settleFrames > 30;
       });
     } finally {
       await ac.close();
@@ -124,8 +129,8 @@
         t.stop();
       }
     }
-    todo(frequencyBytes[40] < 50, "muted MediaDecoder src - bug 1864067");
-    todo(frequencyBytes[250] < 50, "muted MediaStream srcObject - bug 1864067");
+    todo(mutedDecoderPeak < 50, "muted MediaDecoder src - bug 1864067");
+    todo(mutedStreamPeak < 50, "muted MediaStream srcObject - bug 1864067");
   });
 })();
 </script>
