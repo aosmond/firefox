@@ -51,6 +51,13 @@ inline bool IsVideoCodec(AVCodecID aCodecID) {
   }
 }
 
+#ifdef MOZ_WIDGET_ANDROID
+// How long a drain may spend waiting for MediaCodec to hand back the frames
+// it is still holding, and the shortest interval to poll for them at.
+static constexpr uint32_t kDrainTimeoutMs = 500;
+static constexpr uint32_t kMinDrainIntervalMs = 20;
+#endif
+
 inline int64_t GetFramePts(const AVFrame* aFrame) {
 #if LIBAVCODEC_VERSION_MAJOR > 57
   return aFrame->pts;

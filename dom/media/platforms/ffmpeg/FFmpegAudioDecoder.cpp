@@ -26,6 +26,13 @@ namespace mozilla {
 
 using TimeUnit = media::TimeUnit;
 
+#if defined(MOZ_WIDGET_ANDROID) && defined(USING_MOZFFVPX)
+// Unlike video, we don't track decode statistics, so we don't have an adaptive
+// timeout period.
+static constexpr uint32_t kMaxDrainAttempts =
+    kDrainTimeoutMs / kMinDrainIntervalMs;
+#endif
+
 FFmpegAudioDecoder<LIBAV_VER>::FFmpegAudioDecoder(
     const FFmpegLibWrapper* aLib, const CreateDecoderParams& aDecoderParams)
     : FFmpegDataDecoder(aLib,
@@ -130,6 +137,7 @@ RefPtr<MediaDataDecoder::InitPromise> FFmpegAudioDecoder<LIBAV_VER>::Init() {
     AVCodec* codec = FindHardwareAVCodec(mLib, mCodecID, AV_HWDEVICE_TYPE_NONE);
     if (codec) {
       rv = InitDecoder(codec, &options);
+      mIsMediaCodec = NS_SUCCEEDED(rv);
     }
   }
 
@@ -265,6 +273,11 @@ RefPtr<MediaDataDecoder::FlushPromise>
 FFmpegAudioDecoder<LIBAV_VER>::ProcessFlush() {
   MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
   mInputTimes.Clear();
+#if defined(MOZ_WIDGET_ANDROID) && defined(USING_MOZFFVPX)
+  CancelDrainTimer();
+  mHasSentDrainPacket = false;
+  mDrainTimedOut = false;
+#endif
   return FFmpegDataDecoder::ProcessFlush();
 }
 
@@ -410,24 +423,34 @@ MediaResult FFmpegAudioDecoder<LIBAV_VER>::DecodeUsingFFmpeg(
   // This is used to ensure that pts and duration are correctly set on the
   // resulting audio buffers.
   int32_t submitted = 0;
-  int ret = mLib->avcodec_send_packet(mCodecContext, aPacket);
-  switch (ret) {
-    case AVRESULT_OK:
-      submitted++;
-      break;
-    case AVERROR(EAGAIN):
-      FFMPEG_LOG("  av_codec_send_packet: EAGAIN.");
-      MOZ_ASSERT(false, "EAGAIN");
-      break;
-    case AVERROR_EOF:
-      FFMPEG_LOG("  End of stream.");
-      return MediaResult(NS_ERROR_DOM_MEDIA_END_OF_STREAM,
-                         RESULT_DETAIL("End of stream"));
-    default:
-      NS_WARNING("FFmpeg audio decoder error (avcodec_send_packet).");
-      return MediaResult(NS_ERROR_DOM_MEDIA_DECODE_ERR,
-                         RESULT_DETAIL("FFmpeg audio error"));
+  int ret = 0;
+#  if defined(MOZ_WIDGET_ANDROID) && defined(USING_MOZFFVPX)
+  // ProcessDrain submits an empty packet to flush the decoder.
+  const bool draining = aPacket->size == 0;
+  if (!draining || !mHasSentDrainPacket) {
+#  endif
+    ret = mLib->avcodec_send_packet(mCodecContext, aPacket);
+    switch (ret) {
+      case AVRESULT_OK:
+        submitted++;
+        break;
+      case AVERROR(EAGAIN):
+        FFMPEG_LOG("  av_codec_send_packet: EAGAIN.");
+        MOZ_ASSERT(false, "EAGAIN");
+        break;
+      case AVERROR_EOF:
+        FFMPEG_LOG("  End of stream.");
+        return MediaResult(NS_ERROR_DOM_MEDIA_END_OF_STREAM,
+                           RESULT_DETAIL("End of stream"));
+      default:
+        NS_WARNING("FFmpeg audio decoder error (avcodec_send_packet).");
+        return MediaResult(NS_ERROR_DOM_MEDIA_DECODE_ERR,
+                           RESULT_DETAIL("FFmpeg audio error"));
+    }
+#  if defined(MOZ_WIDGET_ANDROID) && defined(USING_MOZFFVPX)
+    mHasSentDrainPacket = draining;
   }
+#  endif
 
   MediaResult rv;
   media::NullableTimeUnit previousEnd;
@@ -453,6 +476,19 @@ MediaResult FFmpegAudioDecoder<LIBAV_VER>::DecodeUsingFFmpeg(
         }
         FFMPEG_LOG("  EAGAIN (packets submitted: {}).", submitted);
         rv = NS_OK;
+#  if defined(MOZ_WIDGET_ANDROID) && defined(USING_MOZFFVPX)
+        // Any call that consumed a MediaCodec event rather than a buffer, such
+        // as the output format change reported before the first frame, returns
+        // EAGAIN even though frames are still held. Wait until the drain times
+        // out or we reach EOS.
+        if (draining && mIsMediaCodec &&
+            !mLib->moz_avcodec_mediacodec_is_eos(mCodecContext) &&
+            MaybeQueueDrain(aResults)) {
+          FFMPEG_LOG("  MediaCodec still holding frames, polling for them");
+          return MediaResult(NS_ERROR_NOT_AVAILABLE,
+                             RESULT_DETAIL("Drain deferred"));
+        }
+#  endif
         break;
       }
       case AVERROR_EOF: {
@@ -602,5 +638,69 @@ nsCString FFmpegAudioDecoder<LIBAV_VER>::GetCodecName() const {
 FFmpegAudioDecoder<LIBAV_VER>::~FFmpegAudioDecoder() {
   MOZ_COUNT_DTOR(FFmpegAudioDecoder);
 }
+
+#if defined(MOZ_WIDGET_ANDROID) && defined(USING_MOZFFVPX)
+void FFmpegAudioDecoder<LIBAV_VER>::CancelDrainTimer() {
+  MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
+
+  if (mDrainTimer) {
+    mDrainTimer->Cancel();
+    mDrainTimer = nullptr;
+  }
+}
+
+bool FFmpegAudioDecoder<LIBAV_VER>::MaybeQueueDrain(
+    const DecodedData& aResults) {
+  MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
+
+  if (!aResults.IsEmpty() || mDrainTimedOut) {
+    return false;
+  }
+
+  if (!mDrainTimer) {
+    mDrainAttempts = 0;
+    nsresult rv = NS_NewTimerWithCallback(
+        getter_AddRefs(mDrainTimer),
+        [self = RefPtr{this}](nsITimer*) { self->OnDrainExpired(); },
+        kMinDrainIntervalMs, nsITimer::TYPE_REPEATING_SLACK,
+        "FFmpegAudioDecoder::OnDrainExpired"_ns, mTaskQueue);
+    if (NS_FAILED(rv)) {
+      mDrainTimer = nullptr;
+      return false;
+    }
+    FFMPEG_LOG("Polling drain every {} ms, up to {} attempts",
+               kMinDrainIntervalMs, kMaxDrainAttempts);
+  }
+  return true;
+}
+
+void FFmpegAudioDecoder<LIBAV_VER>::OnDrainExpired() {
+  MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
+
+  if (mDrainPromise.IsEmpty() || !mCodecContext) {
+    FFMPEG_LOGV("Drain expired but nothing left to drain");
+    CancelDrainTimer();
+    return;
+  }
+
+  if (++mDrainAttempts >= kMaxDrainAttempts) {
+    FFMPEG_LOG("Drain expired after {} attempts, completing with what we have",
+               mDrainAttempts);
+    CancelDrainTimer();
+    mDrainTimedOut = true;
+  } else {
+    FFMPEG_LOGV("Drain attempt {} of {}", mDrainAttempts, kMaxDrainAttempts);
+  }
+
+  ProcessDrain();
+}
+
+void FFmpegAudioDecoder<LIBAV_VER>::ProcessShutdown() {
+  MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
+
+  CancelDrainTimer();
+  FFmpegDataDecoder::ProcessShutdown();
+}
+#endif
 
 }  // namespace mozilla

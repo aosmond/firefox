@@ -1656,8 +1656,8 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
       FFMPEG_LOG("avcodec_send_packet error: {} (code={})", errStr, res);
       nsresult rv;
       if (res == int(AVERROR_EOF)) {
-        rv = MaybeQueueDrain(aResults) ? NS_ERROR_DOM_MEDIA_END_OF_STREAM
-                                       : NS_ERROR_NOT_AVAILABLE;
+        rv = MaybeQueueDrain(aResults) ? NS_ERROR_NOT_AVAILABLE
+                                       : NS_ERROR_DOM_MEDIA_END_OF_STREAM;
       } else {
         rv = NS_ERROR_DOM_MEDIA_DECODE_ERR;
       }
@@ -1706,6 +1706,12 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
       return NS_ERROR_DOM_MEDIA_END_OF_STREAM;
     }
     if (res == AVERROR(EAGAIN)) {
+      // MediaCodec produces no frame while it has no free output buffer. When
+      // draining, giving up here loses the frames it is still holding.
+      if (!aData && MaybeQueueDrain(aResults)) {
+        FFMPEG_LOG("  Output buffer shortage while draining.");
+        return NS_ERROR_NOT_AVAILABLE;
+      }
       return NS_OK;
     }
     if (res < 0) {
@@ -1902,6 +1908,37 @@ void FFmpegVideoDecoder<LIBAV_VER>::ResumeDrain() {
   ProcessDrain();
 }
 
+void FFmpegVideoDecoder<LIBAV_VER>::CancelDrainTimer() {
+  MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
+
+  if (mDrainTimer) {
+    mDrainTimer->Cancel();
+    mDrainTimer = nullptr;
+  }
+}
+
+void FFmpegVideoDecoder<LIBAV_VER>::OnDrainExpired() {
+  MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
+
+  if (mDrainPromise.IsEmpty() || !mCodecContext) {
+    FFMPEG_LOGV("Drain expired but nothing left to drain");
+    CancelDrainTimer();
+    return;
+  }
+
+  if (++mDrainAttempts >= mMaxDrainAttempts) {
+    FFMPEG_LOG("Drain expired after {} attempts, completing with what we have",
+               mDrainAttempts);
+    CancelDrainTimer();
+    mDrainTimedOut = true;
+  } else {
+    FFMPEG_LOGV("Drain attempt {} of {}", mDrainAttempts, mMaxDrainAttempts);
+  }
+
+  mShouldResumeDrain = true;
+  ProcessDrain();
+}
+
 void FFmpegVideoDecoder<LIBAV_VER>::QueueResumeDrain() {
   if (!mShouldResumeDrain.exchange(false)) {
     return;
@@ -1917,8 +1954,37 @@ void FFmpegVideoDecoder<LIBAV_VER>::QueueResumeDrain() {
 bool FFmpegVideoDecoder<LIBAV_VER>::MaybeQueueDrain(
     const MediaDataDecoder::DecodedData& aData) {
 #if defined(MOZ_WIDGET_ANDROID) && defined(USING_MOZFFVPX)
+  // MediaCodec may still hold frames even if we hold none, such as when it
+  // reports an output format change before the first frame. The poll timer
+  // ensures the deferred drain completes either way.
   if (aData.IsEmpty() && mMediaCodecDeviceContext &&
-      !mLib->moz_avcodec_mediacodec_is_eos(mCodecContext)) {
+      !mLib->moz_avcodec_mediacodec_is_eos(mCodecContext) && !mDrainTimedOut) {
+    if (!mDrainTimer) {
+      // MediaCodec may be waiting for frames held by the compositor, which at
+      // the end of the stream is displaying them and will not hand them back
+      // until the element goes away. Poll at the rate we have been decoding,
+      // and give up once the attempts add up to kDrainTimeoutMs rather than
+      // never completing.
+      const double decodeMs = mDecodeStats.AverageFrameDecodeTimeMs().valueOr(
+          double(kMinDrainIntervalMs));
+      const uint32_t intervalMs =
+          std::clamp(static_cast<uint32_t>(std::lround(decodeMs)),
+                     kMinDrainIntervalMs, kDrainTimeoutMs);
+      mDrainAttempts = 0;
+      mMaxDrainAttempts = std::max(1u, kDrainTimeoutMs / intervalMs);
+      nsresult rv = NS_NewTimerWithCallback(
+          getter_AddRefs(mDrainTimer),
+          [self = RefPtr{this}](nsITimer*) { self->OnDrainExpired(); },
+          intervalMs, nsITimer::TYPE_REPEATING_SLACK,
+          "FFmpegVideoDecoder::OnDrainExpired"_ns, mTaskQueue);
+      if (NS_FAILED(rv)) {
+        mDrainTimer = nullptr;
+        mShouldResumeDrain = false;
+        return false;
+      }
+      FFMPEG_LOG("Polling drain every {} ms, up to {} attempts", intervalMs,
+                 mMaxDrainAttempts);
+    }
     FFMPEG_LOGV("Schedule drain");
     return true;
   }
@@ -2539,6 +2605,8 @@ FFmpegVideoDecoder<LIBAV_VER>::ProcessFlush() {
   }
 #endif
 #ifdef MOZ_WIDGET_ANDROID
+  CancelDrainTimer();
+  mDrainTimedOut = false;
   ReleaseFramesMediaCodec();
 #endif
   mPerformanceRecorder.Record(std::numeric_limits<int64_t>::max());
@@ -2617,6 +2685,7 @@ void FFmpegVideoDecoder<LIBAV_VER>::ProcessShutdown() {
   MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
 #ifdef MOZ_WIDGET_ANDROID
   mShouldResumeDrain = false;
+  CancelDrainTimer();
   ReleaseFramesMediaCodec();
   if (mMediaCodecDeviceContext) {
     mLib->av_buffer_unref(&mMediaCodecDeviceContext);

@@ -8,6 +8,7 @@
 #include "FFmpegDataDecoder.h"
 #include "FFmpegLibWrapper.h"
 #include "SimpleMap.h"
+#include "nsITimer.h"
 
 namespace mozilla {
 
@@ -63,6 +64,20 @@ class FFmpegAudioDecoder<LIBAV_VER>
   const AudioInfo mAudioInfo;
   // True if the audio will be downmixed and rendered in mono.
   bool mDefaultPlaybackDeviceMono = false;
+#if defined(MOZ_WIDGET_ANDROID) && defined(USING_MOZFFVPX)
+  void ProcessShutdown() override;
+  // Returns whether the drain should be deferred to the poll timer rather
+  // than completing, scheduling the timer if it is not already running.
+  bool MaybeQueueDrain(const DecodedData& aResults);
+  void OnDrainExpired();
+  void CancelDrainTimer();
+
+  bool mIsMediaCodec = false;
+  bool mHasSentDrainPacket = false;
+  nsCOMPtr<nsITimer> mDrainTimer;
+  uint32_t mDrainAttempts = 0;
+  bool mDrainTimedOut = false;
+#endif
 };
 
 }  // namespace mozilla

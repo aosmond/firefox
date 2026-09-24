@@ -27,6 +27,7 @@
 #endif
 
 #ifdef MOZ_WIDGET_ANDROID
+#  include "nsITimer.h"
 #  include "mozilla/java/GeckoSurfaceWrappers.h"
 #endif
 
@@ -406,8 +407,14 @@ class FFmpegVideoDecoder<LIBAV_VER>
 #ifdef MOZ_WIDGET_ANDROID
   void QueueResumeDrain();
   void ResumeDrain();
+  void OnDrainExpired();
+  void CancelDrainTimer();
 
   Atomic<bool> mShouldResumeDrain{false};
+  nsCOMPtr<nsITimer> mDrainTimer;
+  uint32_t mDrainAttempts = 0;
+  uint32_t mMaxDrainAttempts = 0;
+  bool mDrainTimedOut = false;
 #endif
 
   // True if we're allocating shmem for ffmpeg decode buffer.

@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include "mozilla/CumulativeAverage.h"
+#include "mozilla/Maybe.h"
 #include "mozilla/TimeStamp.h"
 
 namespace mozilla {
@@ -24,6 +25,13 @@ class FFmpegDecodeStats {
   // aDuration is the duration of the frame being decoded, in microseconds.
   void UpdateDecodeTimes(int64_t aDuration);
   bool IsDecodingSlow() const;
+  // How long decoding a frame has taken on average so far, in milliseconds,
+  // or nothing if none have been decoded yet.
+  Maybe<double> AverageFrameDecodeTimeMs() const {
+    return mAverageFrameDecodeTime.empty()
+               ? Nothing()
+               : Some(mAverageFrameDecodeTime.mean());
+  }
 
   // Number of delayed frames until we consider decoding as slow.
   static constexpr uint32_t kMaxLateDecodedFrames = 15;
