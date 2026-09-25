@@ -172,7 +172,7 @@ nsTArray<nsCString> AndroidDecoderModule::GetSupportedMimeTypes() {
 
 nsTArray<nsCString> AndroidDecoderModule::GetSupportedMimeTypesPrefixed() {
   mozilla::jni::ObjectArray::LocalRef supportedTypes = mozilla::java::
-      HardwareCodecCapabilityUtils::GetDecoderSupportedMimeTypesWithAccelInfo();
+      HardwareCodecCapabilityUtils::GetSupportedMimeTypesWithAccelInfo(false);
 
   nsTArray<nsCString> st = nsTArray<nsCString>();
   for (size_t i = 0; i < supportedTypes->Length(); i++) {
