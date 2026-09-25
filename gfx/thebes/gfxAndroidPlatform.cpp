@@ -15,6 +15,8 @@
 #include "gfxFT2FontList.h"
 #include "gfxImageSurface.h"
 #include "gfxTextRun.h"
+#include "media/NdkMediaCrypto.h"
+#include "media/NdkMediaDrm.h"
 #include "mozilla/CountingAllocatorBase.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/StaticPrefs_gfx.h"
@@ -135,23 +137,63 @@ void gfxAndroidPlatform::WaitForInitializeFontAPI() {
   }
 }
 
+static media::MediaCodecsSupported QueryMediaCodecsSupported() {
+  media::MediaCodecsSupported supported;
+  jni::ObjectArray::LocalRef supportedTypes =
+      java::HardwareCodecCapabilityUtils::GetSupportedMimeTypesWithAccelInfo(
+          true);
+  for (size_t i = 0; i < supportedTypes->Length(); i++) {
+    const nsCString s =
+        jni::String::LocalRef(supportedTypes->GetElement(i))->ToCString();
+    const int32_t sep = s.FindChar(' ');
+    if (sep <= 0 || static_cast<uint32_t>(sep) + 1 >= s.Length()) {
+      continue;
+    }
+
+    const media::MediaCodec codec =
+        media::MCSInfo::GetMediaCodecFromMimeType(Substring(s, sep + 1));
+    if (codec == media::MediaCodec::SENTINEL) {
+      continue;
+    }
+
+    const auto caps = Substring(s, 0, sep);
+    if (caps == "SW"_ns) {
+      supported += media::MCSInfo::GetMediaCodecsSupportEnum(
+          codec, media::DecodeSupport::SoftwareDecode);
+    } else if (caps == "HW"_ns) {
+      supported += media::MCSInfo::GetMediaCodecsSupportEnum(
+          codec, media::DecodeSupport::HardwareDecode);
+    } else if (caps == "SWE"_ns) {
+      supported += media::MCSInfo::GetMediaCodecsSupportEnum(
+          codec, media::EncodeSupport::SoftwareEncode);
+    } else if (caps == "HWE"_ns) {
+      supported += media::MCSInfo::GetMediaCodecsSupportEnum(
+          codec, media::EncodeSupport::HardwareEncode);
+    }
+  }
+  return supported;
+}
+
+void gfxAndroidPlatform::InitPlatformHardwareVideoConfig() {
+  static constexpr uint8_t kWidevineUuid[] = {
+      0xed, 0xef, 0x8b, 0xa9, 0x79, 0xd6, 0x4a, 0xce,
+      0xa3, 0xc8, 0x27, 0xdc, 0xd5, 0x1d, 0x21, 0xed};
+
+  gfxVars::SetPlatformMediaCodecsSupported(QueryMediaCodecsSupported());
+  gfxVars::SetSupportsWidevine(
+      AMediaDrm_isCryptoSchemeSupported(kWidevineUuid, nullptr) &&
+      AMediaCrypto_isCryptoSchemeSupported(kWidevineUuid));
+}
+
 // static
 bool gfxAndroidPlatform::IsHwCodecSupported(media::MediaCodec aCodec,
                                             bool aEncoder) {
-  switch (aCodec) {
-    case media::MediaCodec::H264:
-      return java::HardwareCodecCapabilityUtils::HasHWH264(aEncoder);
-    case media::MediaCodec::VP8:
-      return java::HardwareCodecCapabilityUtils::HasHWVP8(aEncoder);
-    case media::MediaCodec::VP9:
-      return java::HardwareCodecCapabilityUtils::HasHWVP9(aEncoder);
-    case media::MediaCodec::AV1:
-      return java::HardwareCodecCapabilityUtils::HasHWAV1(aEncoder);
-    case media::MediaCodec::HEVC:
-      return java::HardwareCodecCapabilityUtils::HasHWHEVC(aEncoder);
-    default:
-      return false;
+  if (aEncoder) {
+    return media::MCSInfo::SupportsHardwareEncode(
+        gfxVars::PlatformMediaCodecsSupported(), aCodec);
   }
+  return media::MCSInfo::SupportsHardwareDecode(
+      gfxVars::PlatformMediaCodecsSupported(), aCodec);
 }
 
 gfxAndroidPlatform::gfxAndroidPlatform() {
