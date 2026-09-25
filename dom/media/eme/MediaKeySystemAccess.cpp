@@ -33,7 +33,7 @@
 #  include "WMFDecoderModule.h"
 #endif
 #ifdef MOZ_WIDGET_ANDROID
-#  include "mozilla/java/MediaDrmProxyWrappers.h"
+#  include "mozilla/gfx/gfxVars.h"
 #endif
 
 namespace mozilla::dom {
@@ -161,9 +161,7 @@ MediaKeySystemStatus MediaKeySystemAccess::GetKeySystemStatus(
 #ifdef MOZ_WIDGET_ANDROID
     } else if (Preferences::GetBool("media.mediadrm-widevinecdm.visible",
                                     false)) {
-      bool supported =
-          mozilla::java::MediaDrmProxy::IsSchemeSupported(keySystem);
-      if (!supported) {
+      if (!gfx::gfxVars::SupportsWidevine()) {
         aOutMessage = nsLiteralCString(
             "KeySystem or Minimum API level not met for Widevine EME");
         return MediaKeySystemStatus::Cdm_not_supported;
