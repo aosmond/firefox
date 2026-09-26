@@ -12559,7 +12559,7 @@
   # Does the GMPlugin process run as an Android isolated process
 -   name: media.gmp.android.isolated-process
     type: RelaxedAtomicBool
-    value: false
+    value: true
     mirror: always
 #endif
 
