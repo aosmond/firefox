@@ -302,18 +302,25 @@ tasks:
                     default: []
         variants:
             - eme-wmf
+            - eme-signed
         run-on-projects:
             by-variant:
                 eme-wmf:
                     by-test-platform:
                         windows1.*-64.*: ['autoland', 'mozilla-central']
                         default: []
+                # Only run on demand until verified on mozilla-central.
+                eme-signed: []
                 default:
                     by-test-platform:
                         .*-wayland.*: []
                         windows1.*: []
                         default: built-projects
         mozharness:
+            requires-signed-builds:
+                by-variant:
+                    eme-signed: true
+                    default: false
             chunked: true
             extra-options:
                 by-test-platform:
@@ -324,11 +331,24 @@ tasks:
                         - --no-update-status-on-crash
                         - --setpref=network.socket.allowed_nonlocal_domains='lic.staging.drmtoday.com,www.googleapis.com'
                     windows.*:
-                        - --test-type=testharness
-                        - --default-exclude
-                        - --tag=eme
-                        - --no-update-status-on-crash
-                        - --setpref=network.socket.allowed_nonlocal_domains='lic.staging.drmtoday.com,test.playready.microsoft.com'
+                        by-variant:
+                            eme-wmf:
+                                - --test-type=testharness
+                                - --default-exclude
+                                - --tag=eme
+                                - --no-update-status-on-crash
+                                - --setpref=network.socket.allowed_nonlocal_domains='lic.staging.drmtoday.com,test.playready.microsoft.com'
+                                - --setpref=media.eme.playready.enabled=true
+                                - --setpref=media.wmf.media-engine.enabled=2
+                                - --setpref=media.wmf.media-engine.bypass-gfx-blocklist=true
+                                - --setpref=media.eme.mfcdm.origin-filter.enabled=0
+                            default:
+                                - --test-type=testharness
+                                - --default-exclude
+                                - --tag=eme
+                                - --no-update-status-on-crash
+                                - --setpref=network.socket.allowed_nonlocal_domains='lic.staging.drmtoday.com'
+                                - --setpref=media.eme.playready.enabled=false
                     default:
                         - --test-type=testharness
                         - --default-exclude
