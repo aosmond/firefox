@@ -310,7 +310,6 @@ tasks:
                         default: []
                 default:
                     by-test-platform:
-                        android-em.*/debug-isolated-process: []
                         .*-wayland.*: []
                         windows1.*: []
                         default: built-projects
