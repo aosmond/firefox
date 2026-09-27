@@ -94,6 +94,8 @@ nsresult AndroidImageReaderImage::BuildSurfaceDescriptorBuffer(
       NS_WARNING("Failed to create snapshot GLContext");
       return NS_ERROR_FAILURE;
     }
+    // The manager thread is a TaskQueue, which may run on any pool thread.
+    sAImageSnapshotContext->mOwningThreadId = Nothing();
   }
 
   auto* imageReaderMap = layers::GpuProcessAndroidImageReaderMap::Get();
@@ -365,11 +367,21 @@ bool AndroidImageReader::UpdateTexImageWithReadback(
     return false;
   }
 
-  aGL->MakeCurrent();
-  gl::ScopedTexture scopedTex(aGL);
+  if (!aGL->MakeCurrent()) {
+    gfxCriticalNote << "Failed to make snapshot GLContext current";
+    return false;
+  }
 
   const auto& gle = gl::GLContextEGL::Cast(aGL);
   const auto& egl = gle->mEgl;
+
+  // Release the context so the next readback can make it current on whichever
+  // thread it runs on.
+  auto releaseContext = MakeScopeExit([&]() {
+    egl->fMakeCurrent(EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+  });
+
+  gl::ScopedTexture scopedTex(aGL);
 
   const EGLint attrs[] = {
       LOCAL_EGL_IMAGE_PRESERVED,
