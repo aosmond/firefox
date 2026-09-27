@@ -180,7 +180,12 @@ class AndroidImageReader final
   ANativeWindow* mNativeWindow MOZ_GUARDED_BY(mMonitor);
   AndroidMediaCodecFrameId mCurrentFrameId MOZ_GUARDED_BY(mMonitor);
   RefPtr<AndroidImageWrapper> mCurrentImage MOZ_GUARDED_BY(mMonitor);
-  bool mWaitingFrameAvailable MOZ_GUARDED_BY(mMonitor) = false;
+  // Frames released to the codec for rendering whose images have not yet been
+  // acquired or dropped. A frame whose wait timed out stays counted until its
+  // image arrives and is dropped by a later DoUpdateTexImage().
+  uint32_t mPendingRenderCount MOZ_GUARDED_BY(mMonitor) = 0;
+  // Images reported by the image listener that have not yet been acquired.
+  uint32_t mAvailableImageCount MOZ_GUARDED_BY(mMonitor) = 0;
   bool mIsPendingNextImage MOZ_GUARDED_BY(mMonitor) = false;
 
   mozilla::Atomic<int32_t> mAcquiredImageCount{0};

@@ -295,7 +295,7 @@ void AndroidImageReader::OnFrameAvailable(void* aContext,
 
 void AndroidImageReader::NotifyFrameAvailable() {
   MonitorAutoLock lock(mMonitor);
-  mWaitingFrameAvailable = false;
+  ++mAvailableImageCount;
   mMonitor.NotifyAll();
 }
 
@@ -459,17 +459,15 @@ bool AndroidImageReader::DoUpdateTexImage(const MonitorAutoLock& aProofOfLock,
 
   mIsPendingNextImage = true;
 
-  MOZ_ASSERT(!mWaitingFrameAvailable);
-  mWaitingFrameAvailable = true;
-
   if (!MaybeReleaseFrameToCodec(aProofOfLock, aFrameId, /* aRender */ true)) {
-    mWaitingFrameAvailable = false;
     return false;
   }
+  ++mPendingRenderCount;
 
+  // Wait for the images of every frame released for rendering, including any
+  // whose earlier wait timed out, so that the newest one is for aFrameId.
   const TimeDuration timeout = TimeDuration::FromMilliseconds(20);
-
-  while (mWaitingFrameAvailable) {
+  while (mAvailableImageCount < mPendingRenderCount) {
     CVStatus status = mMonitor.Wait(timeout);
     if (status == CVStatus::Timeout) {
       gfxCriticalNoteOnce << "UpdateTexImage wait timeout";
@@ -477,36 +475,55 @@ bool AndroidImageReader::DoUpdateTexImage(const MonitorAutoLock& aProofOfLock,
     }
   }
 
-  mWaitingFrameAvailable = false;
-
+  // Acquire the images in order, dropping those of frames whose wait timed
+  // out. Each is deleted before the next is acquired, so this needs no more
+  // free image slots than acquiring a single image.
   AImage* image = nullptr;
-  media_status_t ret = AMEDIA_OK;
   UniqueFileHandle fence;
-  ret = AImageReader_acquireNextImageAsync(mAImageReader, &image,
-                                           getter_Transfers(fence));
-  // XXX Add AImageReader_acquireLatestImageAsync() usage
+  while (true) {
+    media_status_t ret = AImageReader_acquireNextImageAsync(
+        mAImageReader, &image, getter_Transfers(fence));
 
-  switch (ret) {
-    case AMEDIA_ERROR_INVALID_PARAMETER:
-      MOZ_ASSERT_UNREACHABLE("unexpected to be called");
+    switch (ret) {
+      case AMEDIA_ERROR_INVALID_PARAMETER:
+        MOZ_ASSERT_UNREACHABLE("unexpected to be called");
+        return false;
+      case AMEDIA_IMGREADER_MAX_IMAGES_ACQUIRED:
+        MOZ_ASSERT_UNREACHABLE("unexpected to be called");
+        return false;
+      case AMEDIA_IMGREADER_NO_BUFFER_AVAILABLE:
+        // The listener over-reported, so resynchronize with the reader.
+        mAvailableImageCount = 0;
+        return false;
+      case AMEDIA_ERROR_UNKNOWN:
+        return false;
+      case AMEDIA_OK:
+        // Call succeeded.
+        break;
+      default:
+        MOZ_ASSERT_UNREACHABLE("unexpected to be called");
+        return false;
+    }
+
+    MOZ_ASSERT(mAvailableImageCount > 0);
+    MOZ_ASSERT(mPendingRenderCount > 0);
+    --mAvailableImageCount;
+    --mPendingRenderCount;
+
+    if (!image) {
       return false;
-    case AMEDIA_IMGREADER_MAX_IMAGES_ACQUIRED:
-      MOZ_ASSERT_UNREACHABLE("unexpected to be called");
-      return false;
-    case AMEDIA_IMGREADER_NO_BUFFER_AVAILABLE:
-      return false;
-    case AMEDIA_ERROR_UNKNOWN:
-      return false;
-    case AMEDIA_OK:
-      // Call succeeded.
+    }
+
+    if (mPendingRenderCount == 0) {
       break;
-    default:
-      MOZ_ASSERT_UNREACHABLE("unexpected to be called");
-      return false;
-  }
+    }
 
-  if (!image) {
-    return false;
+    if (fence) {
+      AImage_deleteAsync(image, fence.release());
+    } else {
+      AImage_delete(image);
+    }
+    image = nullptr;
   }
 
   AHardwareBuffer* nativeBuffer = nullptr;
