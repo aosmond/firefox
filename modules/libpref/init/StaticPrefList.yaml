@@ -8649,7 +8649,7 @@
 #if defined(MOZ_WIDGET_ANDROID)
 - name: gfx.video.aimage-reader-gpu-process-android
   type: bool
-  value: false
+  value: true
   mirror: once
 #endif
 
@@ -12611,7 +12611,7 @@
 
 - name: media.gpu-process-decoder
   type: RelaxedAtomicBool
-#if defined(XP_WIN)
+#if defined(XP_WIN) || defined(MOZ_WIDGET_ANDROID)
   value: true
 #else
   value: false
