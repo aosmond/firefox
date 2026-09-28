@@ -255,9 +255,11 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 #endif
     }
 
-#ifdef XP_WIN
-    // TODO : add this for Android as well in bug 1974849.
-    MOZ_ASSERT_IF(XRE_IsGPUProcess() && IsVideoCodec(codecId),
+#ifndef MOZ_WIDGET_ANDROID
+    // We need to disable this assert on Android because we can advertise
+    // H264/HEVC software support backed by MediaCodec, which does need to run
+    // in the GPU process.
+    MOZ_ASSERT_IF(XRE_IsGPUProcess(),
                   !supports.contains(media::DecodeSupport::SoftwareDecode));
 #endif
 
@@ -283,7 +285,8 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
       gfx::ColorDepth aColorDepth, const gfx::IntSize& aSize) {
     // Because we don't provide software implementations of H264 or HEVC on
     // Android, we must use the platform software decoders even if true
-    // hardware decoding support is missing.
+    // hardware decoding support is missing. These are permitted in the GPU
+    // process because they still use MediaCodec.
     const media::MediaCodec codec =
         media::MCSInfo::GetMediaCodecFromMimeType(aMimeType);
     media::DecodeSupportSet support;
@@ -313,12 +316,10 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 
   bool IsSWDecodingSupported(const AVCodecID& aCodec,
                              const SupportDecoderParams& aParams) const {
-#ifdef XP_WIN
-    // SW video decoding is not allowed in the GPU process.
-    if (IsVideoCodec(aCodec) && XRE_IsGPUProcess()) {
+    // FFmpeg SW decoding is not allowed in the GPU process.
+    if (XRE_IsGPUProcess()) {
       return false;
     }
-#endif
 #ifdef MOZ_WIDGET_ANDROID
     // With a CDM, video is always decoded with MediaCodec, so it must support
     // the color depth.
@@ -360,24 +361,18 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
             CreateDecoderParams::Option::Output8BitPerChannel),
         aParams.mTrackingId, aParams.mCDM);
 
-#ifdef XP_WIN
     // Ensure that decoding is exclusively performed using HW decoding in
-    // the GPU process. If FFmpeg does not support HW decoding, reset the
-    // decoder to allow PDMFactory to select an alternative HW-capable decoder
-    // module if available. In contrast, in the RDD process, it is acceptable
-    // to fallback to SW decoding when HW decoding is not available.
-    if (XRE_IsGPUProcess()) {
-      AVCodecID videoCodec =
-          FFmpegVideoDecoder<V>::GetCodecId(aParams.mConfig.mMimeType);
-      if (IsHWDecodingSupported(videoCodec) &&
-          !decoder->IsHardwareAccelerated()) {
-        MOZ_LOG_FMT(sPDMLog, LogLevel::Debug,
-                    "FFmpeg video decoder can't perform hw decoding, abort!");
-        (void)decoder->Shutdown();
-        decoder = nullptr;
-      }
+    // the GPU process. If the decoder could not create a HW (or on Android,
+    // MediaCodec) decoding context, reset the decoder to allow PDMFactory to
+    // select an alternative HW-capable decoder module if available. In
+    // contrast, in the RDD process, it is acceptable to fallback to SW decoding
+    // when HW decoding is not available.
+    if (XRE_IsGPUProcess() && !decoder->IsHardwareAccelerated()) {
+      MOZ_LOG_FMT(sPDMLog, LogLevel::Debug,
+                  "FFmpeg video decoder can't perform hw decoding, abort!");
+      (void)decoder->Shutdown();
+      decoder = nullptr;
     }
-#endif
     return decoder.forget();
   }
 

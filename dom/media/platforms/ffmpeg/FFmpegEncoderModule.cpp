@@ -198,8 +198,10 @@ EncodeSupportSet FFmpegEncoderModule<V>::SupportsCodec(CodecType aCodec) const {
     }
   }
 #endif
+  // Pure software encoding is not permitted in the GPU process.
   if ((XRE_IsParentProcess() || XRE_IsContentProcess() ||
-       StaticPrefs::media_use_remote_encoder_video_software()) &&
+       (!XRE_IsGPUProcess() &&
+        StaticPrefs::media_use_remote_encoder_video_software())) &&
       FFmpegDataEncoder<V>::FindSoftwareEncoder(mLib, id)) {
     supports += EncodeSupport::SoftwareEncode;
   }
