@@ -246,7 +246,8 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 #ifdef MOZ_WIDGET_ANDROID
       // Because we don't provide software implementations of H264 or HEVC on
       // Android, we must use the platform software decoders even if true
-      // hardware decoding support is missing.
+      // hardware decoding support is missing. These are permitted in the GPU
+      // process because they still use MediaCodec.
       switch (codecId) {
         case AV_CODEC_ID_H264:
           supports += gfx::gfxVars::UseH264HwDecode()
@@ -267,9 +268,8 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 #endif
     }
 
-#ifdef XP_WIN
-    // TODO : add this for Android as well in bug 1974849.
-    MOZ_ASSERT_IF(XRE_IsGPUProcess() && IsVideoCodec(codecId),
+#ifndef MOZ_WIDGET_ANDROID
+    MOZ_ASSERT_IF(XRE_IsGPUProcess(),
                   !supports.contains(media::DecodeSupport::SoftwareDecode));
 #endif
 
@@ -291,12 +291,10 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
   }
 
   bool IsSWDecodingSupported(const AVCodecID& aCodec) const {
-#ifdef XP_WIN
-    // SW video decoding is not allowed in the GPU process.
-    if (IsVideoCodec(aCodec) && XRE_IsGPUProcess()) {
+    // FFmpeg SW decoding is not allowed in the GPU process.
+    if (XRE_IsGPUProcess()) {
       return false;
     }
-#endif
     return FFmpegDataDecoder<V>::FindSoftwareAVCodec(mLib, aCodec);
   }
 
@@ -328,24 +326,18 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
             CreateDecoderParams::Option::Output8BitPerChannel),
         aParams.mTrackingId, aParams.mCDM);
 
-#ifdef XP_WIN
     // Ensure that decoding is exclusively performed using HW decoding in
-    // the GPU process. If FFmpeg does not support HW decoding, reset the
-    // decoder to allow PDMFactory to select an alternative HW-capable decoder
-    // module if available. In contrast, in the RDD process, it is acceptable
-    // to fallback to SW decoding when HW decoding is not available.
-    if (XRE_IsGPUProcess()) {
-      AVCodecID videoCodec =
-          FFmpegVideoDecoder<V>::GetCodecId(aParams.mConfig.mMimeType);
-      if (IsHWDecodingSupported(videoCodec) &&
-          !decoder->IsHardwareAccelerated()) {
-        MOZ_LOG_FMT(sPDMLog, LogLevel::Debug,
-                    "FFmpeg video decoder can't perform hw decoding, abort!");
-        (void)decoder->Shutdown();
-        decoder = nullptr;
-      }
+    // the GPU process. If the decoder could not create a HW (or on Android,
+    // MediaCodec) decoding context, reset the decoder to allow PDMFactory to
+    // select an alternative HW-capable decoder module if available. In
+    // contrast, in the RDD process, it is acceptable to fallback to SW decoding
+    // when HW decoding is not available.
+    if (XRE_IsGPUProcess() && !decoder->IsHardwareAccelerated()) {
+      MOZ_LOG_FMT(sPDMLog, LogLevel::Debug,
+                  "FFmpeg video decoder can't perform hw decoding, abort!");
+      (void)decoder->Shutdown();
+      decoder = nullptr;
     }
-#endif
     return decoder.forget();
   }
 

@@ -29,6 +29,7 @@
 #  include "mozilla/gfx/gfxVars.h"
 #endif
 #include "nsStringFwd.h"
+#include "nsXULAppAPI.h"
 
 // The ffmpeg namespace is introduced to avoid the PixelFormat's name conflicts
 // with MediaDataEncoder::PixelFormat in MediaDataEncoder class scope.
@@ -419,8 +420,10 @@ MediaResult FFmpegVideoEncoder<LIBAV_VER>::InitEncoder() {
     result = InitEncoderInternal(/* aHardware */ true);
   }
   // TODO(aosmond): We should be checking here for RequireHardware, but we fail
-  // encoding tests if we don't allow fallback to software on Linux in CI.
-  if (NS_FAILED(result.Code())) {
+  // encoding tests if we don't allow fallback to software on Linux in CI. Pure
+  // software encoding is never permitted in the GPU process however, so we fail
+  // there instead.
+  if (NS_FAILED(result.Code()) && !XRE_IsGPUProcess()) {
     result = InitEncoderInternal(/* aHardware */ false);
   }
   return result;
