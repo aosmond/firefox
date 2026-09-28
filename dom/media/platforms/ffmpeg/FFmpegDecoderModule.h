@@ -284,32 +284,31 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 #ifdef MOZ_WIDGET_ANDROID
       // Because we don't provide software implementations of H264 or HEVC on
       // Android, we must use the platform software decoders even if true
-      // hardware decoding support is missing.
+      // hardware decoding support is missing, except in the GPU process where
+      // SW decoding is not allowed.
+      bool useHwDecode = true;
       switch (codecId) {
         case AV_CODEC_ID_H264:
-          supports += gfx::gfxVars::UseH264HwDecode()
-                          ? media::DecodeSupport::HardwareDecode
-                          : media::DecodeSupport::SoftwareDecode;
+          useHwDecode = gfx::gfxVars::UseH264HwDecode();
           break;
         case AV_CODEC_ID_HEVC:
-          supports += gfx::gfxVars::UseHEVCHwDecode()
-                          ? media::DecodeSupport::HardwareDecode
-                          : media::DecodeSupport::SoftwareDecode;
+          useHwDecode = gfx::gfxVars::UseHEVCHwDecode();
           break;
         default:
-          supports += media::DecodeSupport::HardwareDecode;
           break;
+      }
+      if (useHwDecode) {
+        supports += media::DecodeSupport::HardwareDecode;
+      } else if (!XRE_IsGPUProcess()) {
+        supports += media::DecodeSupport::SoftwareDecode;
       }
 #else
       supports += media::DecodeSupport::HardwareDecode;
 #endif
     }
 
-#ifdef XP_WIN
-    // TODO : add this for Android as well in bug 1974849.
-    MOZ_ASSERT_IF(XRE_IsGPUProcess() && IsVideoCodec(codecId),
+    MOZ_ASSERT_IF(XRE_IsGPUProcess(),
                   !supports.contains(media::DecodeSupport::SoftwareDecode));
-#endif
 
     MOZ_LOG_FMT(sPDMLog, LogLevel::Debug,
                 "FFmpeg decoder {} requested type '{}'",
@@ -329,12 +328,10 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
   }
 
   bool IsSWDecodingSupported(const AVCodecID& aCodec) const {
-#ifdef XP_WIN
-    // SW video decoding is not allowed in the GPU process.
-    if (IsVideoCodec(aCodec) && XRE_IsGPUProcess()) {
+    // SW decoding is not allowed in the GPU process.
+    if (XRE_IsGPUProcess()) {
       return false;
     }
-#endif
     return FFmpegDataDecoder<V>::FindSoftwareAVCodec(mLib, aCodec);
   }
 
