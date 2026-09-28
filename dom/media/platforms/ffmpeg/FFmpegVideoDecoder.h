@@ -138,6 +138,13 @@ class FFmpegVideoDecoder<LIBAV_VER>
 
   static AVCodecID GetCodecId(const nsACString& aMimeType);
 
+#ifdef MOZ_WIDGET_ANDROID
+  // Whether MediaCodec video decoding is left to the GPU process. The RDD still
+  // uses MediaCodec for encrypted video, as it must be decoded in the same
+  // process as the CDM.
+  static bool IsMediaCodecReservedForGPUProcess(bool aHasCDM);
+#endif
+
 #ifdef CUSTOMIZED_BUFFER_ALLOCATION
   int GetVideoBuffer(struct AVCodecContext* aCodecContext, AVFrame* aFrame,
                      int aFlags);

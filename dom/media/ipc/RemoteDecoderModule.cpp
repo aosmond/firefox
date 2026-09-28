@@ -71,7 +71,7 @@ media::DecodeSupportSet RemoteDecoderModule::Supports(
   }
 #endif
 #ifdef ANDROID
-  if ((aParams.mCDM && mLocation != RemoteMediaIn::RddProcess) ||
+  if ((aParams.mCDM && mLocation != aParams.mCDM->GetLocation()) ||
       (!aParams.mCDM && aParams.mConfig.IsAudio() &&
        mLocation != RemoteMediaIn::UtilityProcess_Generic)) {
     support = {};

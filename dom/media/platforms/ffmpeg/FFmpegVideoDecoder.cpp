@@ -878,6 +878,15 @@ bool FFmpegVideoDecoder<LIBAV_VER>::ShouldDisableHWDecoding(
     bool aDisableHardwareDecoding) const {
 #  ifdef MOZ_WIDGET_ANDROID
 #    ifdef FFVPX_VERSION
+  const bool hasCDM = !!mCDM;
+#    else
+  const bool hasCDM = false;
+#    endif
+  if (IsMediaCodecReservedForGPUProcess(hasCDM)) {
+    FFMPEG_LOG("Platform decoder is only used in the GPU process");
+    return true;
+  }
+#    ifdef FFVPX_VERSION
   // We only support decrypt and decode with MediaCodec.
   if (mCDM) {
     FFMPEG_LOG("CDM requires platform decoder");
@@ -2648,6 +2657,15 @@ Maybe<MediaDataDecoder::PropertyValue> FFmpegVideoDecoder<
     default:
       return MediaDataDecoder::GetDecodeProperty(aName);
   }
+}
+#endif
+
+#ifdef MOZ_WIDGET_ANDROID
+/* static */
+bool FFmpegVideoDecoder<LIBAV_VER>::IsMediaCodecReservedForGPUProcess(
+    bool aHasCDM) {
+  return XRE_IsRDDProcess() && !aHasCDM &&
+         StaticPrefs::media_gpu_process_decoder();
 }
 #endif
 

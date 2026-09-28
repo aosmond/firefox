@@ -77,6 +77,9 @@ class RemoteMediaManagerChild final
       const CreateDecoderParams& aParams, RemoteMediaIn aLocation);
   static RefPtr<PlatformDecoderModule::CreateDecoderPromise> CreateVideoDecoder(
       const CreateDecoderParams& aParams, RemoteMediaIn aLocation);
+  // The process that should host a new CDM: the GPU process if it is used for
+  // decoding, otherwise the RDD process. Main thread only.
+  static RemoteMediaIn GetCDMLocation();
   static RefPtr<RemoteCDMProxy> CreateCDM(RemoteMediaIn aLocation,
                                           dom::MediaKeys* aKeys,
                                           const nsAString& aKeySystem,

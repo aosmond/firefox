@@ -223,11 +223,14 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 
     // In GPU process, only support decoding if video. This only gives a hint of
     // what the GPU decoder *may* support. The actual check will occur in
-    // AsyncCreateDecoder.
+    // AsyncCreateDecoder. On Android, encrypted audio is also decoded in the
+    // GPU process if it hosts the CDM, see CreateAudioDecoder.
     const auto& trackInfo = aParams.mConfig;
+#ifndef MOZ_WIDGET_ANDROID
     if (XRE_IsGPUProcess() && !trackInfo.GetAsVideoInfo()) {
       return media::DecodeSupportSet{};
     }
+#endif
 
     // Temporary - forces use of VPXDecoder when alpha is present.
     // Bug 1263836 will handle alpha scenario once implemented. It will shift
@@ -354,6 +357,16 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
     if (Supports(SupportDecoderParams(aParams), nullptr).isEmpty()) {
       return nullptr;
     }
+#ifdef MOZ_WIDGET_ANDROID
+    // Codecs without a software decoder can only be decoded with MediaCodec, so
+    // reject them to let PDMFactory fall back.
+    if (FFmpegVideoDecoder<V>::IsMediaCodecReservedForGPUProcess(
+            !!aParams.mCDM) &&
+        !IsSWDecodingSupported(
+            FFmpegVideoDecoder<V>::GetCodecId(aParams.mConfig.mMimeType))) {
+      return nullptr;
+    }
+#endif
     return MakeAndAddRef<FFmpegVideoDecoder<V>>(
         mLib, aParams.VideoConfig(), aParams.mKnowsCompositor,
         aParams.mImageContainer,
@@ -368,8 +381,16 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
   already_AddRefed<MediaDataDecoder> CreateAudioDecoder(
       const CreateDecoderParams& aParams) {
     if (XRE_IsGPUProcess()) {
+#ifdef MOZ_WIDGET_ANDROID
+      // Only allow encrypted audio, which must be decoded in the same process
+      // as the CDM.
+      if (!aParams.mCDM) {
+        return nullptr;
+      }
+#else
       // Only allow video in the GPU process.
       return nullptr;
+#endif
     }
     if (Supports(SupportDecoderParams(aParams), nullptr).isEmpty()) {
       return nullptr;

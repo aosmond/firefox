@@ -133,7 +133,7 @@ RefPtr<MediaDataDecoder::InitPromise> FFmpegAudioDecoder<LIBAV_VER>::Init() {
   MediaResult rv(NS_ERROR_NOT_AVAILABLE);
 #if defined(MOZ_WIDGET_ANDROID) && defined(USING_MOZFFVPX)
   if ((mCDM || mCodecID == AV_CODEC_ID_AAC) &&
-      (XRE_IsRDDProcess() || XRE_IsUtilityProcess())) {
+      (XRE_IsRDDProcess() || XRE_IsUtilityProcess() || XRE_IsGPUProcess())) {
     AVCodec* codec = FindHardwareAVCodec(mLib, mCodecID, AV_HWDEVICE_TYPE_NONE);
     if (codec) {
       rv = InitDecoder(codec, &options);

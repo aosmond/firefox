@@ -98,6 +98,13 @@ IPCResult RemoteAudioDecoderParent::RecvConstruct(
     return IPC_OK();
   }
 
+  // The GPU process only decodes audio that must be decoded alongside its CDM.
+  if (XRE_IsGPUProcess() && !mCDM) {
+    aResolver(MediaResult(NS_ERROR_DOM_MEDIA_NOT_SUPPORTED_ERR,
+                          "GPU process only decodes encrypted audio"_ns));
+    return IPC_OK();
+  }
+
   auto params = CreateDecoderParams{
       mAudioInfo,     static_cast<PRemoteCDMActor*>(mCDM.get()),
       mOptions,       CreateDecoderParams::WrapperSet({/* No wrapper */}),
