@@ -307,7 +307,13 @@ bool AndroidImageReader::UpdateTexImage(const AndroidMediaCodecFrameId aFrameId,
 
   MonitorAutoLock lock(mMonitor);
 
-  DebugOnly<bool> ret = DoUpdateTexImage(lock, aFrameId);
+  bool ret = DoUpdateTexImage(lock, aFrameId);
+  // XXX Temporary diagnostics, do not land.
+  if (ret) {
+    printf_stderr(
+        "AndroidImageReader[%p] compositor advanced reader to frame %llu\n",
+        this, static_cast<unsigned long long>(mCurrentFrameId.mId));
+  }
   if (!mCurrentImage || *aImage == mCurrentImage) {
     MOZ_ASSERT(!ret);
     return false;
@@ -361,7 +367,15 @@ bool AndroidImageReader::UpdateTexImageWithReadback(
 
   MonitorAutoLock lock(mMonitor);
 
-  DoUpdateTexImage(lock, aFrameId);
+  bool updated = DoUpdateTexImage(lock, aFrameId);
+  // XXX Temporary diagnostics, do not land.
+  printf_stderr(
+      "AndroidImageReader[%p] readback requested frame %llu, %s, reading "
+      "frame %llu%s\n",
+      this, static_cast<unsigned long long>(aFrameId.mId),
+      updated ? "advanced reader" : "reader not advanced",
+      static_cast<unsigned long long>(mCurrentFrameId.mId),
+      mCurrentFrameId == aFrameId ? "" : " (MISMATCH)");
   if (!mCurrentImage) {
     MOZ_ASSERT_UNREACHABLE("unexpected to be called");
     return false;
