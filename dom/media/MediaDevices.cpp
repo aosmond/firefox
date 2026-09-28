@@ -759,6 +759,20 @@ RefPtr<MediaDevices::SinkInfoPromise> MediaDevices::GetSinkDevice(
                 continue;
               }
               if (aDeviceId.IsEmpty()) {
+                // XXX DEBUG ONLY (bug 2048385)
+                if (!device->GetAudioDeviceInfo()->Preferred()) {
+                  for (const RefPtr<LocalMediaDevice>& d : *aDevices) {
+                    if (d->Kind() != dom::MediaDeviceKind::Audiooutput) {
+                      continue;
+                    }
+                    printf_stderr(
+                        "[cubeb-debug] GetSinkDevice output name='%s' "
+                        "preferred=%d\n",
+                        NS_ConvertUTF16toUTF8(d->GetAudioDeviceInfo()->Name())
+                            .get(),
+                        d->GetAudioDeviceInfo()->Preferred());
+                  }
+                }
                 MOZ_ASSERT(device->GetAudioDeviceInfo()->Preferred(),
                            "First Audiooutput should be preferred");
                 return SinkInfoPromise::CreateAndResolve(

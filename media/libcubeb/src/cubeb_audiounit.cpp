@@ -32,7 +32,9 @@
 #include <atomic>
 #include <set>
 #include <string>
+#include <stdio.h>
 #include <sys/time.h>
+#include <unistd.h>
 #include <vector>
 
 using namespace std;
@@ -3513,6 +3515,77 @@ audiounit_enumerate_devices(cubeb * /* context */, cubeb_device_type type,
   return CUBEB_ERROR_NOT_SUPPORTED;
 }
 #else
+// XXX DEBUG ONLY (bug 2048385): dump output device enumeration.
+static void
+audiounit_debug_dump_output_enumeration(cubeb_device_info * devices,
+                                        size_t count,
+                                        AudioObjectID default_before)
+{
+  AudioObjectID default_after =
+      audiounit_get_default_device_id(CUBEB_DEVICE_TYPE_OUTPUT);
+  bool any_preferred = false;
+  for (size_t i = 0; i < count; i++) {
+    if (devices[i].preferred != CUBEB_DEVICE_PREF_NONE) {
+      any_preferred = true;
+    }
+  }
+  fprintf(stderr,
+          "[cubeb-debug pid=%d] enumerate output: count=%zu "
+          "default_before=%u default_after=%u any_preferred=%d\n",
+          getpid(), count, default_before, default_after, any_preferred);
+  for (size_t i = 0; i < count; i++) {
+    fprintf(stderr,
+            "[cubeb-debug pid=%d]   listed devid=%u name='%s' uid='%s' "
+            "channels=%u preferred=%d\n",
+            getpid(),
+            (unsigned)reinterpret_cast<uintptr_t>(devices[i].devid),
+            devices[i].friendly_name ? devices[i].friendly_name : "",
+            devices[i].device_id ? devices[i].device_id : "",
+            devices[i].max_channels, (int)devices[i].preferred);
+  }
+  if (any_preferred || count == 0) {
+    return;
+  }
+
+  UInt32 size = 0;
+  if (AudioObjectGetPropertyDataSize(kAudioObjectSystemObject,
+                                     &DEVICES_PROPERTY_ADDRESS, 0, NULL,
+                                     &size) != noErr) {
+    fprintf(stderr, "[cubeb-debug pid=%d]   raw device list size failed\n",
+            getpid());
+    return;
+  }
+  vector<AudioObjectID> raw(size / sizeof(AudioObjectID));
+  if (AudioObjectGetPropertyData(kAudioObjectSystemObject,
+                                 &DEVICES_PROPERTY_ADDRESS, 0, NULL, &size,
+                                 raw.data()) != noErr) {
+    fprintf(stderr, "[cubeb-debug pid=%d]   raw device list failed\n",
+            getpid());
+    return;
+  }
+  bool default_in_raw = false;
+  for (AudioObjectID id : raw) {
+    if (id == default_before || id == default_after) {
+      default_in_raw = true;
+    }
+    char * name = nullptr;
+    if (CFStringRef ref = get_device_name(id)) {
+      name = audiounit_strref_to_cstr_utf8(ref);
+      CFRelease(ref);
+    }
+    fprintf(stderr,
+            "[cubeb-debug pid=%d]   raw devid=%u name='%s' out_channels=%u "
+            "in_channels=%u is_default=%d\n",
+            getpid(), id, name ? name : "",
+            audiounit_get_channel_count(id, kAudioDevicePropertyScopeOutput),
+            audiounit_get_channel_count(id, kAudioDevicePropertyScopeInput),
+            id == default_before || id == default_after);
+    delete[] name;
+  }
+  fprintf(stderr, "[cubeb-debug pid=%d]   default_in_raw=%d\n", getpid(),
+          default_in_raw);
+}
+
 static int
 audiounit_enumerate_devices(cubeb * /* context */, cubeb_device_type type,
                             cubeb_device_collection * collection)
@@ -3526,7 +3599,10 @@ audiounit_enumerate_devices(cubeb * /* context */, cubeb_device_type type,
   // devices may report as being both input *and* output and cubeb
   // separates those into two different devices.
 
+  AudioObjectID debug_default_before = kAudioObjectUnknown;
   if (type & CUBEB_DEVICE_TYPE_OUTPUT) {
+    debug_default_before =
+        audiounit_get_default_device_id(CUBEB_DEVICE_TYPE_OUTPUT);
     output_devs = audiounit_get_devices_of_type(CUBEB_DEVICE_TYPE_OUTPUT);
   }
 
@@ -3547,6 +3623,11 @@ audiounit_enumerate_devices(cubeb * /* context */, cubeb_device_type type,
       }
       collection->count += 1;
     }
+  }
+
+  if (type & CUBEB_DEVICE_TYPE_OUTPUT) {
+    audiounit_debug_dump_output_enumeration(devices, collection->count,
+                                            debug_default_before);
   }
 
   if (type & CUBEB_DEVICE_TYPE_INPUT) {

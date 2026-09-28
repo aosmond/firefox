@@ -366,6 +366,8 @@ void CubebDeviceEnumerator::AudioDeviceListChanged(Side aSide) {
     mOnInputDeviceListChange.Notify();
   } else {
     MOZ_ASSERT(aSide == Side::OUTPUT);
+    // XXX DEBUG ONLY (bug 2048385)
+    printf_stderr("[cubeb-debug] CubebDeviceEnumerator output list changed\n");
     mOutputDevices = nullptr;
     mOnOutputDeviceListChange.Notify();
   }
