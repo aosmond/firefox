@@ -158,13 +158,49 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 
   RefPtr<CreateDecoderPromise> AsyncCreateDecoder(
       const CreateDecoderParams& aParams) override {
-    RefPtr<MediaDataDecoder> decoder;
     if (aParams.IsAudio()) {
-      decoder = CreateAudioDecoder(aParams);
-    } else if (aParams.IsVideo()) {
-      decoder = CreateVideoDecoder(aParams);
+      return CreateDecoderPromiseFrom(CreateAudioDecoder(aParams), aParams);
     }
-    return CreateDecoderPromiseFrom(decoder.forget(), aParams);
+    if (!aParams.IsVideo()) {
+      return CreateDecoderPromiseFrom(nullptr, aParams);
+    }
+    RefPtr<FFmpegVideoDecoder<V>> decoder = CreateVideoDecoder(aParams);
+    if (!decoder) {
+      return CreateDecoderPromiseFrom(nullptr, aParams);
+    }
+
+#ifdef XP_WIN
+    // Ensure that decoding is exclusively performed using HW decoding in
+    // the GPU process. If FFmpeg does not support HW decoding, reject so that
+    // PDMFactory selects an alternative HW-capable decoder module if
+    // available. In contrast, in the RDD process, it is acceptable to fallback
+    // to SW decoding when HW decoding is not available.
+    const bool requireHW =
+        XRE_IsGPUProcess() &&
+        IsHWDecodingSupported(
+            FFmpegVideoDecoder<V>::GetCodecId(aParams.mConfig.mMimeType));
+#else
+    const bool requireHW = false;
+#endif
+
+    // Set up hardware decoding off the caller's thread, before anyone else
+    // sees the decoder.
+    return decoder->InitHWDecoder()->Then(
+        GetCurrentSerialEventTarget(), __func__,
+        [decoder, requireHW](const GenericPromise::ResolveOrRejectValue&) {
+          if (requireHW && !decoder->IsHardwareAccelerated()) {
+            MOZ_LOG_FMT(sPDMLog, LogLevel::Debug,
+                        "FFmpeg video decoder can't perform hw decoding, "
+                        "abort!");
+            (void)decoder->Shutdown();
+            return CreateDecoderPromise::CreateAndReject(
+                MediaResult(NS_ERROR_DOM_MEDIA_FATAL_ERR,
+                            RESULT_DETAIL("FFmpeg can't perform hw decoding")),
+                __func__);
+          }
+          return CreateDecoderPromise::CreateAndResolve(
+              RefPtr<MediaDataDecoder>(decoder), __func__);
+        });
   }
 
   media::DecodeSupportSet SupportsMimeType(
@@ -187,7 +223,7 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 
     // In GPU process, only support decoding if video. This only gives a hint of
     // what the GPU decoder *may* support. The actual check will occur in
-    // CreateVideoDecoder.
+    // AsyncCreateDecoder.
     const auto& trackInfo = aParams.mConfig;
     if (XRE_IsGPUProcess() && !trackInfo.GetAsVideoInfo()) {
       return media::DecodeSupportSet{};
@@ -313,12 +349,12 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
   }
 
  private:
-  already_AddRefed<MediaDataDecoder> CreateVideoDecoder(
+  already_AddRefed<FFmpegVideoDecoder<V>> CreateVideoDecoder(
       const CreateDecoderParams& aParams) {
     if (Supports(SupportDecoderParams(aParams), nullptr).isEmpty()) {
       return nullptr;
     }
-    auto decoder = MakeRefPtr<FFmpegVideoDecoder<V>>(
+    return MakeAndAddRef<FFmpegVideoDecoder<V>>(
         mLib, aParams.VideoConfig(), aParams.mKnowsCompositor,
         aParams.mImageContainer,
         aParams.mOptions.contains(CreateDecoderParams::Option::LowLatency),
@@ -327,26 +363,6 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
         aParams.mOptions.contains(
             CreateDecoderParams::Option::Output8BitPerChannel),
         aParams.mTrackingId, aParams.mCDM);
-
-#ifdef XP_WIN
-    // Ensure that decoding is exclusively performed using HW decoding in
-    // the GPU process. If FFmpeg does not support HW decoding, reset the
-    // decoder to allow PDMFactory to select an alternative HW-capable decoder
-    // module if available. In contrast, in the RDD process, it is acceptable
-    // to fallback to SW decoding when HW decoding is not available.
-    if (XRE_IsGPUProcess()) {
-      AVCodecID videoCodec =
-          FFmpegVideoDecoder<V>::GetCodecId(aParams.mConfig.mMimeType);
-      if (IsHWDecodingSupported(videoCodec) &&
-          !decoder->IsHardwareAccelerated()) {
-        MOZ_LOG_FMT(sPDMLog, LogLevel::Debug,
-                    "FFmpeg video decoder can't perform hw decoding, abort!");
-        (void)decoder->Shutdown();
-        decoder = nullptr;
-      }
-    }
-#endif
-    return decoder.forget();
   }
 
   already_AddRefed<MediaDataDecoder> CreateAudioDecoder(

@@ -101,6 +101,11 @@ class FFmpegVideoDecoder<LIBAV_VER>
   ~FFmpegVideoDecoder();
 
   RefPtr<InitPromise> Init() override;
+  // Sets up hardware decoding if allowed, on the decoder's task queue, so that
+  // it does not block the caller. FFmpegDecoderModule calls this before handing
+  // the decoder out, so IsHardwareAccelerated() is known by the time anyone
+  // else sees it.
+  RefPtr<GenericPromise> InitHWDecoder();
   void InitCodecContext() MOZ_REQUIRES(sMutex) override;
   nsCString GetDescriptionName() const override {
 #ifdef USING_MOZFFVPX
@@ -196,7 +201,7 @@ class FFmpegVideoDecoder<LIBAV_VER>
       AVHWDeviceType aDeviceType = AV_HWDEVICE_TYPE_NONE);
 
  private:
-  // This will be called inside the ctor.
+  // Called by InitHWDecoder().
   void InitHWDecoderIfAllowed();
 
   enum class ContextType {
