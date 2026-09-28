@@ -985,9 +985,16 @@ FFmpegVideoDecoder<LIBAV_VER>::FFmpegVideoDecoder(
 #if defined(MOZ_WIDGET_GTK) && defined(MOZ_USE_HWDECODE)
   mUploadSWDecodeToDMABuf = UploadSWDecodeToDMABuf();
 #endif
+}
+
+RefPtr<GenericPromise> FFmpegVideoDecoder<LIBAV_VER>::InitHWDecoder() {
+  RefPtr<FFmpegVideoDecoder<LIBAV_VER>> self = this;
+  return InvokeAsync(mTaskQueue, __func__, [self]() {
 #ifdef MOZ_USE_HWDECODE
-  InitHWDecoderIfAllowed();
-#endif  // MOZ_USE_HWDECODE
+    self->InitHWDecoderIfAllowed();
+#endif
+    return GenericPromise::CreateAndResolve(true, __func__);
+  });
 }
 
 FFmpegVideoDecoder<LIBAV_VER>::~FFmpegVideoDecoder() {
@@ -1067,7 +1074,7 @@ RefPtr<MediaDataDecoder::InitPromise> FFmpegVideoDecoder<LIBAV_VER>::Init() {
   AUTO_PROFILER_LABEL("FFmpegVideoDecoder::Init", MEDIA_PLAYBACK);
   FFMPEG_LOG("FFmpegVideoDecoder, init, IsHardwareAccelerated={}\n",
              IsHardwareAccelerated());
-  // We've finished the HW decoder initialization in the ctor.
+  // We've finished the HW decoder initialization.
   if (IsHardwareAccelerated()) {
     return InitPromise::CreateAndResolve(TrackInfo::kVideoTrack, __func__);
   }
