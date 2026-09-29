@@ -2637,9 +2637,9 @@ void FFmpegVideoDecoder<LIBAV_VER>::ProcessShutdown() {
   // Shutdown order for Vulkan hw decode:
   // 1. avcodec_free_context() via ProcessShutdown() — FFmpeg must finish
   //    ff_vk_uninit before we touch Firefox-owned Vulkan objects.
-  // 2. mVulkanDecoder.Cleanup() — uses mDeviceWaitIdle and destroys our
-  //    command pools/fences; must run while mVulkanDeviceContext still keeps
-  //    the AVHWDeviceContext alive.
+  // 2. mVulkanDecoder.Cleanup() — waits on this decoder's copy fences and
+  //    destroys our command pools/fences; must run while mVulkanDeviceContext
+  //    still keeps the AVHWDeviceContext alive.
   // 3. av_buffer_unref(&mVulkanDeviceContext) — extra refs from this decoder.
   // 4. VulkanDeviceHolder::Drop — always (no-op if already nullptr); last
   //    process-wide client may vkDestroyDevice under sDeviceHolders.

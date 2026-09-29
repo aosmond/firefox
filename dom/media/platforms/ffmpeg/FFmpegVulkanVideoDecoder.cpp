@@ -794,10 +794,10 @@ void FFmpegVideoDecoder<LIBAV_VER>::FFmpegVulkanVideoDecoder::InitDrmModifiers(
               (unsigned long long)mDrmModifiers[0]);
 }
 
-// Process-wide loader/instance for physical-device select. Created once;
-// never destroyed (VkPhysicalDevice handles die with the instance).
-// sMutex is per-LIBAV_VER so it cannot guard these; sSharedInstanceMutex
-// does, self-contained within this function.
+// Loader/instance for physical-device select, one per libavcodec version as
+// this file is built for each. Created once; never destroyed (VkPhysicalDevice
+// handles die with the instance). Guarded by sSharedInstanceMutex,
+// self-contained within EnsureSharedVulkanInstance.
 static StaticMutex sSharedInstanceMutex;
 static void* sVulkanLib MOZ_GUARDED_BY(sSharedInstanceMutex) = nullptr;
 static VkInstance sSharedInstance MOZ_GUARDED_BY(sSharedInstanceMutex) =
