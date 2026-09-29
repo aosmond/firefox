@@ -576,7 +576,7 @@ void FFmpegVideoDecoder<LIBAV_VER>::AdjustHWDecodeLogging() {
 MediaResult FFmpegVideoDecoder<LIBAV_VER>::InitVAAPIDecoder() {
   FFMPEG_LOG("Initialising VA-API FFmpeg decoder");
 
-  StaticMutexAutoLock mon(sMutex);
+  FFMPEG_LOCK_CODEC();
 
   // mAcceleratedFormats is already configured so check supported
   // formats before we do anything.
@@ -624,7 +624,8 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::InitVAAPIDecoder() {
   InitHWCodecContext(ContextType::VAAPI);
 
   // MOZ_REQUIRES isn't recognized in MakeScopeExit, but InitVAAPIDecoder
-  // already locks sMutex at the start, so just escape thread analysis.
+  // already takes the codec lock at the start, so just escape thread
+  // analysis.
   auto releaseVAAPIdecoder = MakeScopeExit([&]() MOZ_NO_THREAD_SAFETY_ANALYSIS {
     if (mVAAPIDeviceContext) {
       mLib->av_buffer_unref(&mVAAPIDeviceContext);
@@ -693,7 +694,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::InitVulkanDecoder() {
 
   FFMPEG_LOG("Initialising Vulkan FFmpeg decoder");
 
-  StaticMutexAutoLock mon(sMutex);
+  FFMPEG_LOCK_CODEC();
 
   // TODO : change to VkGetPhysicalDeviceVideoCapabilitiesKHR when appropriate
   // vulkan video extensions headers are included in mozilla
@@ -785,7 +786,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::InitVulkanDecoder() {
 MediaResult FFmpegVideoDecoder<LIBAV_VER>::InitV4L2Decoder() {
   FFMPEG_LOG("Initialising V4L2-DRM FFmpeg decoder");
 
-  StaticMutexAutoLock mon(sMutex);
+  FFMPEG_LOCK_CODEC();
 
   // Select the appropriate v4l2 codec
   AVCodec* codec = FindVideoHardwareAVCodec(mLib, mCodecID);
@@ -813,7 +814,8 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::InitV4L2Decoder() {
   mCodecContext->apply_cropping = 0;
 
   // MOZ_REQUIRES isn't recognized in MakeScopeExit, but InitV4L2Decoder
-  // already locks sMutex at the start, so just escape thread analysis.
+  // already takes the codec lock at the start, so just escape thread
+  // analysis.
   auto releaseDecoder = MakeScopeExit(
       [&]() MOZ_NO_THREAD_SAFETY_ANALYSIS { ReleaseCodecContext(); });
 
@@ -2868,7 +2870,7 @@ nsTArray<AVCodecID> FFmpegVideoDecoder<LIBAV_VER>::GetAcceleratedFormats() {
 MediaResult FFmpegVideoDecoder<LIBAV_VER>::InitD3D11VADecoder() {
   MOZ_DIAGNOSTIC_ASSERT(XRE_IsGPUProcess());
   FFMPEG_LOG("Initialising D3D11VA FFmpeg decoder");
-  StaticMutexAutoLock mon(sMutex);
+  FFMPEG_LOCK_CODEC();
 
   if (!mImageAllocator || !mImageAllocator->SupportsD3D11()) {
     FFMPEG_LOG("  no KnowsCompositor or it doesn't support D3D11");
@@ -2897,7 +2899,8 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::InitD3D11VADecoder() {
   InitHWCodecContext(ContextType::D3D11VA);
 
   // MOZ_REQUIRES isn't recognized in MakeScopeExit, but InitD3D11VADecoder
-  // already locks sMutex at the start, so just escape thread analysis.
+  // already takes the codec lock at the start, so just escape thread
+  // analysis.
   auto releaseResources = MakeScopeExit([&]() MOZ_NO_THREAD_SAFETY_ANALYSIS {
     ReleaseCodecContext();
     if (mD3D11VADeviceContext) {
@@ -3133,7 +3136,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::AllocateHEVCExtraData() {
 
 MediaResult FFmpegVideoDecoder<LIBAV_VER>::InitMediaCodecDecoder() {
   FFMPEG_LOG("Initialising MediaCodec FFmpeg decoder");
-  StaticMutexAutoLock mon(sMutex);
+  FFMPEG_LOCK_CODEC();
 
   if (StaticPrefs::media_ffvpx_hw_minimal() && mCodecID != AV_CODEC_ID_H264 &&
       mCodecID != AV_CODEC_ID_HEVC) {
@@ -3165,7 +3168,8 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::InitMediaCodecDecoder() {
   InitHWCodecContext(ContextType::MediaCodec);
 
   // MOZ_REQUIRES isn't recognized in MakeScopeExit, but InitMediaCodecDecoder
-  // already locks sMutex at the start, so just escape thread analysis.
+  // already takes the codec lock at the start, so just escape thread
+  // analysis.
   auto releaseResources = MakeScopeExit([&]() MOZ_NO_THREAD_SAFETY_ANALYSIS {
     ReleaseCodecContext();
     if (mMediaCodecDeviceContext) {

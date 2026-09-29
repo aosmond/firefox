@@ -12,6 +12,20 @@
 // This must be the last header included
 #include "FFmpegLibs.h"
 
+// Older libavcodec versions require codec open and close to be serialized.
+// ffvpx's libavcodec serializes codec initialization itself where required,
+// and the state shared by our open and close paths has its own locking, so
+// there it does not need to be serialized.
+#ifdef USING_MOZFFVPX
+#  define FFMPEG_LOCK_CODEC() \
+    do {                      \
+    } while (0)
+#  define FFMPEG_REQUIRES_CODEC_LOCK
+#else
+#  define FFMPEG_LOCK_CODEC() StaticMutexAutoLock codecLock(sMutex)
+#  define FFMPEG_REQUIRES_CODEC_LOCK MOZ_REQUIRES(sMutex)
+#endif
+
 namespace mozilla {
 #if defined(MOZ_WIDGET_ANDROID) && defined(USING_MOZFFVPX)
 class MediaDrmCrypto;
@@ -55,8 +69,8 @@ class FFmpegDataDecoder<LIBAV_VER>
   // Flush and Drain operation, always run
   virtual RefPtr<FlushPromise> ProcessFlush();
   virtual void ProcessShutdown();
-  virtual void InitCodecContext() MOZ_REQUIRES(sMutex) {}
-  void ReleaseCodecContext() MOZ_REQUIRES(sMutex);
+  virtual void InitCodecContext() FFMPEG_REQUIRES_CODEC_LOCK {}
+  void ReleaseCodecContext() FFMPEG_REQUIRES_CODEC_LOCK;
   AVFrame* PrepareFrame();
   void ReleaseFrame();
   MediaResult InitSWDecoder(AVDictionary** aOptions);
@@ -91,8 +105,10 @@ class FFmpegDataDecoder<LIBAV_VER>
  protected:
   virtual ~FFmpegDataDecoder();
 
+#ifndef USING_MOZFFVPX
   static StaticMutex sMutex;  // used to provide critical-section locking
                               // for calls into ffmpeg
+#endif
   const RefPtr<TaskQueue> mTaskQueue;  // set in constructor
 
   RefPtr<DecodePromise> ProcessDrain();

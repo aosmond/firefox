@@ -105,7 +105,7 @@ class FFmpegVideoDecoder<LIBAV_VER>
   // the decoder out, so IsHardwareAccelerated() is known by the time anyone
   // else sees it.
   RefPtr<GenericPromise> InitHWDecoder();
-  void InitCodecContext() MOZ_REQUIRES(sMutex) override;
+  void InitCodecContext() FFMPEG_REQUIRES_CODEC_LOCK override;
   nsCString GetDescriptionName() const override {
 #ifdef USING_MOZFFVPX
     return "ffvpx video decoder"_ns;

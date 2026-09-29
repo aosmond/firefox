@@ -29,7 +29,7 @@ class FFmpegAudioDecoder<LIBAV_VER>
   virtual ~FFmpegAudioDecoder();
 
   RefPtr<InitPromise> Init() override;
-  void InitCodecContext() MOZ_REQUIRES(sMutex) override;
+  void InitCodecContext() FFMPEG_REQUIRES_CODEC_LOCK override;
   static AVCodecID GetCodecId(const nsACString& aMimeType,
                               const AudioInfo& aInfo);
   nsCString GetDescriptionName() const override {

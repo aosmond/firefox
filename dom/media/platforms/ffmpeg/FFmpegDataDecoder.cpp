@@ -26,7 +26,9 @@
 
 namespace mozilla {
 
+#ifndef USING_MOZFFVPX
 StaticMutex FFmpegDataDecoder<LIBAV_VER>::sMutex;
+#endif
 
 FFmpegDataDecoder<LIBAV_VER>::FFmpegDataDecoder(const FFmpegLibWrapper* aLib,
                                                 AVCodecID aCodecID,
@@ -219,7 +221,7 @@ MediaResult FFmpegDataDecoder<LIBAV_VER>::InitDecoder(AVCodec* aCodec,
                                                       AVDictionary** aOptions) {
   FFMPEG_LOG("  codec {} : {}", aCodec->name, aCodec->long_name);
 
-  StaticMutexAutoLock mon(sMutex);
+  FFMPEG_LOCK_CODEC();
 
   if (!(mCodecContext = mLib->avcodec_alloc_context3(aCodec))) {
     FFMPEG_LOG("  couldn't allocate ffmpeg context for codec {}", aCodec->name);
@@ -433,7 +435,7 @@ FFmpegDataDecoder<LIBAV_VER>::ProcessFlush() {
 void FFmpegDataDecoder<LIBAV_VER>::ProcessShutdown() {
   AUTO_PROFILER_LABEL("FFmpegDataDecoder::ProcessShutdown", MEDIA_PLAYBACK);
   MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
-  StaticMutexAutoLock mon(sMutex);
+  FFMPEG_LOCK_CODEC();
 
   if (mCodecContext) {
     FFMPEG_LOG("FFmpegDataDecoder: shutdown");
