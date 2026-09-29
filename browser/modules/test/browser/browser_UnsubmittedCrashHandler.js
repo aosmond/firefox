@@ -543,6 +543,34 @@ add_task(async function test_can_auto_submit() {
 });
 
 /**
+ * Tests that if the user has chosen to automatically send crash
+ * reports, they are sent even if the notification is disabled.
+ */
+add_task(async function test_can_auto_submit_when_disabled() {
+  await SpecialPowers.pushPrefEnv({
+    set: [
+      ["browser.crashReports.unsubmittedCheck.enabled", false],
+      ["browser.crashReports.unsubmittedCheck.autoSubmit2", true],
+    ],
+  });
+
+  let reportIDs = await createPendingCrashReports(3);
+  let submissionBefore = Glean.crashSubmission.success.testGetValue();
+  let promiseReports = waitForSubmittedReports(reportIDs);
+  let notification =
+    await UnsubmittedCrashHandler.checkForUnsubmittedCrashReports();
+  Assert.equal(notification, null, "There should be no notification");
+  await promiseReports;
+  Assert.equal(
+    submissionBefore + 3,
+    Glean.crashSubmission.success.testGetValue()
+  );
+
+  await clearPendingCrashReports();
+  await SpecialPowers.popPrefEnv();
+});
+
+/**
  * Tests that if the user chooses to dismiss the notification,
  * then the current pending requests won't cause the notification
  * to appear again in the future.

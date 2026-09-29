@@ -893,7 +893,8 @@ export var UnsubmittedCrashHandler = {
    *          If a notification cannot be shown, will resolve with null.
    */
   async checkForUnsubmittedCrashReports() {
-    if (!this.enabled || this.suppressed) {
+    let autoSubmit = this.autoSubmit;
+    if (!autoSubmit && (!this.enabled || this.suppressed)) {
       return null;
     }
 
@@ -913,7 +914,7 @@ export var UnsubmittedCrashHandler = {
     if (reportIDs.length) {
       this.log.debug("found ", reportIDs.length, " unsubmitted crash reports");
       Glean.crashSubmission.pending.add(reportIDs.length);
-      if (this.autoSubmit) {
+      if (autoSubmit) {
         this.log.debug("auto submitted crash reports");
         this.submitReports(reportIDs, lazy.CrashSubmit.SUBMITTED_FROM_AUTO);
       } else if (this.shouldShowPendingSubmissionsNotification()) {
