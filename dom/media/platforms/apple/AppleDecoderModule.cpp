@@ -82,11 +82,11 @@ nsresult AppleDecoderModule::Startup() {
 
 RefPtr<PlatformDecoderModule::CreateDecoderPromise>
 AppleDecoderModule::AsyncCreateDecoder(const CreateDecoderParams& aParams) {
-  RefPtr<MediaDataDecoder> decoder;
   if (Supports(SupportDecoderParams(aParams), nullptr /* diagnostics */)
           .isEmpty()) {
-    return CreateDecoderPromiseFrom(decoder.forget(), aParams);
+    return CreateDecoderPromiseFrom(nullptr, aParams);
   }
+  RefPtr<MediaDataDecoder> decoder;
   if (aParams.IsAudio()) {
     decoder = new AppleATDecoder(aParams.AudioConfig());
   } else if (aParams.IsVideo() &&
