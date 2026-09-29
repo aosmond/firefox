@@ -845,13 +845,23 @@ static bool EnsureSharedVulkanInstance(
   return true;
 }
 
-static bool sVulkanEnumerated = false;
-static uint32_t sCachedRendererDrmMajor = 0;
-static uint32_t sCachedRendererDrmMinor = 0;
-static char sCachedVulkanDeviceName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE] = {};
-static uint32_t sCachedVulkanVendorID = 0;
-static uint32_t sCachedVulkanDeviceID = 0;
-static bool sCachedDecoderMatchesCompositor = false;
+namespace {
+
+// The Vulkan device selected for a given renderer node.
+struct SelectedDeviceCache {
+  bool mValid = false;
+  uint32_t mRendererDrmMajor = 0;
+  uint32_t mRendererDrmMinor = 0;
+  char mDeviceName[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE] = {};
+  uint32_t mVendorID = 0;
+  uint32_t mDeviceID = 0;
+  bool mDecoderMatchesCompositor = false;
+};
+
+}  // namespace
+
+constinit static StaticDataMutex<SelectedDeviceCache> sSelectedDeviceCache{
+    "VulkanSelectedDevice"};
 
 static bool PhysicalDeviceHasVulkanVideoDecodeStack(
     PFN_vkEnumerateDeviceExtensionProperties aEnumerateExt,
@@ -904,8 +914,7 @@ static bool NvidiaDrmModesetDisabled() {
 #  endif
 
 bool FFmpegVideoDecoder<LIBAV_VER>::FFmpegVulkanVideoDecoder::
-    SelectVulkanDecoderPhysicalDevice(const StaticMutexAutoLock& aProofOfLock,
-                                      const nsCString& aRendererNode) {
+    SelectVulkanDecoderPhysicalDevice(const nsCString& aRendererNode) {
   uint32_t rendererDrmMajor = 0, rendererDrmMinor = 0;
 #  if defined(MOZ_WIDGET_GTK)
   if (!aRendererNode.IsEmpty()) {
@@ -929,20 +938,23 @@ bool FFmpegVideoDecoder<LIBAV_VER>::FFmpegVulkanVideoDecoder::
   // for a given renderer node, later selects for that same node can reuse the
   // result instead of re-running vkEnumeratePhysicalDevices on the shared
   // instance while another decoder may still be using libvulkan.
-  if (sVulkanEnumerated && rendererDrmMajor == sCachedRendererDrmMajor &&
-      rendererDrmMinor == sCachedRendererDrmMinor) {
-    memcpy(mNegotiatedVulkanDeviceName, sCachedVulkanDeviceName,
-           VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
-    mNegotiatedCompositorDecoderVendorID = sCachedVulkanVendorID;
-    mNegotiatedCompositorDecoderDeviceID = sCachedVulkanDeviceID;
-    mDecoderMatchesCompositor = sCachedDecoderMatchesCompositor;
-    FFMPEGV_LOG(
-        "Reusing cached Vulkan device for video decoding: {} (vendorID=0x{:x}, "
-        "deviceID=0x{:x}), matches renderer: {}",
-        mNegotiatedVulkanDeviceName, mNegotiatedCompositorDecoderVendorID,
-        mNegotiatedCompositorDecoderDeviceID,
-        mDecoderMatchesCompositor ? "true" : "false");
-    return true;
+  {
+    auto cache = sSelectedDeviceCache.Lock();
+    if (cache->mValid && rendererDrmMajor == cache->mRendererDrmMajor &&
+        rendererDrmMinor == cache->mRendererDrmMinor) {
+      memcpy(mNegotiatedVulkanDeviceName, cache->mDeviceName,
+             VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
+      mNegotiatedCompositorDecoderVendorID = cache->mVendorID;
+      mNegotiatedCompositorDecoderDeviceID = cache->mDeviceID;
+      mDecoderMatchesCompositor = cache->mDecoderMatchesCompositor;
+      FFMPEGV_LOG(
+          "Reusing cached Vulkan device for video decoding: {} "
+          "(vendorID=0x{:x}, deviceID=0x{:x}), matches renderer: {}",
+          mNegotiatedVulkanDeviceName, mNegotiatedCompositorDecoderVendorID,
+          mNegotiatedCompositorDecoderDeviceID,
+          mDecoderMatchesCompositor ? "true" : "false");
+      return true;
+    }
   }
 
   PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
@@ -1061,14 +1073,17 @@ bool FFmpegVideoDecoder<LIBAV_VER>::FFmpegVulkanVideoDecoder::
   mNegotiatedCompositorDecoderVendorID = validDevices[0].first.vendorID;
   mNegotiatedCompositorDecoderDeviceID = validDevices[0].first.deviceID;
   mDecoderMatchesCompositor = validDevices[0].second;
-  memcpy(sCachedVulkanDeviceName, mNegotiatedVulkanDeviceName,
-         VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
-  sCachedVulkanVendorID = mNegotiatedCompositorDecoderVendorID;
-  sCachedVulkanDeviceID = mNegotiatedCompositorDecoderDeviceID;
-  sCachedDecoderMatchesCompositor = mDecoderMatchesCompositor;
-  sCachedRendererDrmMajor = rendererDrmMajor;
-  sCachedRendererDrmMinor = rendererDrmMinor;
-  sVulkanEnumerated = true;
+  {
+    auto cache = sSelectedDeviceCache.Lock();
+    memcpy(cache->mDeviceName, mNegotiatedVulkanDeviceName,
+           VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
+    cache->mVendorID = mNegotiatedCompositorDecoderVendorID;
+    cache->mDeviceID = mNegotiatedCompositorDecoderDeviceID;
+    cache->mDecoderMatchesCompositor = mDecoderMatchesCompositor;
+    cache->mRendererDrmMajor = rendererDrmMajor;
+    cache->mRendererDrmMinor = rendererDrmMinor;
+    cache->mValid = true;
+  }
   FFMPEGV_LOG(
       "Selected Vulkan device for video decoding: {} (vendorID=0x{:x}, "
       "deviceID=0x{:x}), matches renderer: {}",

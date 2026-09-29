@@ -116,8 +116,7 @@ struct FFmpegVulkanVideoDecoder {
   void InitDrmModifiers(VkPhysicalDevice aPhysDev, VkFormat aFormatForModifiers,
                         const nsTArray<uint64_t>* aCompositorMods = nullptr,
                         VkImageUsageFlags aImageUsages = 0);
-  bool SelectVulkanDecoderPhysicalDevice(
-      const StaticMutexAutoLock& aProofOfLock, const nsCString& aRendererNode);
+  bool SelectVulkanDecoderPhysicalDevice(const nsCString& aRendererNode);
   bool VulkanCanDecodeFormat(AVCodecID aCodecID, unsigned aAvcodecVersion,
                              AVBufferRef* aVulkanDeviceContext,
                              const MediaByteBuffer* aExtraData,

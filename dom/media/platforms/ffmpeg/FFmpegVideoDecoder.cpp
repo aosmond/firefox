@@ -378,8 +378,7 @@ bool FFmpegVideoDecoder<LIBAV_VER>::VulkanDirectDecodeExportEnabled() {
   return exportEnabled;
 }
 
-bool FFmpegVideoDecoder<LIBAV_VER>::CreateVulkanDeviceContext(
-    const StaticMutexAutoLock& aProofOfLock) {
+bool FFmpegVideoDecoder<LIBAV_VER>::CreateVulkanDeviceContext() {
   const char* device_extensions =
       "VK_KHR_timeline_semaphore+"
       "VK_KHR_external_memory_fd+"
@@ -727,12 +726,12 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::InitVulkanDecoder() {
       });
 
   nsAutoCString rendererNode(gfx::gfxVars::DrmRenderDevice());
-  if (!mVulkanDecoder.SelectVulkanDecoderPhysicalDevice(mon, rendererNode)) {
+  if (!mVulkanDecoder.SelectVulkanDecoderPhysicalDevice(rendererNode)) {
     FFMPEG_LOG("No usable Vulkan decoder physical device");
     return NS_ERROR_NOT_AVAILABLE;
   }
 
-  if (!CreateVulkanDeviceContext(mon)) {
+  if (!CreateVulkanDeviceContext()) {
     FFMPEG_LOG("  Failed to create Vulkan device context");
     return NS_ERROR_DOM_MEDIA_FATAL_ERR;
   }

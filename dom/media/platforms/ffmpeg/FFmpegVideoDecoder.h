@@ -265,7 +265,7 @@ class FFmpegVideoDecoder<LIBAV_VER>
 #    include "FFmpegVulkanVideoDecoder.h"
   MediaResult InitVulkanDecoder();
   bool VulkanDirectDecodeExportEnabled();
-  bool CreateVulkanDeviceContext(const StaticMutexAutoLock& aProofOfLock);
+  bool CreateVulkanDeviceContext();
   void PrepareVulkanDrmModifiersForSwFormat(int aSwFormat,
                                             VkImageUsageFlags aImageUsages);
 #  endif
