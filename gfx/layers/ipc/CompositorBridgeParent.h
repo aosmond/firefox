@@ -581,6 +581,13 @@ class CompositorBridgeParent final : public CompositorBridgeParentBase {
 
   void FlushPendingWrTransactionEventsWithWait();
 
+  /**
+   * Release compositor-thread resources referred to by |aID|.
+   *
+   * Must run on the main thread or the compositor thread.
+   */
+  static void DeallocateLayerTreeId(LayersId aId);
+
  private:
   /**
    * Lookup the indirect shadow tree for |aId| and return it if it
@@ -595,13 +602,6 @@ class CompositorBridgeParent final : public CompositorBridgeParentBase {
    * possible.
    */
   void StopAndClearResources();
-
-  /**
-   * Release compositor-thread resources referred to by |aID|.
-   *
-   * Must run on the content main thread.
-   */
-  static void DeallocateLayerTreeId(LayersId aId);
 
   /**
    * Notify the compositor the quality settings have been updated.

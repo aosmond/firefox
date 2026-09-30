@@ -66,7 +66,7 @@ void CompositorManagerChild::InitSameProcess(uint32_t aNamespace,
   child->mCanSend = true;
   child->SetReplyTimeout();
 
-  parent->BindComplete(/* aIsRoot */ true);
+  parent->BindComplete();
   sInstance = std::move(child);
   SetCompositorProcInfo(sInstance->OtherEndpointProcInfo());
 }

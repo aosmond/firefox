@@ -7,14 +7,17 @@
 #include "VsyncSource.h"
 #include "gfxPlatform.h"
 #include "mozilla/gfx/CanvasManagerParent.h"
-#include "mozilla/gfx/GPUParent.h"
 #include "mozilla/ipc/Endpoint.h"
+#include "mozilla/layers/APZBridgeParent.h"
 #include "mozilla/layers/CompositorBridgeParent.h"
 #include "mozilla/layers/CompositorThread.h"
 #include "mozilla/layers/ContentCompositorBridgeParent.h"
+#include "mozilla/layers/IAPZCTreeManager.h"
 #include "mozilla/layers/LayerTreeLog.h"
+#include "mozilla/layers/LayerTreeOwnerTracker.h"
 #include "mozilla/layers/RemoteTextureMap.h"
 #include "mozilla/layers/SharedSurfacesParent.h"
+#include "mozilla/layers/UiCompositorControllerParent.h"
 #include "mozilla/webrender/RenderThread.h"
 
 namespace mozilla {
@@ -44,7 +47,8 @@ CompositorManagerParent::CreateSameProcess(uint32_t aNamespace) {
   // process case because if we open from the child perspective, we can do it
   // on the main thread and complete before we return the manager handles.
   RefPtr<CompositorManagerParent> parent = new CompositorManagerParent(
-      dom::ContentParentId(), aNamespace, /* aContentBridgeNamespace */ 0);
+      dom::ContentParentId(), aNamespace, /* aContentBridgeNamespace */ 0,
+      /* aIsRoot */ true);
   parent->SetOtherEndpointProcInfo(ipc::EndpointProcInfo::Current());
   return parent.forget();
 }
@@ -65,12 +69,12 @@ bool CompositorManagerParent::Create(
   }
 
   RefPtr<CompositorManagerParent> bridge = new CompositorManagerParent(
-      aChildId, aNamespace, aContentBridgeNamespace);
+      aChildId, aNamespace, aContentBridgeNamespace, aIsRoot);
 
   RefPtr<Runnable> runnable =
-      NewRunnableMethod<Endpoint<PCompositorManagerParent>&&, bool>(
+      NewRunnableMethod<Endpoint<PCompositorManagerParent>&&>(
           "CompositorManagerParent::Bind", bridge,
-          &CompositorManagerParent::Bind, std::move(aEndpoint), aIsRoot);
+          &CompositorManagerParent::Bind, std::move(aEndpoint));
   CompositorThread()->Dispatch(runnable.forget());
   return true;
 }
@@ -117,34 +121,35 @@ CompositorManagerParent::CreateSameProcessWidgetCompositorBridge(
 
 CompositorManagerParent::CompositorManagerParent(
     dom::ContentParentId aContentId, uint32_t aNamespace,
-    uint32_t aContentBridgeNamespace)
+    uint32_t aContentBridgeNamespace, bool aIsRoot)
     : mCompositorThreadHolder(CompositorThreadHolder::GetSingleton()),
       mSharedSurfacesHolder(MakeRefPtr<SharedSurfacesHolder>(aNamespace)),
       mContentId(aContentId),
       mNamespace(aNamespace),
-      mContentBridgeNamespace(aContentBridgeNamespace) {}
+      mContentBridgeNamespace(aContentBridgeNamespace),
+      mIsRoot(aIsRoot) {}
 
 CompositorManagerParent::~CompositorManagerParent() = default;
 
 void CompositorManagerParent::Bind(
-    Endpoint<PCompositorManagerParent>&& aEndpoint, bool aIsRoot) {
+    Endpoint<PCompositorManagerParent>&& aEndpoint) {
   MOZ_ASSERT(CompositorThreadHolder::IsInCompositorThread());
   if (NS_WARN_IF(!aEndpoint.Bind(this))) {
     return;
   }
 
-  BindComplete(aIsRoot);
+  BindComplete();
 }
 
-void CompositorManagerParent::BindComplete(bool aIsRoot) {
+void CompositorManagerParent::BindComplete() {
   MOZ_ASSERT(CompositorThreadHolder::IsInCompositorThread() ||
              NS_IsMainThread());
 
   LAYERTREE_LOG("Compositor manager bound, namespace {}, content {}, root {}",
-                mNamespace, mContentId, aIsRoot);
+                mNamespace, mContentId, mIsRoot);
 
   StaticMonitorAutoLock lock(sMonitor);
-  if (aIsRoot) {
+  if (mIsRoot) {
     MOZ_ASSERT(!sInstance);
     sInstance = this;
   }
@@ -254,8 +259,7 @@ CompositorManagerParent::AllocPCompositorBridgeParent(
     case CompositorBridgeOptions::TWidgetCompositorOptions: {
       // Only the UI process is allowed to create widget compositors in the
       // compositor process.
-      gfx::GPUParent* gpu = gfx::GPUParent::GetSingleton();
-      if (NS_WARN_IF(!gpu || OtherPid() != gpu->OtherPid())) {
+      if (NS_WARN_IF(!IsFromParentProcess())) {
         MOZ_ASSERT_UNREACHABLE("Child cannot create widget compositor!");
         break;
       }
@@ -397,6 +401,64 @@ mozilla::ipc::IPCResult CompositorManagerParent::RecvInitCanvasManager(
   gfx::CanvasManagerParent::Init(std::move(aEndpoint), mSharedSurfacesHolder,
                                  mContentId);
   mRemoteTextureTxnScheduler = RemoteTextureTxnScheduler::Create(this);
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult CompositorManagerParent::RecvAddLayerTreeIdMapping(
+    const LayersId& aLayersId, const base::ProcessId& aOwnerId) {
+  if (NS_WARN_IF(!IsFromParentProcess())) {
+    return IPC_FAIL(this, "Only the parent process may map layer trees");
+  }
+
+  LayerTreeOwnerTracker::Get()->Map(aLayersId, aOwnerId);
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult CompositorManagerParent::RecvRemoveLayerTreeIdMapping(
+    const LayersId& aLayersId, const base::ProcessId& aOwnerId) {
+  if (NS_WARN_IF(!IsFromParentProcess())) {
+    return IPC_FAIL(this, "Only the parent process may unmap layer trees");
+  }
+
+  LayerTreeOwnerTracker::Get()->Unmap(aLayersId, aOwnerId);
+  CompositorBridgeParent::DeallocateLayerTreeId(aLayersId);
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult CompositorManagerParent::RecvInitUiCompositorController(
+    const LayersId& aRootLayerTreeId,
+    Endpoint<PUiCompositorControllerParent>&& aEndpoint) {
+  if (NS_WARN_IF(!IsFromParentProcess())) {
+    return IPC_FAIL(this, "Only the parent process may create UI controllers");
+  }
+
+  UiCompositorControllerParent::Start(aRootLayerTreeId, std::move(aEndpoint));
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult CompositorManagerParent::RecvInitAPZBridge(
+    const LayersId& aRootLayerTreeId, Endpoint<PAPZBridgeParent>&& aEndpoint) {
+  if (NS_WARN_IF(!IsFromParentProcess())) {
+    return IPC_FAIL(this,
+                    "Only the parent process may create APZ input bridges");
+  }
+
+  // APZBridgeParent lives on the main thread, but the tree manager is created
+  // by PCompositorBridge::Initialize, so we must look it up here, where we are
+  // ordered after Initialize and before the root compositor is torn down.
+  RefPtr<IAPZCTreeManager> treeManager =
+      CompositorBridgeParent::GetAPZCTreeManager(aRootLayerTreeId);
+  if (NS_WARN_IF(!treeManager)) {
+    return IPC_FAIL(this, "No APZ tree manager for the root layer tree");
+  }
+
+  NS_DispatchToMainThread(NS_NewRunnableFunction(
+      "CompositorManagerParent::RecvInitAPZBridge",
+      [aRootLayerTreeId, treeManager = std::move(treeManager),
+       endpoint = std::move(aEndpoint)]() mutable {
+        APZBridgeParent::Create(aRootLayerTreeId, std::move(treeManager),
+                                std::move(endpoint));
+      }));
   return IPC_OK();
 }
 

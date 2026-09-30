@@ -66,7 +66,17 @@ class CompositorManagerParent final : public PCompositorManagerParent {
   mozilla::ipc::IPCResult RecvInitCanvasManager(
       Endpoint<PCanvasManagerParent>&&);
 
-  void BindComplete(bool aIsRoot);
+  mozilla::ipc::IPCResult RecvAddLayerTreeIdMapping(
+      const LayersId& aLayersId, const base::ProcessId& aOwnerId);
+  mozilla::ipc::IPCResult RecvRemoveLayerTreeIdMapping(
+      const LayersId& aLayersId, const base::ProcessId& aOwnerId);
+  mozilla::ipc::IPCResult RecvInitUiCompositorController(
+      const LayersId& aRootLayerTreeId,
+      Endpoint<PUiCompositorControllerParent>&& aEndpoint);
+  mozilla::ipc::IPCResult RecvInitAPZBridge(
+      const LayersId& aRootLayerTreeId, Endpoint<PAPZBridgeParent>&& aEndpoint);
+
+  void BindComplete();
   void ActorDestroy(ActorDestroyReason aReason) override;
 
   already_AddRefed<PCompositorBridgeParent> AllocPCompositorBridgeParent(
@@ -94,10 +104,13 @@ class CompositorManagerParent final : public PCompositorManagerParent {
   static void ShutdownInternal();
 
   CompositorManagerParent(dom::ContentParentId aContentId, uint32_t aNamespace,
-                          uint32_t aContentBridgeNamespace);
+                          uint32_t aContentBridgeNamespace, bool aIsRoot);
   virtual ~CompositorManagerParent();
 
-  void Bind(Endpoint<PCompositorManagerParent>&& aEndpoint, bool aIsRoot);
+  void Bind(Endpoint<PCompositorManagerParent>&& aEndpoint);
+
+  // Whether this is the parent process's manager, whose messages we trust.
+  bool IsFromParentProcess() const { return mIsRoot; }
 
   void DeferredDestroy();
 
@@ -109,6 +122,8 @@ class CompositorManagerParent final : public PCompositorManagerParent {
   // The id namespace the UI process assigned for this (content) child's
   // compositor bridge; 0 when the child may not create content compositors.
   const uint32_t mContentBridgeNamespace;
+  // Set for the parent process when creating its own manager.
+  const bool mIsRoot;
   uint32_t mLastSharedSurfaceResourceId MOZ_GUARDED_BY(sMonitor) = 0;
   RefPtr<RemoteTextureTxnScheduler> mRemoteTextureTxnScheduler;
 };

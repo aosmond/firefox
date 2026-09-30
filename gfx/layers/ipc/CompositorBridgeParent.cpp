@@ -1497,8 +1497,9 @@ void EraseLayerState(LayersId aId) {
 
 /*static*/
 void CompositorBridgeParent::DeallocateLayerTreeId(LayersId aId) {
-  MOZ_ASSERT(NS_IsMainThread());
-  // Here main thread notifies compositor to remove an element from
+  MOZ_ASSERT(NS_IsMainThread() ||
+             CompositorThreadHolder::IsInCompositorThread());
+  // Here we notify the compositor thread to remove an element from
   // sIndirectLayerTrees. This removed element might be queried soon.
   // Checking the elements of sIndirectLayerTrees exist or not before using.
   if (!CompositorThread()) {

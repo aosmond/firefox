@@ -498,8 +498,8 @@ bool GPUProcessManager::EnsureCompositorManagerChild() {
 
   uint32_t cmNamespace = AllocateNamespace();
   mGPUChild->SendInitCompositorManager(std::move(parentPipe), cmNamespace);
-  CompositorManagerChild::Init(std::move(childPipe), cmNamespace,
-                               mProcessToken);
+  MOZ_ALWAYS_TRUE(CompositorManagerChild::Init(std::move(childPipe),
+                                               cmNamespace, mProcessToken));
   return true;
 }
 
@@ -579,7 +579,12 @@ GPUProcessManager::CreateUiCompositorController(nsIWidget* aWidget,
     return nullptr;
   }
 
-  mGPUChild->SendInitUiCompositorController(aId, std::move(parentPipe));
+  CompositorManagerChild* manager = CompositorManagerChild::GetInstance();
+  if (!manager) {
+    return nullptr;
+  }
+
+  manager->SendInitUiCompositorController(aId, std::move(parentPipe));
   RefPtr<UiCompositorControllerChild> result =
       UiCompositorControllerChild::CreateForGPUProcess(
           mProcessToken, std::move(childPipe), aWidget);
@@ -645,6 +650,13 @@ void GPUProcessManager::OnProcessLaunchComplete(GPUProcessHost* aHost) {
   mVsyncBridge = VsyncBridgeChild::Create(mVsyncIOThread, mProcessToken,
                                           std::move(vsyncChild));
   mGPUChild->SendInitVsyncBridge(std::move(vsyncParent));
+
+  // Create the parent process's CompositorManagerChild now, so that one exists
+  // whenever we have a GPUChild. If this fails, it disables the GPU process.
+  EnsureCompositorManagerChild();
+  if (!mGPUChild) {
+    return;
+  }
 
   MOZ_DIAGNOSTIC_ASSERT(!mBatteryObserver);
   if (!AppShutdown::IsInOrBeyond(ShutdownPhase::XPCOMWillShutdown)) {
@@ -1391,7 +1403,8 @@ RefPtr<CompositorSession> GPUProcessManager::CreateRemoteSession(
     if (NS_FAILED(rv)) {
       return nullptr;
     }
-    mGPUChild->SendInitAPZBridge(aRootLayerTreeId, std::move(parentPipe));
+    child->Manager()->SendInitAPZBridge(aRootLayerTreeId,
+                                        std::move(parentPipe));
 
     RefPtr<APZBridgeChild> apzBridge =
         APZBridgeChild::Create(mProcessToken, std::move(childPipe));
@@ -1671,8 +1684,17 @@ void GPUProcessManager::UnmapLayerTreeId(LayersId aLayersId,
   // If the GPU process is down, but not disabled, there is no need to relaunch
   // here because the layers ID is already invalid.
   if (mGPUChild) {
-    mGPUChild->SendRemoveLayerTreeIdMapping(
-        LayerTreeIdMapping(aLayersId, aOwningId));
+    // If the CompositorManagerChild is gone, then the GPU process is going away
+    // too, and the mapping will not be shared with its replacement.
+    if (CompositorManagerChild* manager =
+            CompositorManagerChild::GetInstance()) {
+      manager->SendRemoveLayerTreeIdMapping(aLayersId, aOwningId);
+    } else {
+      LAYERTREE_LOG(
+          "Not unmapping layer tree {:x} in GPU process {}, it is "
+          "going away",
+          aLayersId, mProcessToken);
+    }
   } else if (!gfxConfig::IsEnabled(Feature::GPU_PROCESS)) {
     CompositorBridgeParent::DeallocateLayerTreeId(aLayersId);
   }
@@ -1748,8 +1770,10 @@ bool GPUProcessManager::AllocateAndConnectLayerTreeId(
   // If we don't have a CompositorBridgeChild, we just need to call
   // LayerTreeOwnerTracker::Map in the compositing process.
   if (mGPUChild) {
-    mGPUChild->SendAddLayerTreeIdMapping(
-        LayerTreeIdMapping(layersId, aOtherPid));
+    if (CompositorManagerChild* manager =
+            CompositorManagerChild::GetInstance()) {
+      manager->SendAddLayerTreeIdMapping(layersId, aOtherPid);
+    }
   }
   return false;
 }

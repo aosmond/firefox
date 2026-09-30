@@ -16,9 +16,11 @@ class APZBridgeParent final : public PAPZBridgeParent {
   NS_INLINE_DECL_THREADSAFE_REFCOUNTING(APZBridgeParent, final)
 
  public:
-  explicit APZBridgeParent(const LayersId& aLayersId);
+  APZBridgeParent(const LayersId& aLayersId,
+                  RefPtr<IAPZCTreeManager>&& aTreeManager);
 
   static void Create(const LayersId& aLayersId,
+                     RefPtr<IAPZCTreeManager>&& aTreeManager,
                      Endpoint<PAPZBridgeParent>&& aEndpoint);
 
   mozilla::ipc::IPCResult RecvReceiveMultiTouchInputEvent(

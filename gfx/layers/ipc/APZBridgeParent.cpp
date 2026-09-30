@@ -16,8 +16,9 @@ namespace layers {
 
 /* static */
 void APZBridgeParent::Create(const LayersId& aLayersId,
+                             RefPtr<IAPZCTreeManager>&& aTreeManager,
                              Endpoint<PAPZBridgeParent>&& aEndpoint) {
-  auto parent = MakeRefPtr<APZBridgeParent>(aLayersId);
+  auto parent = MakeRefPtr<APZBridgeParent>(aLayersId, std::move(aTreeManager));
   if (!aEndpoint.Bind(parent)) {
     // We can't recover from this.
     MOZ_CRASH("Failed to bind APZBridgeParent to endpoint");
@@ -26,12 +27,11 @@ void APZBridgeParent::Create(const LayersId& aLayersId,
   CompositorBridgeParent::SetAPZBridgeParent(aLayersId, std::move(parent));
 }
 
-APZBridgeParent::APZBridgeParent(const LayersId& aLayersId) {
+APZBridgeParent::APZBridgeParent(const LayersId& aLayersId,
+                                 RefPtr<IAPZCTreeManager>&& aTreeManager)
+    : mTreeManager(std::move(aTreeManager)), mLayersId(aLayersId) {
   MOZ_ASSERT(XRE_IsGPUProcess());
   MOZ_ASSERT(NS_IsMainThread());
-
-  mLayersId = aLayersId;
-  mTreeManager = CompositorBridgeParent::GetAPZCTreeManager(aLayersId);
   MOZ_ASSERT(mTreeManager);
 }
 
