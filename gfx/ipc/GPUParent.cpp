@@ -588,16 +588,6 @@ mozilla::ipc::IPCResult GPUParent::RecvSimulateDeviceReset() {
   return IPC_OK();
 }
 
-mozilla::ipc::IPCResult GPUParent::RecvNewContentCompositorManager(
-    Endpoint<PCompositorManagerParent>&& aEndpoint,
-    const ContentParentId& aChildId, uint32_t aNamespace,
-    uint32_t aContentBridgeNamespace) {
-  CompositorManagerParent::Create(std::move(aEndpoint), aChildId, aNamespace,
-                                  aContentBridgeNamespace,
-                                  /* aIsRoot */ false);
-  return IPC_OK();
-}
-
 mozilla::ipc::IPCResult GPUParent::RecvNewContentImageBridge(
     Endpoint<PImageBridgeParent>&& aEndpoint, const ContentParentId& aChildId,
     uint32_t aNamespace) {

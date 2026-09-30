@@ -14,6 +14,7 @@ using mozilla::TimeDuration from "mozilla/TimeStamp.h";
 using mozilla::CSSToLayoutDeviceScale from "Units.h";
 using mozilla::gfx::IntSize from "mozilla/gfx/2D.h";
 using base::ProcessId from "base/process.h";
+using mozilla::dom::ContentParentId from "mozilla/dom/ipc/IdType.h";
 using struct mozilla::layers::LayersId from "mozilla/layers/LayersTypes.h";
 using mozilla::layers::CompositorOptions from "mozilla/layers/LayersMessageUtils.h";
 using mozilla::wr::ExternalImageId from "mozilla/webrender/WebRenderTypes.h";
@@ -91,6 +92,12 @@ parent:
   // The following messages may only be sent by the UI process to the GPU
   // process. They share a channel with the widget PCompositorBridge actors so
   // that they are ordered with respect to them.
+
+  // Create a new content-process compositor manager.
+  async NewContentCompositorManager(Endpoint<PCompositorManagerParent> endpoint,
+                                    ContentParentId childId,
+                                    uint32_t aNamespace,
+                                    uint32_t aContentBridgeNamespace);
 
   // Called to notify the GPU process of who owns a layersId.
   async AddLayerTreeIdMapping(LayersId layersId, ProcessId ownerId);
