@@ -18839,6 +18839,17 @@
     value: true
     mirror: always
 
+  # Controls win32k lockdown for the Widevine plugin, if permitted by
+  # security.sandbox.gmp.win32k-disable.
+  # 0: Use lockdown if the sandbox version required by the plugin is supported
+  #    by this build.
+  # 1: Always use lockdown.
+  # 2: Never use lockdown.
+-   name: security.sandbox.gmp.widevine.win32k-lockdown
+    type: RelaxedAtomicUint32
+    value: 0
+    mirror: always
+
   # Whether ACG is enabled (dynamic code blocked) for compatible plugins.
 -   name: security.sandbox.gmp.acg.enabled
     type: RelaxedAtomicBool

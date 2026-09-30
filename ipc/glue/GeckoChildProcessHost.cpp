@@ -167,7 +167,8 @@ class BaseProcessLauncher {
         mAllowedFilesRead(aHost->mAllowedFilesRead),
         mSandboxLevel(aHost->mSandboxLevel),
         mIsFileContent(aHost->mIsFileContent),
-        mEnableSandboxLogging(aHost->mEnableSandboxLogging)
+        mEnableSandboxLogging(aHost->mEnableSandboxLogging),
+        mGMPSandboxVersion(aHost->mGMPSandboxVersion)
 #endif
 #if defined(XP_MACOSX) && defined(MOZ_SANDBOX)
         ,
@@ -236,6 +237,7 @@ class BaseProcessLauncher {
   int32_t mSandboxLevel;
   bool mIsFileContent;
   bool mEnableSandboxLogging;
+  uint32_t mGMPSandboxVersion;
 #endif
 #if defined(XP_MACOSX) && defined(MOZ_SANDBOX)
   // Controls whether or not the process will be launched with
@@ -1649,7 +1651,7 @@ Result<Ok, LaunchError> WindowsProcessLauncher::DoSetup() {
         }
 
         if (NS_WARN_IF(!mResults.mSandboxBroker->SetSecurityLevelForGMPlugin(
-                gmpSandboxKind))) {
+                gmpSandboxKind, mGMPSandboxVersion))) {
           return Err(LaunchError("SetSecurityLevelForGMPlugin"));
         }
         mUseSandbox = true;

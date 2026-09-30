@@ -55,7 +55,10 @@ class SandboxBroker {
   bool SetSecurityLevelForRDDProcess();
   bool SetSecurityLevelForSocketProcess();
 
-  bool SetSecurityLevelForGMPlugin(GMPSandboxKind aGMPSandboxKind);
+  // aSandboxVersion is the minimum sandbox version required by the plugin to
+  // use the stricter sandbox policies, or 0 if none has been declared.
+  bool SetSecurityLevelForGMPlugin(GMPSandboxKind aGMPSandboxKind,
+                                   uint32_t aSandboxVersion);
   bool SetSecurityLevelForUtilityProcess(mozilla::ipc::SandboxingKind aSandbox);
 
   // File system permissions

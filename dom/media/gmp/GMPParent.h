@@ -215,6 +215,11 @@ class GMPParent final : public PGMPParent,
   nsString mAdapter;
   const uint32_t mPluginId;
   GMPPluginType mPluginType = GMPPluginType::Unknown;
+#if defined(XP_WIN) && defined(MOZ_SANDBOX)
+  // The minimum sandbox version required by the plugin to use the stricter
+  // sandbox policies. 0 means no compatibility has been declared.
+  uint32_t mSandboxVersion = 0;
+#endif
   nsTArray<GMPCapability> mCapabilities;
   GMPProcessParent* mProcess;
   bool mDeleteProcessOnlyOnUnload;

@@ -113,6 +113,9 @@ void GMPParent::CloneFrom(const GMPParent* aOther) {
 #ifdef ALLOW_GECKO_CHILD_PROCESS_ARCH
   mChildLaunchArch = aOther->mChildLaunchArch;
 #endif
+#if defined(XP_WIN) && defined(MOZ_SANDBOX)
+  mSandboxVersion = aOther->mSandboxVersion;
+#endif
 }
 
 #if defined(XP_WIN) || defined(XP_MACOSX)
@@ -392,6 +395,10 @@ nsresult GMPParent::LoadProcess() {
     mProcess = new GMPProcessParent(NS_ConvertUTF16toUTF8(path).get());
 #if defined(XP_MACOSX) && defined(MOZ_SANDBOX)
     mProcess->SetRequiresWindowServer(mAdapter.EqualsLiteral("chromium"));
+#endif
+
+#if defined(XP_WIN) && defined(MOZ_SANDBOX)
+    mProcess->SetGMPSandboxVersion(mSandboxVersion);
 #endif
 
 #ifdef ALLOW_GECKO_CHILD_PROCESS_ARCH

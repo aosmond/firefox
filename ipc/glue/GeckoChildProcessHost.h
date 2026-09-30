@@ -291,6 +291,7 @@ class GeckoChildProcessHost : public SupportsWeakPtr,
   std::vector<std::wstring> mAllowedFilesRead;
   bool mEnableSandboxLogging;
   int32_t mSandboxLevel;
+  uint32_t mGMPSandboxVersion = 0;
 #  endif
 #endif  // XP_WIN
 

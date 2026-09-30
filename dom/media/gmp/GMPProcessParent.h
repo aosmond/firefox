@@ -52,6 +52,14 @@ class GMPProcessParent final : public mozilla::ipc::GeckoChildProcessHost {
   static MacSandboxType GetMacSandboxType() { return MacSandboxType_GMP; };
 #endif
 
+#if defined(XP_WIN) && defined(MOZ_SANDBOX)
+  // The minimum sandbox version required by the plugin to use the stricter
+  // sandbox policies. 0 means no compatibility has been declared.
+  void SetGMPSandboxVersion(uint32_t aGMPSandboxVersion) {
+    mGMPSandboxVersion = aGMPSandboxVersion;
+  }
+#endif
+
   using mozilla::ipc::GeckoChildProcessHost::GetChildProcessHandle;
 
  private:

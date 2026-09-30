@@ -1893,8 +1893,25 @@ bool SandboxBroker::SetSecurityLevelForUtilityProcess(
   }
 }
 
-bool SandboxBroker::SetSecurityLevelForGMPlugin(
-    GMPSandboxKind aGMPSandboxKind) {
+// The highest Widevine sandbox version supported by this build. This must be
+// incremented when we add support for win32k APIs required by a new version of
+// the plugin.
+static constexpr uint32_t kSupportedWidevineSandboxVersion = 0;
+
+static bool UseWidevineWin32kLockdown(uint32_t aSandboxVersion) {
+  switch (StaticPrefs::security_sandbox_gmp_widevine_win32k_lockdown()) {
+    case 1:
+      return true;
+    case 2:
+      return false;
+    default:
+      return aSandboxVersion > 0 &&
+             aSandboxVersion <= kSupportedWidevineSandboxVersion;
+  }
+}
+
+bool SandboxBroker::SetSecurityLevelForGMPlugin(GMPSandboxKind aGMPSandboxKind,
+                                                uint32_t aSandboxVersion) {
   if (!mPolicy) {
     return false;
   }
@@ -1943,15 +1960,28 @@ bool SandboxBroker::SetSecurityLevelForGMPlugin(
   result = config->SetProcessMitigations(mitigations);
   SANDBOX_ENSURE_SUCCESS(result, "Invalid flags for SetProcessMitigations.");
 
-  // win32k is currently not disabled for clearkey due to WMF decoding or
-  // widevine due to intermittent test failures, where the GMP process fails
-  // very early. See bug 1449348.
+  // win32k is currently not disabled for clearkey due to WMF decoding.
+  // widevine is only disabled if the plugin requires a sandbox version we
+  // support, due to intermittent test failures in the past, where the GMP
+  // process fails very early. See bug 1449348.
   // The sandbox doesn't provide Output Protection Manager API brokering
   // anymore, so we can't use this for the Fake plugin that is used to partially
   // test it. This brokering was only used in the tests anyway.
-  if (StaticPrefs::security_sandbox_gmp_win32k_disable() &&
-      aGMPSandboxKind != Widevine && aGMPSandboxKind != Clearkey &&
-      aGMPSandboxKind != Fake) {
+  bool useWin32kLockdown;
+  switch (aGMPSandboxKind) {
+    case Widevine:
+      useWin32kLockdown = UseWidevineWin32kLockdown(aSandboxVersion);
+      break;
+    case Clearkey:
+    case Fake:
+      useWin32kLockdown = false;
+      break;
+    default:
+      useWin32kLockdown = true;
+      break;
+  }
+
+  if (StaticPrefs::security_sandbox_gmp_win32k_disable() && useWin32kLockdown) {
     result = AddWin32kLockdownConfig(config);
     SANDBOX_ENSURE_SUCCESS(result, "Failed to add the win32k lockdown policy");
   }
