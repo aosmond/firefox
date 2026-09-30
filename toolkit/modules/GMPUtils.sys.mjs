@@ -167,6 +167,7 @@ export var GMPPrefs = {
   KEY_PLUGIN_LAST_INSTALL_START: "media.{0}.lastInstallStart",
   KEY_PLUGIN_LAST_UPDATE: "media.{0}.lastUpdate",
   KEY_PLUGIN_HASHVALUE: "media.{0}.hashValue",
+  KEY_PLUGIN_SANDBOX_VERSION: "media.{0}.sandboxVersion",
   KEY_PLUGIN_VERSION: "media.{0}.version",
   KEY_PLUGIN_AUTOUPDATE: "media.{0}.autoupdate",
   KEY_PLUGIN_VISIBLE: "media.{0}.visible",

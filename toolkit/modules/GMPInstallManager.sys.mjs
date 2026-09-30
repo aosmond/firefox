@@ -141,6 +141,7 @@ function downloadLocalConfig(sources) {
           hashValue: details.hashValue,
           version: addons.vendors[conf.id].version,
           size: details.filesize,
+          sandboxVersion: details.sandboxVersion,
           usedFallback: true,
         };
       });
@@ -446,6 +447,7 @@ GMPInstallManager.prototype = {
           delete gmpAddon.size;
           delete gmpAddon.hashValue;
           delete gmpAddon.hashFunction;
+          delete gmpAddon.sandboxVersion;
         } else {
           // While we prefer the URL given by the Chromium update service,
           // the version must match what we were provisioned with on balrog.
@@ -607,6 +609,11 @@ GMPInstallManager.prototype = {
 
         if (gmpAddon.isInstalled) {
           log.info("Addon |" + gmpAddon.id + "| already installed.");
+          // The sandbox version for an installed addon may change without a
+          // new version of the addon, but we should only trust balrog for this.
+          if (!gmpAddon.usedFallback) {
+            gmpAddon.updateSandboxVersion();
+          }
           return false;
         }
 
@@ -766,6 +773,21 @@ GMPAddon.prototype = {
             this.hashValue))
     );
   },
+  /**
+   * Records the minimum sandbox version required by the addon to use stricter
+   * sandbox policies, or clears it if there is none.
+   */
+  updateSandboxVersion() {
+    if (this.sandboxVersion) {
+      GMPPrefs.setInt(
+        GMPPrefs.KEY_PLUGIN_SANDBOX_VERSION,
+        this.sandboxVersion,
+        this.id
+      );
+    } else {
+      GMPPrefs.reset(GMPPrefs.KEY_PLUGIN_SANDBOX_VERSION, this.id);
+    }
+  },
   get isEME() {
     return this.id == WIDEVINE_L1_ID || this.id == WIDEVINE_L3_ID;
   },
@@ -904,6 +926,7 @@ GMPDownloader.prototype = {
               } else {
                 GMPPrefs.reset(GMPPrefs.KEY_PLUGIN_HASHVALUE, gmpAddon.id);
               }
+              gmpAddon.updateSandboxVersion();
               // Setting the version pref signals installation completion to consumers,
               // if you need to set other prefs etc. do it before this.
               GMPPrefs.setString(

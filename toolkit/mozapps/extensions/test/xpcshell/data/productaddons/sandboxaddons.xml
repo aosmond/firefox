@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<updates>
+  <addons>
+    <addon id="test1" URL="http://example.com/test1.xpi"/>
+    <addon id="test2" URL="http://example.com/test2.xpi" sandboxVersion="2"/>
+    <addon id="test3" URL="http://example.com/test3.xpi" sandboxVersion="0"/>
+    <addon id="test4" URL="http://example.com/test4.xpi" sandboxVersion="-1"/>
+    <addon id="test5" URL="http://example.com/test5.xpi" sandboxVersion="1.5"/>
+    <addon id="test6" URL="http://example.com/test6.xpi" sandboxVersion="abc"/>
+  </addons>
+</updates>

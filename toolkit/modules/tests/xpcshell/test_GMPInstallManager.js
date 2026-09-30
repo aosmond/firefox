@@ -929,7 +929,8 @@ async function test_checkForAddons_installAddon(
   defaultConfig,
   mirrorConfig,
   secondMirrorConfig,
-  expectedError
+  expectedError,
+  sandboxVersion
 ) {
   info(
     "Running installAddon for id: " +
@@ -1020,7 +1021,12 @@ async function test_checkForAddons_installAddon(
   if (sizeConfig !== "none") {
     addonData.size = fileSize;
   }
+  if (sandboxVersion !== undefined) {
+    addonData.sandboxVersion = sandboxVersion;
+  }
   let gmpAddon = new GMPAddon(addonData);
+  // Ensure a stale sandbox version is replaced upon installation.
+  GMPPrefs.setInt(GMPPrefs.KEY_PLUGIN_SANDBOX_VERSION, 99, gmpAddon.id);
   let installManager = new GMPInstallManager();
   Assert.ok(!gmpAddon.isInstalled);
 
@@ -1059,6 +1065,10 @@ async function test_checkForAddons_installAddon(
       GMPPrefs.getString(GMPPrefs.KEY_PLUGIN_ABI, "", gmpAddon.id),
       UpdateUtils.ABI
     );
+    Assert.equal(
+      GMPPrefs.getInt(GMPPrefs.KEY_PLUGIN_SANDBOX_VERSION, 0, gmpAddon.id),
+      sandboxVersion ?? 0
+    );
     // Make sure it reports as being installed
     Assert.ok(gmpAddon.isInstalled);
 
@@ -1073,6 +1083,7 @@ async function test_checkForAddons_installAddon(
       ex?.message + " matches " + expectedError
     );
   } finally {
+    GMPPrefs.reset(GMPPrefs.KEY_PLUGIN_SANDBOX_VERSION, gmpAddon.id);
     zipFile.remove(false);
     if (badZipFile) {
       badZipFile.remove(false);
@@ -1391,6 +1402,62 @@ add_task(
     );
   }
 );
+
+add_task(async function test_checkForAddons_installAddon_sandboxVersion() {
+  await test_checkForAddons_installAddon(
+    /* id */ "sandboxVersion",
+    /* sizeConfig */ "include",
+    /* defaultConfig */ "success",
+    /* mirrorConfig */ "none",
+    /* secondMirrorConfig */ "none",
+    /* expectedError */ null,
+    /* sandboxVersion */ 3
+  );
+});
+
+/**
+ * Tests that simpleCheckAndInstall updates the sandbox version of an already
+ * installed addon, but only if it came from balrog and not the fallback.
+ */
+add_task(async function test_simpleCheckAndInstall_updatesSandboxVersion() {
+  const addonData = {
+    id: OPEN_H264_ID,
+    URL: "http://example.com/gmp.zip",
+    hashFunction: "sha256",
+    hashValue: "abcdef",
+    version: "1.1",
+  };
+  GMPPrefs.setString(GMPPrefs.KEY_PLUGIN_VERSION, "1.1", OPEN_H264_ID);
+  GMPPrefs.setString(GMPPrefs.KEY_PLUGIN_HASHVALUE, "abcdef", OPEN_H264_ID);
+
+  let installManager = new GMPInstallManager();
+  async function check(addon) {
+    Preferences.reset(GMPPrefs.KEY_UPDATE_LAST_CHECK);
+    installManager.checkForAddons = async () => ({
+      addons: [new GMPAddon(addon)],
+    });
+    let result = await installManager.simpleCheckAndInstall();
+    Assert.equal(result.status, "nothing-new-to-install");
+    return GMPPrefs.getInt(
+      GMPPrefs.KEY_PLUGIN_SANDBOX_VERSION,
+      0,
+      OPEN_H264_ID
+    );
+  }
+
+  Assert.equal(await check({ ...addonData, sandboxVersion: 2 }), 2);
+  Assert.equal(
+    await check({ ...addonData, sandboxVersion: 5, usedFallback: true }),
+    2
+  );
+  Assert.equal(await check(addonData), 0);
+
+  installManager.uninit();
+  Preferences.reset(GMPPrefs.KEY_UPDATE_LAST_CHECK);
+  GMPPrefs.reset(GMPPrefs.KEY_PLUGIN_VERSION, OPEN_H264_ID);
+  GMPPrefs.reset(GMPPrefs.KEY_PLUGIN_HASHVALUE, OPEN_H264_ID);
+  GMPPrefs.reset(GMPPrefs.KEY_PLUGIN_SANDBOX_VERSION, OPEN_H264_ID);
+});
 
 /**
  * Tests simpleCheckAndInstall when autoupdate is disabled for a GMP

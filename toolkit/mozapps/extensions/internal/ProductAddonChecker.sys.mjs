@@ -387,6 +387,13 @@ function parseXML(document) {
     }
     addon.size = Number(addon.size) || undefined;
 
+    if (addonElement.hasAttribute("sandboxVersion")) {
+      let sandboxVersion = Number(addonElement.getAttribute("sandboxVersion"));
+      if (Number.isInteger(sandboxVersion) && sandboxVersion > 0) {
+        addon.sandboxVersion = sandboxVersion;
+      }
+    }
+
     let mirrorList = addonElement.querySelectorAll("mirror");
     for (let mirrorElement of mirrorList) {
       if (mirrorElement.hasAttribute("URL")) {

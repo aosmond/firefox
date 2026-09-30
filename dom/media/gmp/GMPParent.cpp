@@ -14,6 +14,7 @@
 #include "mozIGeckoMediaPluginService.h"
 #include "mozilla/Casting.h"
 #include "mozilla/FOGIPC.h"
+#include "mozilla/Preferences.h"
 #include "mozilla/dom/KeySystemNames.h"
 #include "mozilla/dom/WidevineCDMManifestBinding.h"
 #include "mozilla/ipc/Endpoint.h"
@@ -1241,6 +1242,10 @@ RefPtr<GenericPromise> GMPParent::ParseChromiumManifest(
   ApplyOleaut32(mLibs);
 #endif
 
+#if defined(XP_WIN) && defined(MOZ_SANDBOX)
+  ReadSandboxVersion();
+#endif
+
   nsTArray<nsCString> codecs;
 
   if (m.mX_cdm_codecs.WasPassed()) {
@@ -1285,6 +1290,34 @@ RefPtr<GenericPromise> GMPParent::ParseChromiumManifest(
   GMP_PARENT_LOG_DEBUG("{}: Successfully parsed manifest.", __FUNCTION__);
   return GenericPromise::CreateAndResolve(true, __func__);
 }
+
+#if defined(XP_WIN) && defined(MOZ_SANDBOX)
+void GMPParent::ReadSandboxVersion() {
+  MOZ_ASSERT(NS_IsMainThread());
+
+  // The sandbox version is recorded by GMPInstallManager when it installs the
+  // plugin, so we only trust it if the installed version is in this directory.
+  nsAutoString dirVersion;
+  if (NS_WARN_IF(NS_FAILED(mDirectory->GetLeafName(dirVersion)))) {
+    return;
+  }
+
+  NS_ConvertUTF16toUTF8 name(mName);
+  nsAutoCString installedVersion;
+  if (NS_FAILED(Preferences::GetCString(
+          nsPrintfCString("media.gmp-%s.version", name.get()).get(),
+          installedVersion)) ||
+      !installedVersion.Equals(NS_ConvertUTF16toUTF8(dirVersion))) {
+    return;
+  }
+
+  int32_t sandboxVersion = Preferences::GetInt(
+      nsPrintfCString("media.gmp-%s.sandboxVersion", name.get()).get(), 0);
+  mSandboxVersion = sandboxVersion > 0 ? uint32_t(sandboxVersion) : 0;
+  GMP_PARENT_LOG_DEBUG("{}: {} version {} has sandbox version {}", __FUNCTION__,
+                       name.get(), installedVersion.get(), mSandboxVersion);
+}
+#endif
 
 bool GMPParent::CanBeSharedCrossNodeIds() const {
   return mNodeId.IsEmpty() &&

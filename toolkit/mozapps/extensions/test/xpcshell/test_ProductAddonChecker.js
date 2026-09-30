@@ -193,6 +193,26 @@ add_task(async function test_good_xml() {
   ]);
 });
 
+add_task(async function test_sandbox_version_xml() {
+  let res = await ProductAddonChecker.getProductAddonList(
+    root + "sandboxaddons.xml"
+  );
+  Assert.ok(Array.isArray(res.addons));
+  Assert.equal(res.addons.length, 6);
+
+  Assert.equal(res.addons[0].id, "test1");
+  Assert.equal(res.addons[0].sandboxVersion, undefined);
+
+  Assert.equal(res.addons[1].id, "test2");
+  Assert.strictEqual(res.addons[1].sandboxVersion, 2);
+
+  // Invalid sandbox versions are ignored.
+  for (let i = 2; i < res.addons.length; ++i) {
+    Assert.equal(res.addons[i].id, "test" + (i + 1));
+    Assert.equal(res.addons[i].sandboxVersion, undefined);
+  }
+});
+
 add_task(async function test_download_nourl() {
   try {
     let path = await ProductAddonChecker.downloadAddon({});

@@ -153,6 +153,9 @@ class GMPParent final : public PGMPParent,
  private:
   ~GMPParent();
   void UpdatePluginType();
+#if defined(XP_WIN) && defined(MOZ_SANDBOX)
+  void ReadSandboxVersion();
+#endif
 
   RefPtr<GeckoMediaPluginServiceParent> mService;
   bool EnsureProcessLoaded();
