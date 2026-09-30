@@ -257,6 +257,8 @@ def set_worker_type(config, tasks):
             task["worker-type"] = MACOSX_WORKER_TYPES["macosx1500-aarch64"]
         elif test_platform.startswith("android-em-"):
             task["worker-type"] = "t-linux-kvm"
+        elif test_platform.startswith("linux2404-aarch64"):
+            task["worker-type"] = "t-linux-arm64-docker"
         elif test_platform.startswith("linux") or test_platform.startswith("android"):
             if "wayland" in test_platform:
                 if task["instance-size"].startswith("xlarge"):
