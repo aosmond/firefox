@@ -319,6 +319,9 @@ windows32-tests:
     - web-platform-tests
     - web-platform-tests-crashtest
 
+linux-aarch64-tests:
+    - web-platform-tests-eme
+
 windows-aarch64-tests:
     - cppunittest
 

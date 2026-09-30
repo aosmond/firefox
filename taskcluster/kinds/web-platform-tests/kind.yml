@@ -43,7 +43,11 @@ task-defaults:
                     default: true
             default: false
     docker-image:
-        in-tree: ubuntu2404-test
+        by-test-platform:
+            linux.*-aarch64.*:
+                in-tree: ubuntu2404-arm64-test
+            default:
+                in-tree: ubuntu2404-test
     fetches:
         toolchain:
             by-test-platform:
@@ -67,6 +71,9 @@ task-defaults:
                     - linux64-minidump-stackwalk
                     - linux64-fix-stacks
                     - linux64-hostutils
+                linux.*-aarch64.*:
+                    - linux64-aarch64-minidump-stackwalk
+                    - linux64-aarch64-fix-stacks
                 default:
                     - linux64-minidump-stackwalk
                     - linux64-fix-stacks
@@ -337,6 +344,8 @@ tasks:
                 eme-signed: []
                 default:
                     by-test-platform:
+                        android-em.*/debug-isolated-process: []
+                        linux.*-aarch64.*: []
                         .*-wayland.*: []
                         windows1.*: []
                         default: built-projects
