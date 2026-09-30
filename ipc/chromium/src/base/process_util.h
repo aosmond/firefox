@@ -164,13 +164,7 @@ struct LaunchOptions {
   // with respect to privacy/security permission prompts and
   // decisions.  Ignored if not supported by the OS.
   bool disclaim = false;
-#  ifdef __aarch64__
-  // The architecture to launch when launching a "universal" binary.
-  // Note: the implementation only supports launching x64 child
-  // processes from arm64 parent processes.
-  uint32_t arch = PROCESS_ARCH_INVALID;
-#  endif  // __aarch64__
-#endif    // XP_DARWIN
+#endif  // XP_DARWIN
 };
 
 #if defined(XP_WIN)

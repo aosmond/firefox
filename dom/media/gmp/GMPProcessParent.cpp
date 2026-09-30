@@ -159,16 +159,6 @@ bool GMPProcessParent::Launch(int32_t aTimeoutMs) {
   geckoargs::sPluginNativeEvent.Put(
       StaticPrefs::media_gmp_use_native_event_processing(), args);
 
-#ifdef ALLOW_GECKO_CHILD_PROCESS_ARCH
-  GMP_LOG_DEBUG("GMPProcessParent::Launch() mLaunchArch: {}", mLaunchArch);
-#  if defined(XP_MACOSX)
-  mLaunchOptions->arch = mLaunchArch;
-  if (mLaunchArch == base::PROCESS_ARCH_X86_64) {
-    mLaunchOptions->env_map["MOZ_SHMEM_PAGESIZE_16K"] = 1;
-  }
-#  endif
-#endif
-
   // Resolve symlinks in the plugin path. The sandbox prevents
   // resolving symlinks in the child process if access to link
   // source file is denied.

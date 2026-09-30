@@ -355,15 +355,6 @@ static nsCOMPtr<nsIFile> GetParentFile(const nsCOMPtr<nsIFile>& aFile) {
 }
 
 #if defined(XP_WIN)
-static bool IsFileLeafEqualToASCII(const nsCOMPtr<nsIFile>& aFile,
-                                   const char* aStr) {
-  nsAutoString leafName;
-  return aFile && NS_SUCCEEDED(aFile->GetLeafName(leafName)) &&
-         leafName.EqualsASCII(aStr);
-}
-#endif
-
-#if defined(XP_WIN)
 #  define FIREFOX_FILE MOZ_APP_NAME u".exe"_ns
 #else
 #  define FIREFOX_FILE MOZ_APP_NAME u""_ns
@@ -384,15 +375,7 @@ static nsCOMPtr<nsIFile> GetFirefoxAppPath(
   }
   return path;
 #else
-  nsCOMPtr<nsIFile> parent = GetParentFile(aPluginContainerPath);
-#  if XP_WIN
-  if (IsFileLeafEqualToASCII(parent, "i686")) {
-    // We must be on Windows on ARM64, where the plugin-container path will
-    // be in the 'i686' subdir. The firefox.exe is in the parent directory.
-    parent = GetParentFile(parent);
-  }
-#  endif
-  return parent;
+  return GetParentFile(aPluginContainerPath);
 #endif
 }
 

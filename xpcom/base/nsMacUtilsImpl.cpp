@@ -26,9 +26,6 @@
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreServices/CoreServices.h>
-#if defined(__aarch64__)
-#  include <dlfcn.h>
-#endif
 #include <sys/sysctl.h>
 
 using mozilla::StaticMutexAutoLock;
@@ -37,22 +34,13 @@ using namespace nsMacUtilsImpl;
 static mozilla::LazyLogModule sMacUtilsLog("macutils");
 #define LOG(args...) MOZ_LOG(sMacUtilsLog, mozilla::LogLevel::Debug, (args))
 
-#if defined(MOZ_SANDBOX) || defined(__aarch64__)
+#if defined(MOZ_SANDBOX)
 // For thread safe setting/checking of sCachedAppPath
 static StaticMutex sCachedAppPathMutex;
 
 // Cache the appDir returned from GetAppPath to avoid doing I/O
 static StaticAutoPtr<nsCString> sCachedAppPath
     MOZ_GUARDED_BY(sCachedAppPathMutex);
-#endif
-
-// The cached machine architectures of the .app bundle which can
-// be multiple architectures for universal binaries.
-static std::atomic<uint32_t> sBundleArchMaskAtomic = 0;
-
-#if defined(__aarch64__)
-// Limit XUL translation to one attempt
-static std::atomic<bool> sIsXULTranslated = false;
 #endif
 
 // Info.plist key associated with the developer repo path
@@ -68,7 +56,7 @@ enum TCSMStatus { TCSM_Unknown = 0, TCSM_Available, TCSM_Unavailable };
 // Initialize with Unknown until we've checked if TCSM is available to set
 static Atomic<TCSMStatus> sTCSMStatus(TCSM_Unknown);
 
-#if defined(MOZ_SANDBOX) || defined(__aarch64__)
+#if defined(MOZ_SANDBOX)
 
 static void ClearCachedAppPathOnShutdown() {
   mozilla::RunOnShutdown([] {
@@ -148,7 +136,7 @@ bool nsMacUtilsImpl::GetAppPath(nsCString& aAppPath) {
   return true;
 }
 
-#endif /* MOZ_SANDBOX || __aarch64__ */
+#endif /* MOZ_SANDBOX */
 
 #if defined(MOZ_SANDBOX) && defined(DEBUG)
 // If XPCOM_MEM_BLOAT_LOG or XPCOM_MEM_LEAK_LOG is set to a log file
@@ -359,56 +347,6 @@ nsresult nsMacUtilsImpl::GetObjDir(nsIFile** aObjDir) {
 }
 
 /* static */
-nsresult nsMacUtilsImpl::GetArchitecturesForBundle(uint32_t* aArchMask) {
-  MOZ_ASSERT(aArchMask);
-
-  *aArchMask = sBundleArchMaskAtomic;
-  if (*aArchMask != 0) {
-    return NS_OK;
-  }
-
-  CFBundleRef mainBundle = ::CFBundleGetMainBundle();
-  if (!mainBundle) {
-    return NS_ERROR_FAILURE;
-  }
-
-  CFArrayRef archList = ::CFBundleCopyExecutableArchitectures(mainBundle);
-  if (!archList) {
-    return NS_ERROR_FAILURE;
-  }
-
-  CFIndex archCount = ::CFArrayGetCount(archList);
-  for (CFIndex i = 0; i < archCount; i++) {
-    CFNumberRef arch =
-        static_cast<CFNumberRef>(::CFArrayGetValueAtIndex(archList, i));
-
-    int archInt = 0;
-    if (!::CFNumberGetValue(arch, kCFNumberIntType, &archInt)) {
-      ::CFRelease(archList);
-      return NS_ERROR_FAILURE;
-    }
-
-    if (archInt == kCFBundleExecutableArchitecturePPC) {
-      *aArchMask |= base::PROCESS_ARCH_PPC;
-    } else if (archInt == kCFBundleExecutableArchitectureI386) {
-      *aArchMask |= base::PROCESS_ARCH_I386;
-    } else if (archInt == kCFBundleExecutableArchitecturePPC64) {
-      *aArchMask |= base::PROCESS_ARCH_PPC_64;
-    } else if (archInt == kCFBundleExecutableArchitectureX86_64) {
-      *aArchMask |= base::PROCESS_ARCH_X86_64;
-    } else if (archInt == kCFBundleExecutableArchitectureARM64) {
-      *aArchMask |= base::PROCESS_ARCH_ARM_64;
-    }
-  }
-
-  ::CFRelease(archList);
-
-  sBundleArchMaskAtomic = *aArchMask;
-
-  return NS_OK;
-}
-
-/* static */
 nsresult nsMacUtilsImpl::GetArchitecturesForBinary(const char* aPath,
                                                    uint32_t* aArchMask) {
   MOZ_ASSERT(aArchMask);
@@ -457,92 +395,6 @@ nsresult nsMacUtilsImpl::GetArchitecturesForBinary(const char* aPath,
 
   return NS_OK;
 }
-
-#if defined(__aarch64__)
-// Pre-translate XUL so that x64 child processes launched after this
-// translation will not incur the translation overhead delaying startup.
-// Returns 1 if translation is in progress, -1 on an error encountered before
-// translation, and otherwise returns the result of rosetta_translate_binaries.
-/* static */
-int nsMacUtilsImpl::PreTranslateXUL() {
-  bool expected = false;
-  if (!sIsXULTranslated.compare_exchange_strong(expected, true)) {
-    // Translation is already done or in progress.
-    return 1;
-  }
-
-  // Get the path to XUL by first getting the
-  // outer .app path and appending the path to XUL.
-  nsCString xulPath;
-  if (!GetAppPath(xulPath)) {
-    return -1;
-  }
-  xulPath.Append("/Contents/MacOS/XUL");
-
-  return PreTranslateBinary(xulPath);
-}
-
-// Use Chromium's method to pre-translate the provided binary using the
-// undocumented function "rosetta_translate_binaries" from libRosetta.dylib.
-// Re-translating the same binary does not cause translation to occur again.
-// Returns -1 on an error encountered before translation, otherwise returns
-// the rosetta_translate_binaries result. This method is partly copied from
-// Chromium code.
-/* static */
-int nsMacUtilsImpl::PreTranslateBinary(nsCString aBinaryPath) {
-  // Do not attempt to use this in child processes. Child
-  // processes executing should already be translated and
-  // sandboxing may interfere with translation.
-  MOZ_ASSERT(XRE_IsParentProcess());
-  if (!XRE_IsParentProcess()) {
-    return -1;
-  }
-
-  // Translation can take several seconds and therefore
-  // should not be done on the main thread.
-  MOZ_ASSERT(!NS_IsMainThread());
-  if (NS_IsMainThread()) {
-    return -1;
-  }
-
-  // @available() is not available for macOS 11 at this time so use
-  // -Wunguarded-availability-new to avoid compiler warnings caused
-  // by an earlier minimum SDK. ARM64 builds require the 11.0 SDK and
-  // can not be run on earlier OS versions so this is not a concern.
-#  pragma clang diagnostic push
-#  pragma clang diagnostic ignored "-Wunguarded-availability-new"
-  // If Rosetta is not installed, do not proceed.
-  if (!CFBundleIsArchitectureLoadable(CPU_TYPE_X86_64)) {
-    return -1;
-  }
-#  pragma clang diagnostic pop
-
-  if (aBinaryPath.IsEmpty()) {
-    return -1;
-  }
-
-  // int rosetta_translate_binaries(const char*[] paths, int npaths)
-  using rosetta_translate_binaries_t = int (*)(const char*[], int);
-
-  static auto rosetta_translate_binaries = []() {
-    void* libRosetta =
-        dlopen("/usr/lib/libRosetta.dylib", RTLD_LAZY | RTLD_LOCAL);
-    if (!libRosetta) {
-      return static_cast<rosetta_translate_binaries_t>(nullptr);
-    }
-
-    return reinterpret_cast<rosetta_translate_binaries_t>(
-        dlsym(libRosetta, "rosetta_translate_binaries"));
-  }();
-
-  if (!rosetta_translate_binaries) {
-    return -1;
-  }
-
-  const char* pathPtr = aBinaryPath.get();
-  return rosetta_translate_binaries(&pathPtr, 1);
-}
-#endif
 
 std::string CFStringToStdString(CFStringRef aString) {
   if (!aString) {

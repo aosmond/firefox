@@ -76,9 +76,6 @@ GMPParent::GMPParent(nsISerialEventTarget* aGMPEventTarget)
       mCanDecrypt(false),
       mGMPContentChildCount(0),
       mChildPid(0),
-#ifdef ALLOW_GECKO_CHILD_PROCESS_ARCH
-      mChildLaunchArch(base::PROCESS_ARCH_INVALID),
-#endif
       mMainThread(GetMainThreadSerialEventTarget()),
       mGMPEventTarget(aGMPEventTarget) {
   MOZ_ASSERT(GMPEventTarget()->IsOnCurrentThread());
@@ -109,10 +106,6 @@ void GMPParent::CloneFrom(const GMPParent* aOther) {
     mCapabilities.AppendElement(cap);
   }
   mAdapter = aOther->mAdapter;
-
-#ifdef ALLOW_GECKO_CHILD_PROCESS_ARCH
-  mChildLaunchArch = aOther->mChildLaunchArch;
-#endif
 }
 
 #if defined(XP_WIN) || defined(XP_MACOSX)
@@ -143,10 +136,6 @@ nsresult GMPParent::GetPluginFileArch(nsIFile* aPluginDir,
 
   rv = nsMacUtilsImpl::GetArchitecturesForBinary(pluginPath.get(), &aArchSet);
   NS_ENSURE_SUCCESS(rv, rv);
-
-#    if defined(__aarch64__)
-  mPluginFilePath = pluginPath;
-#    endif
 #  elif defined(XP_WIN)
   // Get the full plugin path
   nsAutoString pluginPath;
@@ -232,75 +221,23 @@ RefPtr<GenericPromise> GMPParent::Init(GeckoMediaPluginServiceParent* aService,
     GMP_PARENT_LOG_DEBUG("{}: Plugin arch: 0x{:x}", __FUNCTION__, pluginArch);
   }
 
-  const uint32_t x86 = base::PROCESS_ARCH_X86_64 | base::PROCESS_ARCH_I386;
-#  ifdef ALLOW_GECKO_CHILD_PROCESS_ARCH
-  const uint32_t arm64 = base::PROCESS_ARCH_ARM_64;
-
-  mChildLaunchArch = pluginArch;
-  // When executing in an ARM64 process, if the library is x86 or x64,
-  // set |mChildLaunchArch| to x64 and allow the library to be used as long
-  // as this process is a universal binary.
-  if (!(pluginArch & arm64) && (pluginArch & x86)) {
-    bool isWidevine = parentLeafName.Find(u"widevine") != kNotFound;
-    bool isWidevineAllowed =
-        StaticPrefs::media_gmp_widevinecdm_allow_x64_plugin_on_arm64();
-    bool isH264 = parentLeafName.Find(u"openh264") != kNotFound;
-    bool isH264Allowed =
-        StaticPrefs::media_gmp_gmpopenh264_allow_x64_plugin_on_arm64();
-    bool isClearkey = parentLeafName.Find(u"clearkey") != kNotFound;
-    bool isClearkeyAllowed =
-        StaticPrefs::media_gmp_gmpclearkey_allow_x64_plugin_on_arm64();
-
-    // Only allow x64 child GMP processes for Widevine, OpenH264 and Clearkey
-    if (!isWidevine && !isH264 && !isClearkey) {
-      return GenericPromise::CreateAndReject(NS_ERROR_NOT_IMPLEMENTED,
-                                             __func__);
-    }
-    // And only if prefs permit it.
-    if ((isWidevine && !isWidevineAllowed) || (isH264 && !isH264Allowed) ||
-        (isClearkey && !isClearkeyAllowed)) {
-      return GenericPromise::CreateAndReject(NS_ERROR_PLUGIN_DISABLED,
-                                             __func__);
-    }
-
-#    ifdef XP_MACOSX
-    // We have an x64 library. Get the bundle architecture to determine
-    // if we are a universal binary and hence if we can launch an x64
-    // child process to host this plugin.
-    uint32_t bundleArch = base::PROCESS_ARCH_INVALID;
-    rv = nsMacUtilsImpl::GetArchitecturesForBundle(&bundleArch);
-    if (NS_FAILED(rv)) {
-      // If we fail here, continue as if this is not a univeral binary.
-      GMP_PARENT_LOG_DEBUG("{}: Bundle arch error: {}", __FUNCTION__,
-                           uint32_t(rv));
-    } else {
-      GMP_PARENT_LOG_DEBUG("{}: Bundle arch: 0x{:x}", __FUNCTION__, bundleArch);
-    }
-
-    bool isUniversalBinary = (bundleArch & base::PROCESS_ARCH_X86_64) &&
-                             (bundleArch & base::PROCESS_ARCH_ARM_64);
-    if (isUniversalBinary) {
-      mChildLaunchArch = base::PROCESS_ARCH_X86_64;
-      PreTranslateBins();
-    } else {
-      return GenericPromise::CreateAndReject(NS_ERROR_NOT_IMPLEMENTED,
-                                             __func__);
-    }
-#    endif
-  }
+#  if defined(_ARM64_) || defined(__aarch64__)
+  const uint32_t nativeArch = base::PROCESS_ARCH_ARM_64;
 #  else
-  // When executing in a non-ARM process, if the library is not x86 or x64,
-  // remove it and return an error. This prevents a child process crash due
-  // to loading an incompatible library and forces a new plugin version to be
-  // downloaded when the check is next performed. This could occur if a profile
-  // is moved from an ARM64 system to an x64 system.
-  if ((pluginArch & x86) == 0) {
+  const uint32_t nativeArch =
+      base::PROCESS_ARCH_X86_64 | base::PROCESS_ARCH_I386;
+#  endif
+  // If the library is not for this process's architecture, remove it and
+  // return an error. This prevents a child process crash due to loading an
+  // incompatible library and forces a new plugin version to be downloaded when
+  // the check is next performed. This could occur if a profile is moved between
+  // systems with different architectures.
+  if ((pluginArch & nativeArch) == 0) {
     GMP_PARENT_LOG_DEBUG("{}: Removing plugin directory", __FUNCTION__);
     aPluginDir->Remove(true);
     return GenericPromise::CreateAndReject(NS_ERROR_NOT_IMPLEMENTED, __func__);
   }
-#  endif  // defined(ALLOW_GECKO_CHILD_PROCESS_ARCH)
-#endif    // defined(XP_WIN) || defined(XP_MACOSX)
+#endif  // defined(XP_WIN) || defined(XP_MACOSX)
 
   return ReadGMPMetaData();
 }
@@ -392,10 +329,6 @@ nsresult GMPParent::LoadProcess() {
     mProcess = new GMPProcessParent(NS_ConvertUTF16toUTF8(path).get());
 #if defined(XP_MACOSX) && defined(MOZ_SANDBOX)
     mProcess->SetRequiresWindowServer(mAdapter.EqualsLiteral("chromium"));
-#endif
-
-#ifdef ALLOW_GECKO_CHILD_PROCESS_ARCH
-    mProcess->SetLaunchArchitecture(mChildLaunchArch);
 #endif
 
     // Coverage builds instrument plugin-container.exe heavily enough that
@@ -1414,27 +1347,6 @@ bool GMPParent::EnsureProcessLoaded(base::ProcessId* aID) {
 void GMPParent::IncrementGMPContentChildCount() { ++mGMPContentChildCount; }
 
 nsString GMPParent::GetPluginBaseName() const { return u"gmp-"_ns + mName; }
-
-#if defined(XP_MACOSX) && defined(__aarch64__)
-void GMPParent::PreTranslateBins() {
-  nsCOMPtr<nsIRunnable> event = mozilla::NewRunnableMethod(
-      "RosettaTranslation", this, &GMPParent::PreTranslateBinsWorker);
-
-  DebugOnly<nsresult> rv =
-      NS_DispatchBackgroundTask(event.forget(), NS_DISPATCH_EVENT_MAY_BLOCK);
-
-  MOZ_ASSERT(NS_SUCCEEDED(rv));
-}
-
-void GMPParent::PreTranslateBinsWorker() {
-  int rv = nsMacUtilsImpl::PreTranslateXUL();
-  GMP_PARENT_LOG_DEBUG("{}: XUL translation result: {}", __FUNCTION__, rv);
-
-  rv = nsMacUtilsImpl::PreTranslateBinary(mPluginFilePath);
-  GMP_PARENT_LOG_DEBUG("{}: {} translation result: {}", __FUNCTION__,
-                       mPluginFilePath.get(), rv);
-}
-#endif
 
 }  // namespace mozilla::gmp
 

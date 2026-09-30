@@ -24,9 +24,9 @@ namespace nsMacUtilsImpl {
 nsresult GetRepoDir(nsIFile** aRepoDir);
 nsresult GetObjDir(nsIFile** aObjDir);
 
-#if defined(MOZ_SANDBOX) || defined(__aarch64__)
+#if defined(MOZ_SANDBOX)
 bool GetAppPath(nsCString& aAppPath);
-#endif /* MOZ_SANDBOX || __aarch64__ */
+#endif /* MOZ_SANDBOX */
 
 #if defined(MOZ_SANDBOX) && defined(DEBUG)
 nsresult GetBloatLogDir(nsCString& aDirectoryPath);
@@ -36,17 +36,7 @@ nsresult GetDirectoryPath(const char* aPath, nsCString& aDirectoryPath);
 void EnableTCSMIfAvailable();
 bool IsTCSMAvailable();
 uint32_t GetPhysicalCPUCount();
-nsresult GetArchitecturesForBundle(uint32_t* aArchMask);
 nsresult GetArchitecturesForBinary(const char* aPath, uint32_t* aArchMask);
-
-#if defined(__aarch64__)
-// Pre-translate binaries to avoid translation delays when launching
-// x64 child process instances for the first time. i.e. on first launch
-// after installation or after an update. Translations are cached so
-// repeated launches of the binaries do not encounter delays.
-int PreTranslateXUL();
-int PreTranslateBinary(nsCString aBinaryPath);
-#endif
 
 enum class CodeSignatureType {
   UnexpectedError,

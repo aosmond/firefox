@@ -99,12 +99,6 @@ export var GMPUtils = {
     );
   },
 
-  _isWindowsOnARM64() {
-    return (
-      AppConstants.platform == "win" && lazy.UpdateUtils.ABI.match(/aarch64/)
-    );
-  },
-
   _getChromiumUpdateParameters(aPlugin) {
     let params = "";
     if (AppConstants.platform === "win") {
@@ -141,15 +135,8 @@ export var GMPUtils = {
     return params;
   },
 
-  _expectedABI(aPlugin) {
-    let defaultABI = lazy.UpdateUtils.ABI;
-    let expectedABIs = [defaultABI];
-    if (aPlugin.id == WIDEVINE_L3_ID && this._isWindowsOnARM64()) {
-      // On Windows on aarch64, we may use either the x86 or the ARM64 plugin
-      // as we are still shipping the former to release.
-      expectedABIs.push(defaultABI.replace(/aarch64/g, "x86"));
-    }
-    return expectedABIs.join(",");
+  _expectedABI() {
+    return lazy.UpdateUtils.ABI;
   },
 };
 

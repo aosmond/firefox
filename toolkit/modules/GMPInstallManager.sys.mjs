@@ -890,7 +890,7 @@ GMPDownloader.prototype = {
               // Remember our ABI, so that if the profile is migrated to another
               // platform or from 32 -> 64 bit, we notice and don't try to load the
               // unexecutable plugin library.
-              let abi = GMPUtils._expectedABI(gmpAddon);
+              let abi = GMPUtils._expectedABI();
               log.info("Setting ABI to '" + abi + "' for " + gmpAddon.id);
               GMPPrefs.setString(GMPPrefs.KEY_PLUGIN_ABI, abi, gmpAddon.id);
               // We use the combination of the hash and version to ensure we are

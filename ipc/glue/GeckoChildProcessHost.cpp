@@ -191,12 +191,6 @@ class BaseProcessLauncher {
 
   NS_INLINE_DECL_THREADSAFE_REFCOUNTING(BaseProcessLauncher);
 
-#ifdef ALLOW_GECKO_CHILD_PROCESS_ARCH
-  void SetLaunchArchitecture(uint32_t aLaunchArch) {
-    mLaunchArch = aLaunchArch;
-  }
-#endif
-
   RefPtr<ProcessLaunchPromise> Launch(GeckoChildProcessHost*);
 
  protected:
@@ -223,9 +217,6 @@ class BaseProcessLauncher {
   nsCOMPtr<nsISerialEventTarget> mLaunchThread;
   GeckoProcessType mProcessType;
   UniquePtr<base::LaunchOptions> mLaunchOptions;
-#ifdef ALLOW_GECKO_CHILD_PROCESS_ARCH
-  uint32_t mLaunchArch = base::PROCESS_ARCH_INVALID;
-#endif
   geckoargs::ChildProcessArgs mChildArgs;
 #ifdef XP_WIN
   nsString mGroupId;
@@ -750,9 +741,6 @@ bool GeckoChildProcessHost::AsyncLaunch(
   RefPtr<BaseProcessLauncher> launcher =
       MakeRefPtr<ProcessLauncher>(this, std::move(aExtraOpts));
   TimeStamp startTimeStamp = TimeStamp::Now();
-#ifdef ALLOW_GECKO_CHILD_PROCESS_ARCH
-  launcher->SetLaunchArchitecture(mLaunchArch);
-#endif
 
   // Note: Destroy() waits on mHandlePromise to delete |this|. As such, we want
   // to be sure that all of our post-launch processing on |this| happens before

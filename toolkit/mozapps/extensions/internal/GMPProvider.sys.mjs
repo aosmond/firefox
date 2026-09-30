@@ -703,7 +703,7 @@ GMPWrapper.prototype = {
       };
     }
 
-    let expectedABI = GMPUtils._expectedABI(this._plugin);
+    let expectedABI = GMPUtils._expectedABI();
     let abi = GMPPrefs.getString(
       GMPPrefs.KEY_PLUGIN_ABI,
       expectedABI,

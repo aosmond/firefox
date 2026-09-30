@@ -103,20 +103,6 @@ Result<Ok, LaunchError> LaunchApp(const std::vector<std::string>& argv,
   auto spawnattr_guard = mozilla::MakeScopeExit(
       [&spawnattr] { posix_spawnattr_destroy(&spawnattr); });
 
-#if defined(XP_MACOSX) && defined(__aarch64__)
-  if (options.arch == PROCESS_ARCH_X86_64) {
-    cpu_type_t cpu_pref = CPU_TYPE_X86_64;
-    size_t count = 1;
-    size_t ocount = 0;
-    int rv =
-        posix_spawnattr_setbinpref_np(&spawnattr, count, &cpu_pref, &ocount);
-    if ((rv != 0) || (ocount != count)) {
-      DLOG(WARNING) << "posix_spawnattr_setbinpref_np failed";
-      return Err(LaunchError("posix_spawnattr_setbinpref_np", rv));
-    }
-  }
-#endif
-
   if (options.disclaim) {
     int err = responsibility_spawnattrs_setdisclaim(&spawnattr, 1);
     if (err != 0) {
