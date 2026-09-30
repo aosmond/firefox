@@ -66,6 +66,10 @@ class CompositorManagerParent final : public PCompositorManagerParent {
   mozilla::ipc::IPCResult RecvInitCanvasManager(
       Endpoint<PCanvasManagerParent>&&);
 
+  mozilla::ipc::IPCResult RecvNewContentCompositorManager(
+      Endpoint<PCompositorManagerParent>&& aEndpoint,
+      const dom::ContentParentId& aChildId, uint32_t aNamespace,
+      uint32_t aContentBridgeNamespace);
   mozilla::ipc::IPCResult RecvAddLayerTreeIdMapping(
       const LayersId& aLayersId, const base::ProcessId& aOwnerId);
   mozilla::ipc::IPCResult RecvRemoveLayerTreeIdMapping(

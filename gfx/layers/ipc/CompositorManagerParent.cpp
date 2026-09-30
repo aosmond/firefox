@@ -404,6 +404,22 @@ mozilla::ipc::IPCResult CompositorManagerParent::RecvInitCanvasManager(
   return IPC_OK();
 }
 
+mozilla::ipc::IPCResult
+CompositorManagerParent::RecvNewContentCompositorManager(
+    Endpoint<PCompositorManagerParent>&& aEndpoint,
+    const dom::ContentParentId& aChildId, uint32_t aNamespace,
+    uint32_t aContentBridgeNamespace) {
+  if (NS_WARN_IF(!IsFromParentProcess())) {
+    return IPC_FAIL(this,
+                    "Only the parent process may create content managers");
+  }
+
+  RefPtr<CompositorManagerParent> bridge = new CompositorManagerParent(
+      aChildId, aNamespace, aContentBridgeNamespace, /* aIsRoot */ false);
+  bridge->Bind(std::move(aEndpoint));
+  return IPC_OK();
+}
+
 mozilla::ipc::IPCResult CompositorManagerParent::RecvAddLayerTreeIdMapping(
     const LayersId& aLayersId, const base::ProcessId& aOwnerId) {
   if (NS_WARN_IF(!IsFromParentProcess())) {

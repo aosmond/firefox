@@ -1486,7 +1486,12 @@ bool GPUProcessManager::CreateContentCompositorManager(
   }
 
   if (mGPUChild) {
-    mGPUChild->SendNewContentCompositorManager(
+    CompositorManagerChild* manager = CompositorManagerChild::GetInstance();
+    if (!manager) {
+      gfxCriticalNote << "Could not send content compositor manager";
+      return false;
+    }
+    manager->SendNewContentCompositorManager(
         std::move(parentPipe), aChildId, aNamespace, aContentBridgeNamespace);
   } else if (!CompositorManagerParent::Create(std::move(parentPipe), aChildId,
                                               aNamespace,
