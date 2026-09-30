@@ -122,7 +122,7 @@ parent:
   async PCompositorWidget(CompositorWidgetInitData aInitData);
 
   // When out-of-process, this must be called to finish initialization.
-  sync Initialize(LayersId rootLayerTreeId);
+  async Initialize(LayersId rootLayerTreeId);
 
   // Must be called after Initialize(), and only succeeds if AsyncPanZoomEnabled() is true.
   async PAPZ(LayersId layersId);

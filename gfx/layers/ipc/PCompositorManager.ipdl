@@ -2,8 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+include protocol PAPZInputBridge;
 include protocol PCanvasManager;
 include protocol PCompositorBridge;
+include protocol PUiCompositorController;
 include LayersSurfaces;
 include "mozilla/GfxMessageUtils.h";
 include "mozilla/layers/WebRenderMessageUtils.h";
@@ -11,6 +13,8 @@ include "mozilla/layers/WebRenderMessageUtils.h";
 using mozilla::TimeDuration from "mozilla/TimeStamp.h";
 using mozilla::CSSToLayoutDeviceScale from "Units.h";
 using mozilla::gfx::IntSize from "mozilla/gfx/2D.h";
+using base::ProcessId from "base/process.h";
+using struct mozilla::layers::LayersId from "mozilla/layers/LayersTypes.h";
 using mozilla::layers::CompositorOptions from "mozilla/layers/LayersMessageUtils.h";
 using mozilla::wr::ExternalImageId from "mozilla/webrender/WebRenderTypes.h";
 using mozilla::wr::MemoryReport from "mozilla/webrender/WebRenderTypes.h";
@@ -83,6 +87,20 @@ parent:
   async ReportMemory() returns (MemoryReport aReport);
 
   async InitCanvasManager(Endpoint<PCanvasManagerParent> endpoint);
+
+  // The following messages may only be sent by the UI process to the GPU
+  // process. They share a channel with the widget PCompositorBridge actors so
+  // that they are ordered with respect to them.
+
+  // Called to notify the GPU process of who owns a layersId.
+  async AddLayerTreeIdMapping(LayersId layersId, ProcessId ownerId);
+  async RemoveLayerTreeIdMapping(LayersId layersId, ProcessId ownerId);
+
+  // Must be sent after PCompositorBridge::Initialize for the given root.
+  async InitUiCompositorController(LayersId rootLayerTreeId,
+                                   Endpoint<PUiCompositorControllerParent> endpoint);
+  async InitAPZInputBridge(LayersId rootLayerTreeId,
+                           Endpoint<PAPZInputBridgeParent> endpoint);
 
 child:
   async NotifyWebRenderError(WebRenderError error);

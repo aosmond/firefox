@@ -30,6 +30,7 @@ namespace layers {
 class IAPZCTreeManager;
 class CompositorOptions;
 class CompositorSession;
+class CompositorManagerChild;
 class CompositorUpdateObserver;
 class PCompositorBridgeChild;
 class PCompositorManagerChild;
@@ -328,6 +329,9 @@ class GPUProcessManager final : public GPUProcessHost::Listener {
 
   bool EnsureProtocolsReady();
   bool EnsureCompositorManagerChild();
+  // Returns the existing UI process CompositorManagerChild for the current GPU
+  // process, if it can send messages.
+  layers::CompositorManagerChild* GetCompositorManagerChild();
   bool EnsureImageBridgeChild();
   bool EnsureVRManager();
 

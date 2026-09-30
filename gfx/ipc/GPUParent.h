@@ -66,12 +66,6 @@ class GPUParent final : public PGPUParent {
   mozilla::ipc::IPCResult RecvInitVRManager(
       Endpoint<PVRManagerParent>&& aEndpoint, uint32_t aNamespace);
   mozilla::ipc::IPCResult RecvInitVR(Endpoint<PVRGPUChild>&& aVRGPUChild);
-  mozilla::ipc::IPCResult RecvInitUiCompositorController(
-      const LayersId& aRootLayerTreeId,
-      Endpoint<PUiCompositorControllerParent>&& aEndpoint);
-  mozilla::ipc::IPCResult RecvInitAPZInputBridge(
-      const LayersId& aRootLayerTreeId,
-      Endpoint<PAPZInputBridgeParent>&& aEndpoint);
   mozilla::ipc::IPCResult RecvInitProfiler(
       Endpoint<PProfilerChild>&& aEndpoint);
   mozilla::ipc::IPCResult RecvUpdateVar(const nsTArray<GfxVarUpdate>& var);
@@ -94,10 +88,6 @@ class GPUParent final : public PGPUParent {
       const ContentParentId& aChildId);
   mozilla::ipc::IPCResult RecvGetDeviceStatus(GPUDeviceData* aOutStatus);
   mozilla::ipc::IPCResult RecvSimulateDeviceReset();
-  mozilla::ipc::IPCResult RecvAddLayerTreeIdMapping(
-      const LayerTreeIdMapping& aMapping);
-  mozilla::ipc::IPCResult RecvRemoveLayerTreeIdMapping(
-      const LayerTreeIdMapping& aMapping);
   mozilla::ipc::IPCResult RecvFlushActiveCheckerboardReports();
   mozilla::ipc::IPCResult RecvRequestMemoryReport(
       const uint32_t& generation, const bool& anonymize,

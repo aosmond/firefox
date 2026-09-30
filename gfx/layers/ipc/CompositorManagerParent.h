@@ -66,6 +66,17 @@ class CompositorManagerParent final : public PCompositorManagerParent {
   mozilla::ipc::IPCResult RecvInitCanvasManager(
       Endpoint<PCanvasManagerParent>&&);
 
+  mozilla::ipc::IPCResult RecvAddLayerTreeIdMapping(
+      const LayersId& aLayersId, const base::ProcessId& aOwnerId);
+  mozilla::ipc::IPCResult RecvRemoveLayerTreeIdMapping(
+      const LayersId& aLayersId, const base::ProcessId& aOwnerId);
+  mozilla::ipc::IPCResult RecvInitUiCompositorController(
+      const LayersId& aRootLayerTreeId,
+      Endpoint<PUiCompositorControllerParent>&& aEndpoint);
+  mozilla::ipc::IPCResult RecvInitAPZInputBridge(
+      const LayersId& aRootLayerTreeId,
+      Endpoint<PAPZInputBridgeParent>&& aEndpoint);
+
   void BindComplete(bool aIsRoot);
   void ActorDestroy(ActorDestroyReason aReason) override;
 
@@ -98,6 +109,9 @@ class CompositorManagerParent final : public PCompositorManagerParent {
   virtual ~CompositorManagerParent();
 
   void Bind(Endpoint<PCompositorManagerParent>&& aEndpoint, bool aIsRoot);
+
+  // Whether the other side is the UI process and we are the GPU process.
+  bool IsFromUIProcess() const;
 
   void DeferredDestroy();
 

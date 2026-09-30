@@ -239,6 +239,7 @@ MOZ_MAKE_ENUM_CLASS_BITWISE_OPERATORS(
     CompositorBridgeParentBase::TransformsToSkip)
 
 class CompositorBridgeParent final : public CompositorBridgeParentBase {
+  friend class CompositorManagerParent;
   friend class CompositorThreadHolder;
   friend class InProcessCompositorSession;
   friend class gfx::GPUProcessManager;
@@ -598,7 +599,7 @@ class CompositorBridgeParent final : public CompositorBridgeParentBase {
   /**
    * Release compositor-thread resources referred to by |aID|.
    *
-   * Must run on the content main thread.
+   * Must run on the main thread or the compositor thread.
    */
   static void DeallocateLayerTreeId(LayersId aId);
 

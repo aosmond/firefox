@@ -9,11 +9,14 @@
 #include "mozilla/gfx/CanvasManagerParent.h"
 #include "mozilla/gfx/GPUParent.h"
 #include "mozilla/ipc/Endpoint.h"
+#include "mozilla/layers/APZInputBridgeParent.h"
 #include "mozilla/layers/CompositorBridgeParent.h"
 #include "mozilla/layers/CompositorThread.h"
 #include "mozilla/layers/ContentCompositorBridgeParent.h"
+#include "mozilla/layers/LayerTreeOwnerTracker.h"
 #include "mozilla/layers/RemoteTextureMap.h"
 #include "mozilla/layers/SharedSurfacesParent.h"
+#include "mozilla/layers/UiCompositorControllerParent.h"
 #include "mozilla/webrender/RenderThread.h"
 
 namespace mozilla {
@@ -225,6 +228,11 @@ void CompositorManagerParent::Shutdown() {
   }
 }
 
+bool CompositorManagerParent::IsFromUIProcess() const {
+  gfx::GPUParent* gpu = gfx::GPUParent::GetSingleton();
+  return gpu && OtherPid() == gpu->OtherPid();
+}
+
 already_AddRefed<PCompositorBridgeParent>
 CompositorManagerParent::AllocPCompositorBridgeParent(
     const CompositorBridgeOptions& aOpt, const uint32_t& aNamespace) {
@@ -248,8 +256,7 @@ CompositorManagerParent::AllocPCompositorBridgeParent(
     case CompositorBridgeOptions::TWidgetCompositorOptions: {
       // Only the UI process is allowed to create widget compositors in the
       // compositor process.
-      gfx::GPUParent* gpu = gfx::GPUParent::GetSingleton();
-      if (NS_WARN_IF(!gpu || OtherPid() != gpu->OtherPid())) {
+      if (NS_WARN_IF(!IsFromUIProcess())) {
         MOZ_ASSERT_UNREACHABLE("Child cannot create widget compositor!");
         break;
       }
@@ -391,6 +398,55 @@ mozilla::ipc::IPCResult CompositorManagerParent::RecvInitCanvasManager(
   gfx::CanvasManagerParent::Init(std::move(aEndpoint), mSharedSurfacesHolder,
                                  mContentId);
   mRemoteTextureTxnScheduler = RemoteTextureTxnScheduler::Create(this);
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult CompositorManagerParent::RecvAddLayerTreeIdMapping(
+    const LayersId& aLayersId, const base::ProcessId& aOwnerId) {
+  if (NS_WARN_IF(!IsFromUIProcess())) {
+    return IPC_FAIL(this, "Only the UI process may map layer trees");
+  }
+
+  LayerTreeOwnerTracker::Get()->Map(aLayersId, aOwnerId);
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult CompositorManagerParent::RecvRemoveLayerTreeIdMapping(
+    const LayersId& aLayersId, const base::ProcessId& aOwnerId) {
+  if (NS_WARN_IF(!IsFromUIProcess())) {
+    return IPC_FAIL(this, "Only the UI process may unmap layer trees");
+  }
+
+  LayerTreeOwnerTracker::Get()->Unmap(aLayersId, aOwnerId);
+  CompositorBridgeParent::DeallocateLayerTreeId(aLayersId);
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult CompositorManagerParent::RecvInitUiCompositorController(
+    const LayersId& aRootLayerTreeId,
+    Endpoint<PUiCompositorControllerParent>&& aEndpoint) {
+  if (NS_WARN_IF(!IsFromUIProcess())) {
+    return IPC_FAIL(this, "Only the UI process may create UI controllers");
+  }
+
+  UiCompositorControllerParent::Start(aRootLayerTreeId, std::move(aEndpoint));
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult CompositorManagerParent::RecvInitAPZInputBridge(
+    const LayersId& aRootLayerTreeId,
+    Endpoint<PAPZInputBridgeParent>&& aEndpoint) {
+  if (NS_WARN_IF(!IsFromUIProcess())) {
+    return IPC_FAIL(this, "Only the UI process may create APZ input bridges");
+  }
+
+  // APZInputBridgeParent lives on the main thread, but we must receive the
+  // endpoint here to be ordered after PCompositorBridge::Initialize.
+  NS_DispatchToMainThread(NS_NewRunnableFunction(
+      "CompositorManagerParent::RecvInitAPZInputBridge",
+      [aRootLayerTreeId, endpoint = std::move(aEndpoint)]() mutable {
+        APZInputBridgeParent::Create(aRootLayerTreeId, std::move(endpoint));
+      }));
   return IPC_OK();
 }
 

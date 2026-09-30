@@ -500,6 +500,13 @@ bool GPUProcessManager::EnsureCompositorManagerChild() {
   return true;
 }
 
+CompositorManagerChild* GPUProcessManager::GetCompositorManagerChild() {
+  if (!CompositorManagerChild::IsInitialized(mProcessToken)) {
+    return nullptr;
+  }
+  return CompositorManagerChild::GetInstance();
+}
+
 bool GPUProcessManager::EnsureImageBridgeChild() {
   MOZ_DIAGNOSTIC_ASSERT(IsGPUReady());
 
@@ -576,7 +583,8 @@ GPUProcessManager::CreateUiCompositorController(nsIWidget* aWidget,
     return nullptr;
   }
 
-  mGPUChild->SendInitUiCompositorController(aId, std::move(parentPipe));
+  CompositorManagerChild::GetInstance()->SendInitUiCompositorController(
+      aId, std::move(parentPipe));
   RefPtr<UiCompositorControllerChild> result =
       UiCompositorControllerChild::CreateForGPUProcess(
           mProcessToken, std::move(childPipe), aWidget);
@@ -1359,7 +1367,8 @@ RefPtr<CompositorSession> GPUProcessManager::CreateRemoteSession(
     if (NS_FAILED(rv)) {
       return nullptr;
     }
-    mGPUChild->SendInitAPZInputBridge(aRootLayerTreeId, std::move(parentPipe));
+    child->Manager()->SendInitAPZInputBridge(aRootLayerTreeId,
+                                             std::move(parentPipe));
 
     RefPtr<APZInputBridgeChild> inputBridge =
         APZInputBridgeChild::Create(mProcessToken, std::move(childPipe));
@@ -1631,8 +1640,9 @@ void GPUProcessManager::UnmapLayerTreeId(LayersId aLayersId,
   // If the GPU process is down, but not disabled, there is no need to relaunch
   // here because the layers ID is already invalid.
   if (mGPUChild) {
-    mGPUChild->SendRemoveLayerTreeIdMapping(
-        LayerTreeIdMapping(aLayersId, aOwningId));
+    if (CompositorManagerChild* manager = GetCompositorManagerChild()) {
+      manager->SendRemoveLayerTreeIdMapping(aLayersId, aOwningId);
+    }
   } else if (!gfxConfig::IsEnabled(Feature::GPU_PROCESS)) {
     CompositorBridgeParent::DeallocateLayerTreeId(aLayersId);
   }
@@ -1720,9 +1730,10 @@ bool GPUProcessManager::AllocateAndConnectLayerTreeId(
 
   // If we don't have a CompositorBridgeChild, we just need to call
   // LayerTreeOwnerTracker::Map in the compositing process.
-  if (mGPUChild) {
-    mGPUChild->SendAddLayerTreeIdMapping(
-        LayerTreeIdMapping(layersId, aOtherPid));
+  if (mGPUChild && EnsureCompositorManagerChild()) {
+    if (CompositorManagerChild* manager = GetCompositorManagerChild()) {
+      manager->SendAddLayerTreeIdMapping(layersId, aOtherPid);
+    }
   }
   return false;
 }

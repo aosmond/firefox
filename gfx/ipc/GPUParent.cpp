@@ -45,7 +45,6 @@
 #include "mozilla/ipc/CrashReporterClient.h"
 #include "mozilla/ipc/ProcessChild.h"
 #include "mozilla/ipc/ProcessUtils.h"
-#include "mozilla/layers/APZInputBridgeParent.h"
 #include "mozilla/layers/APZPublicUtils.h"  // for apz::InitializeGlobalState
 #include "mozilla/layers/APZThreadUtils.h"
 #include "mozilla/layers/CompositeProcessFencesHolderMap.h"
@@ -55,7 +54,6 @@
 #include "mozilla/layers/ImageBridgeParent.h"
 #include "mozilla/layers/LayerTreeOwnerTracker.h"
 #include "mozilla/layers/RemoteTextureMap.h"
-#include "mozilla/layers/UiCompositorControllerParent.h"
 #include "mozilla/layers/VideoBridgeParent.h"
 #include "mozilla/webrender/RenderThread.h"
 #include "mozilla/webrender/WebRenderAPI.h"
@@ -491,20 +489,6 @@ mozilla::ipc::IPCResult GPUParent::RecvInitVR(
   return IPC_OK();
 }
 
-mozilla::ipc::IPCResult GPUParent::RecvInitUiCompositorController(
-    const LayersId& aRootLayerTreeId,
-    Endpoint<PUiCompositorControllerParent>&& aEndpoint) {
-  UiCompositorControllerParent::Start(aRootLayerTreeId, std::move(aEndpoint));
-  return IPC_OK();
-}
-
-mozilla::ipc::IPCResult GPUParent::RecvInitAPZInputBridge(
-    const LayersId& aRootLayerTreeId,
-    Endpoint<PAPZInputBridgeParent>&& aEndpoint) {
-  APZInputBridgeParent::Create(aRootLayerTreeId, std::move(aEndpoint));
-  return IPC_OK();
-}
-
 mozilla::ipc::IPCResult GPUParent::RecvInitProfiler(
     Endpoint<PProfilerChild>&& aEndpoint) {
   mProfilerController = ChildProfilerController::Create(std::move(aEndpoint));
@@ -641,19 +625,6 @@ mozilla::ipc::IPCResult GPUParent::RecvNewContentRemoteMediaManager(
                                                   aChildId)) {
     return IPC_FAIL_NO_REASON(this);
   }
-  return IPC_OK();
-}
-
-mozilla::ipc::IPCResult GPUParent::RecvAddLayerTreeIdMapping(
-    const LayerTreeIdMapping& aMapping) {
-  LayerTreeOwnerTracker::Get()->Map(aMapping.layersId(), aMapping.ownerId());
-  return IPC_OK();
-}
-
-mozilla::ipc::IPCResult GPUParent::RecvRemoveLayerTreeIdMapping(
-    const LayerTreeIdMapping& aMapping) {
-  LayerTreeOwnerTracker::Get()->Unmap(aMapping.layersId(), aMapping.ownerId());
-  CompositorBridgeParent::DeallocateLayerTreeId(aMapping.layersId());
   return IPC_OK();
 }
 
