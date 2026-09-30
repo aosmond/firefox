@@ -1861,23 +1861,61 @@ class GMPSandboxPolicy : public SandboxPolicyCommon {
     return fd;
   }
 
-#if defined(__NR_stat64) || defined(__NR_stat)
-  static intptr_t StatTrap(const arch_seccomp_data& aArgs, void* aux) {
-    const auto* const files = static_cast<const SandboxOpenedFiles*>(aux);
-    const auto* path = reinterpret_cast<const char*>(aArgs.args[0]);
-    int fd = files->GetDesc(path);
+  static intptr_t StatOpenedFile(const SandboxOpenedFiles* aFiles,
+                                 const char* aPath, statstruct* aBuf) {
+    int fd = aFiles->GetDesc(aPath);
     if (fd < 0) {
       // SandboxOpenedFile::GetDesc already logged about this, if appropriate.
       return -ENOENT;
     }
+#ifdef __NR_fstat64
+    return DoSyscall(__NR_fstat64, fd, aBuf);
+#else
+    return DoSyscall(__NR_fstat, fd, aBuf);
+#endif
+  }
+
+#if defined(__NR_stat64) || defined(__NR_stat)
+  static intptr_t StatTrap(const arch_seccomp_data& aArgs, void* aux) {
+    const auto* const files = static_cast<const SandboxOpenedFiles*>(aux);
+    const auto* path = reinterpret_cast<const char*>(aArgs.args[0]);
     auto* buf = reinterpret_cast<statstruct*>(aArgs.args[1]);
-#  ifdef __NR_fstat64
-    return DoSyscall(__NR_fstat64, fd, buf);
-#  else
-    return DoSyscall(__NR_fstat, fd, buf);
-#  endif
+    return StatOpenedFile(files, path, buf);
   }
 #endif
+
+  // Architectures without a stat syscall (e.g., aarch64) implement stat()
+  // with fstatat, so simulate it for the pre-opened files as well.
+  static intptr_t StatAtTrap(const arch_seccomp_data& aArgs, void* aux) {
+    const auto* const files = static_cast<const SandboxOpenedFiles*>(aux);
+    auto fd = static_cast<int>(aArgs.args[0]);
+    const auto* path = reinterpret_cast<const char*>(aArgs.args[1]);
+    auto* buf = reinterpret_cast<statstruct*>(aArgs.args[2]);
+    auto flags = static_cast<int>(aArgs.args[3]);
+
+    if (!path) {
+      return BlockedSyscallTrap(aArgs, nullptr);
+    }
+
+    if (fd != AT_FDCWD && (flags & AT_EMPTY_PATH) && !strcmp(path, "")) {
+#ifdef __NR_fstat64
+      return DoSyscall(__NR_fstat64, fd, buf);
+#else
+      return DoSyscall(__NR_fstat, fd, buf);
+#endif
+    }
+
+    int badFlags = flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT);
+    if (badFlags != 0) {
+      SANDBOX_LOG("unsupported flags 0x%x in fstatat(%d, \"%s\", %p, 0x%x)",
+                  badFlags, fd, path, buf, flags);
+      return BlockedSyscallTrap(aArgs, nullptr);
+    }
+
+    // The path has to be absolute to match the pre-opened file (see
+    // assertion in SandboxOpenedFile's ctor) so the dirfd argument is ignored.
+    return StatOpenedFile(files, path, buf);
+  }
 
   static intptr_t UnameTrap(const arch_seccomp_data& aArgs, void* aux) {
     const auto buf = reinterpret_cast<struct utsname*>(aArgs.args[0]);
@@ -1914,6 +1952,8 @@ class GMPSandboxPolicy : public SandboxPolicyCommon {
       CASES_FOR_stat:
         return Trap(StatTrap, mFiles);
 #endif
+      CASES_FOR_fstatat:
+        return Trap(StatAtTrap, mFiles);
 
       case __NR_brk:
         return Allow();
