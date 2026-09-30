@@ -173,7 +173,6 @@ export var GMPPrefs = {
   KEY_PLUGIN_ABI: "media.{0}.abi",
   KEY_PLUGIN_FORCE_SUPPORTED: "media.{0}.forceSupported",
   KEY_PLUGIN_FORCE_INSTALL: "media.{0}.forceInstall",
-  KEY_PLUGIN_ALLOW_X64_ON_ARM64: "media.{0}.allow-x64-plugin-on-arm64",
   KEY_PLUGIN_CHROMIUM_GUID: "media.{0}.chromium-guid",
   KEY_PLUGIN_ALLOW_CHROMIUM_UPDATE: "media.{0}.allow-chromium-update",
   KEY_PLUGIN_FORCE_CHROMIUM_UPDATE: "media.{0}.force-chromium-update",
