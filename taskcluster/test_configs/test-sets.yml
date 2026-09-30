@@ -322,6 +322,9 @@ windows32-tests:
 windows-aarch64-tests:
     - cppunittest
 
+windows-aarch64-eme-tests:
+    - web-platform-tests-eme
+
 windows10-2009-tests:
     - cppunittest
     - gtest

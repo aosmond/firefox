@@ -350,8 +350,10 @@ windows11-64-25h2-mingwclang/opt:
 # windows11-64-aarch64
 windows11-aarch64-25h2-shippable/opt:
     build-platform: win64-aarch64-shippable/opt
+    build-signing-label: build-signing-win64-aarch64-shippable/opt
     test-sets:
         - windows-aarch64-tests
+        - windows-aarch64-eme-tests
 
 windows11-aarch64-25h2/opt:
     build-platform: win64-aarch64/opt

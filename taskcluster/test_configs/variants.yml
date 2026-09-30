@@ -440,7 +440,7 @@ eme-wmf:
     component: "Core::Audio/Video: Playback"
     expiration: "never"
     when:
-        $eval: '"windows1" in task["test-platform"]'
+        $eval: '"windows1" in task["test-platform"] && !("aarch64" in task["test-platform"])'
     suffix: "emewmf"
     mozinfo: "emewmf"
     merge:
