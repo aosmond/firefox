@@ -303,6 +303,30 @@ tasks:
         variants:
             - eme-wmf
             - eme-signed
+        # Try builds are only dep signed, so use the VMP signed builds from
+        # mozilla-central. Set MOZ_SIGNED_BUILD_REVISION in the try env to pin
+        # the mozilla-central revision, otherwise the latest one is used.
+        target:
+            by-variant:
+                eme-signed:
+                    by-project:
+                        try:
+                            by-test-platform:
+                                macosx.*:
+                                    index: gecko.v2.mozilla-central.shippable.{signed_build}.firefox.macosx64-shippable-repackage
+                                    name: build/target.dmg
+                                windows.*-aarch64.*:
+                                    index: gecko.v2.mozilla-central.signed.shippable.{signed_build}.firefox.win64-aarch64-opt
+                                    name: build/target.zip
+                                windows.*-64.*:
+                                    index: gecko.v2.mozilla-central.signed.shippable.{signed_build}.firefox.win64-opt
+                                    name: build/target.zip
+                                default: null
+                        default: null
+                default:
+                    by-test-platform:
+                        android-em.*: geckoview-test_runner.apk
+                        default: null
         run-on-projects:
             by-variant:
                 eme-wmf:
@@ -319,7 +343,10 @@ tasks:
         mozharness:
             requires-signed-builds:
                 by-variant:
-                    eme-signed: true
+                    eme-signed:
+                        by-project:
+                            try: false
+                            default: true
                     default: false
             chunked: true
             extra-options:

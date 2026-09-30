@@ -93,7 +93,7 @@ class MozharnessSchema(Schema, kw_only=True):
     # of chunks is 1
     chunked: optionally_keyed_by("test-platform", bool, use_msgspec=True)  # type: ignore
     requires_signed_builds: optionally_keyed_by(  # type: ignore
-        "test-platform", "variant", bool, use_msgspec=True
+        "test-platform", "variant", "project", bool, use_msgspec=True
     )
 
     def __post_init__(self):
@@ -353,6 +353,7 @@ class TestDescriptionSchema(Schema, kw_only=True):
             "app",
             "test-platform",
             "variant",
+            "project",
             Union[str, None, TargetIndexSchema, TargetUpstreamTaskSchema],
             use_msgspec=True,
         )

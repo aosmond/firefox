@@ -302,7 +302,19 @@ def set_target(config, tasks):
         if isinstance(target, dict):
             if "index" in target:
                 # TODO Remove hardcoded mobile artifact prefix
-                index_url = get_index_url(target["index"])
+                signed_build_rev = (
+                    config
+                    .params["try_task_config"]
+                    .get("env", {})
+                    .get("MOZ_SIGNED_BUILD_REVISION")
+                )
+                index_url = get_index_url(
+                    target["index"].format(
+                        signed_build=f"revision.{signed_build_rev}"
+                        if signed_build_rev
+                        else "latest"
+                    )
+                )
                 installer_url = "{}/artifacts/public/{}".format(
                     index_url, target["name"]
                 )
