@@ -99,6 +99,15 @@ class GMPParent final : public PGMPParent,
 
   void OnPreferenceChange(const mozilla::dom::Pref& aPref);
 
+#if defined(XP_WIN)
+  // Whether the plugin requires monitor information to be provided by the
+  // parent process, if it cannot make win32k system calls.
+  bool NeedsMonitorInfo() const {
+    return mPluginType == GMPPluginType::Widevine;
+  }
+  void UpdateMonitorInfo(const nsTArray<GMPMonitorInfo>& aMonitors);
+#endif
+
   // A GMP can either be a single instance shared across all NodeIds (like
   // in the OpenH264 case), or we can require a new plugin instance for every
   // NodeIds running the plugin (as in the EME plugin case).

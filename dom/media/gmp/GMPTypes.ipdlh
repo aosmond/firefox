@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 include "GMPMessageUtils.h";
+include "mozilla/GfxMessageUtils.h";
 
 using cdm::EncryptionScheme from "GMPSanitizedExports.h";
 using cdm::KeyStatus from "GMPSanitizedExports.h";
@@ -10,6 +11,7 @@ using cdm::VideoCodec from "GMPSanitizedExports.h";
 using cdm::VideoCodecProfile from "GMPSanitizedExports.h";
 using cdm::VideoFormat from "GMPSanitizedExports.h";
 using GMPBufferType from "gmp-video-codec.h";
+using mozilla::gfx::IntRect from "mozilla/gfx/Rect.h";
 
 namespace mozilla {
 namespace gmp {
@@ -51,6 +53,16 @@ struct GMPVideoEncodedFrameData {
   int32_t mTemporalLayerId;
   GMPBufferType mBufferType;
   bool mCompleteFrame;
+};
+
+// Display monitor information collected in the parent process, used to service
+// monitor queries in GMP processes which cannot make win32k system calls.
+struct GMPMonitorInfo {
+  uintptr_t mHandle;
+  IntRect mMonitorRect;
+  IntRect mWorkRect;
+  uint32_t mFlags;
+  nsString mDeviceName;
 };
 
 struct GMPPlaneData {

@@ -28,6 +28,7 @@
 #include "mozilla/StaticPrefs_media.h"
 #include "mozilla/SyncRunnable.h"
 #if defined(XP_WIN)
+#  include "GMPMonitorInfoWin.h"
 #  include "mozilla/UntrustedModulesData.h"
 #endif
 #include "nsAppDirectoryServiceDefs.h"
@@ -113,6 +114,10 @@ nsresult GeckoMediaPluginServiceParent::Init() {
   MOZ_ALWAYS_SUCCEEDS(
       obsService->AddObserver(this, NS_XPCOM_WILL_SHUTDOWN_OBSERVER_ID, false));
   MOZ_ALWAYS_SUCCEEDS(obsService->AddObserver(this, "nsPref:changed", false));
+#if defined(XP_WIN)
+  MOZ_ALWAYS_SUCCEEDS(
+      obsService->AddObserver(this, "screen-information-changed", false));
+#endif
 
 #ifdef DEBUG
   MOZ_ALWAYS_SUCCEEDS(obsService->AddObserver(
@@ -371,6 +376,25 @@ GeckoMediaPluginServiceParent::Observe(nsISupports* aSubject,
           &GeckoMediaPluginServiceParent::OnPreferenceChanged,
           std::move(pref)));
     }
+#if defined(XP_WIN)
+  } else if (!strcmp("screen-information-changed", aTopic)) {
+    bool needsMonitorInfo = false;
+    {
+      MutexAutoLock lock(mMutex);
+      for (const auto& plugin : mPlugins) {
+        if (plugin->State() == GMPState::Loaded && plugin->NeedsMonitorInfo()) {
+          needsMonitorInfo = true;
+          break;
+        }
+      }
+    }
+
+    if (needsMonitorInfo) {
+      return GMPDispatch(NewRunnableMethod(
+          "gmp::GeckoMediaPluginServiceParent::UpdateMonitorInfo", this,
+          &GeckoMediaPluginServiceParent::UpdateMonitorInfo));
+    }
+#endif
   }
 
   return NS_OK;
@@ -385,6 +409,19 @@ void GeckoMediaPluginServiceParent::OnPreferenceChanged(
     plugin->OnPreferenceChange(aPref);
   }
 }
+
+#if defined(XP_WIN)
+void GeckoMediaPluginServiceParent::UpdateMonitorInfo() {
+  AssertOnGMPThread();
+
+  nsTArray<GMPMonitorInfo> monitors = CollectMonitorInfo();
+
+  MutexAutoLock lock(mMutex);
+  for (const auto& plugin : mPlugins) {
+    plugin->UpdateMonitorInfo(monitors);
+  }
+}
+#endif
 
 RefPtr<GenericNonExclusivePromise>
 GeckoMediaPluginServiceParent::EnsureInitialized() {

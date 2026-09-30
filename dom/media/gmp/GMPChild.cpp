@@ -49,6 +49,7 @@
 #ifdef XP_WIN
 #  include <stdlib.h>  // for _exit()
 
+#  include "GMPMonitorInfoWin.h"
 #  include "WinUtils.h"
 #  include "mozilla/Services.h"
 #  include "mozilla/StaticPrefs_dom.h"
@@ -782,6 +783,12 @@ mozilla::ipc::IPCResult GMPChild::RecvUnblockUntrustedModulesThread() {
           mozilla::services::GetObserverService()) {
     obs->NotifyObservers(nullptr, "unblock-untrusted-modules-thread", nullptr);
   }
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult GMPChild::RecvUpdateMonitorInfo(
+    nsTArray<GMPMonitorInfo>&& aMonitors) {
+  SetMonitorInfo(std::move(aMonitors));
   return IPC_OK();
 }
 #endif  // defined(XP_WIN)

@@ -1896,7 +1896,8 @@ bool SandboxBroker::SetSecurityLevelForUtilityProcess(
 // The highest Widevine sandbox version supported by this build. This must be
 // incremented when we add support for win32k APIs required by a new version of
 // the plugin.
-static constexpr uint32_t kSupportedWidevineSandboxVersion = 0;
+// 1: EnumDisplayMonitors and GetMonitorInfo, see GMPMonitorInfoWin.h.
+static constexpr uint32_t kSupportedWidevineSandboxVersion = 1;
 
 static bool UseWidevineWin32kLockdown(uint32_t aSandboxVersion) {
   switch (StaticPrefs::security_sandbox_gmp_widevine_win32k_lockdown()) {

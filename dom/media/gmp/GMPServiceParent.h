@@ -141,6 +141,9 @@ class GeckoMediaPluginServiceParent final
   void ForgetThisBaseDomainOnGMPThread(const nsACString& aBaseDomain);
   void ClearRecentHistoryOnGMPThread(PRTime aSince);
   void OnPreferenceChanged(mozilla::dom::Pref&& aPref);
+#if defined(XP_WIN)
+  void UpdateMonitorInfo();
+#endif
 
   already_AddRefed<GMPParent> GetById(uint32_t aPluginId);
 

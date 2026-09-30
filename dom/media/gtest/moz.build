@@ -145,6 +145,7 @@ if CONFIG["OS_TARGET"] == "WINNT":
     # Not in UNIFIED_SOURCES: WMF.h pulls in <windows.h> which defines a
     # StrCat macro that conflicts with absl::StrCat in WebRTC unified units.
     SOURCES += [
+        "TestGMPMonitorInfoWin.cpp",
         "TestWMFDeadlock.cpp",
     ]
 

@@ -23,7 +23,9 @@
 #  include <unordered_map>
 #  include <vector>
 
+#  include "GMPMonitorInfoWin.h"
 #  include "WinUtils.h"
+#  include "mozilla/WindowsProcessMitigations.h"
 #  include "nsWindowsDllInterceptor.h"
 #else
 #  include <fcntl.h>
@@ -278,6 +280,10 @@ static void InitializeHooks() {
   sKernel32Intercept.Init("kernelbase.dll");
   sOriginalQueryDosDeviceWFnPtr.Set(sKernel32Intercept, "QueryDosDeviceW",
                                     &QueryDosDeviceWHook);
+
+  if (IsWin32kLockedDown()) {
+    gmp::InitializeMonitorHooks();
+  }
 }
 #endif
 

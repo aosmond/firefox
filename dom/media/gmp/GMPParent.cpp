@@ -38,6 +38,7 @@
 #include "nsThreadUtils.h"
 #include "runnable_utils.h"
 #ifdef XP_WIN
+#  include "GMPMonitorInfoWin.h"
 #  include "PDMFactory.h"
 #  include "WMFDecoderModule.h"
 #  include "mozilla/FileUtilsWin.h"
@@ -461,6 +462,20 @@ nsresult GMPParent::LoadProcess() {
     }
 #endif
 
+#if defined(XP_WIN)
+    // This must be sent before StartPlugin to ensure the plugin has the monitor
+    // information before it is loaded.
+    if (NeedsMonitorInfo()) {
+      if (!SendUpdateMonitorInfo(CollectMonitorInfo())) {
+        GMP_PARENT_LOG_DEBUG("{}: Failed to send monitor info to child process",
+                             __FUNCTION__);
+        return NS_ERROR_FAILURE;
+      }
+      GMP_PARENT_LOG_DEBUG("{}: Sent monitor info to child process",
+                           __FUNCTION__);
+    }
+#endif
+
     NS_DispatchToMainThread(new NotifyGMPProcessLoadedTask(OtherPid(), this));
 
     // Intr call to block initialization on plugin load.
@@ -487,6 +502,19 @@ void GMPParent::OnPreferenceChange(const mozilla::dom::Pref& aPref) {
 
   (void)SendPreferenceUpdate(aPref);
 }
+
+#if defined(XP_WIN)
+void GMPParent::UpdateMonitorInfo(const nsTArray<GMPMonitorInfo>& aMonitors) {
+  MOZ_ASSERT(GMPEventTarget()->IsOnCurrentThread());
+
+  if (mState != GMPState::Loaded || !NeedsMonitorInfo()) {
+    return;
+  }
+
+  GMP_PARENT_LOG_DEBUG("{}", __FUNCTION__);
+  (void)SendUpdateMonitorInfo(aMonitors);
+}
+#endif
 
 mozilla::ipc::IPCResult GMPParent::RecvPGMPContentChildDestroyed() {
   --mGMPContentChildCount;
