@@ -960,7 +960,10 @@ def eme_choices(target, wmf):
         if wmf:
             return ("widevine", "wmfcdm")
         return ("widevine",)
-    if target.kernel == "WINNT" and target.cpu == "aarch64":
+    if target.cpu == "aarch64" and (
+        target.kernel == "WINNT"
+        or (target.kernel == "Linux" and target.os != "Android")
+    ):
         return ("widevine",)
     if target.os in ("OSX"):
         return ("widevine",)
