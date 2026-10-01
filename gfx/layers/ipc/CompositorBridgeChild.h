@@ -8,9 +8,11 @@
 #include <unordered_map>
 
 #include "base/basictypes.h"  // for DISALLOW_EVIL_CONSTRUCTORS
+#include "mozilla/Maybe.h"
 #include "mozilla/Monitor.h"
 #include "mozilla/RefPtr.h"
 #include "mozilla/ipc/ProtocolUtils.h"
+#include "mozilla/layers/CompositorOptions.h"
 #include "mozilla/layers/PCompositorBridgeChild.h"
 #include "mozilla/layers/TextureForwarder.h"  // for TextureForwarder
 #include "mozilla/webrender/WebRenderTypes.h"
@@ -64,7 +66,12 @@ class CompositorBridgeChild final : public PCompositorBridgeChild,
    */
   void InitForContent(uint32_t aNamespace);
 
-  void InitForWidget(uint64_t aProcessToken, uint32_t aNamespace);
+  void InitForWidget(uint64_t aProcessToken, uint32_t aNamespace,
+                     const CompositorOptions& aOptions);
+
+  // The options the widget compositor was created with. Must only be called on
+  // widget compositor bridges.
+  const CompositorOptions& GetWidgetOptions() const;
 
   // Creates a layer manager for this compositor bridge. Must only be called
   // once, and only on widget compositor bridges.
@@ -233,6 +240,8 @@ class CompositorBridgeChild final : public PCompositorBridgeChild,
   nsCOMPtr<nsISerialEventTarget> mThread;
 
   uint64_t mProcessToken;
+
+  Maybe<CompositorOptions> mWidgetOptions;
 
   FixedSizeSmallShmemSectionAllocator* mSectionAllocator;
 

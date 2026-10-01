@@ -47,7 +47,7 @@ RefPtr<InProcessCompositorSession> InProcessCompositorSession::Create(
 
   RefPtr<CompositorBridgeChild> child =
       CompositorManagerChild::CreateSameProcessWidgetCompositorBridge(
-          aNamespace);
+          aNamespace, aOptions);
   MOZ_ASSERT(child);
   if (!child) {
     gfxCriticalNote << "Failed to create CompositorBridgeChild";

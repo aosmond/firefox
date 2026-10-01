@@ -82,16 +82,21 @@ bool RemoteLayerTreeOwner::Initialize(BrowserParent* aBrowserParent) {
   // Note that this may be what creates the embedding widget's
   // CompositorSession, which GetEmbedderLayersId() below relies on.
   RefPtr<WindowRenderer> renderer = GetWindowRenderer(mBrowserParent);
-  PCompositorBridgeChild* compositor =
+  CompositorBridgeChild* compositor =
       renderer ? renderer->GetCompositorBridgeChild() : nullptr;
   mTabProcessId = mBrowserParent->Manager()->OtherPid();
 
   // Our remote frame will push layers updates to the compositor,
   // and we'll keep an indirect reference to that tree.
   GPUProcessManager* gpm = GPUProcessManager::Get();
+  CompositorOptions compositorOptions;
   mLayersConnected = gpm->AllocateAndConnectLayerTreeId(
       compositor, mTabProcessId, GetEmbedderLayersId(mBrowserParent),
-      &mLayersId, &mCompositorOptions);
+      &mLayersId, &compositorOptions);
+  if (compositor) {
+    mCompositorOptions = compositor->GetWidgetOptions();
+    MOZ_ASSERT_IF(mLayersConnected, mCompositorOptions == compositorOptions);
+  }
 
   mInitialized = true;
   return true;
@@ -114,9 +119,12 @@ void RemoteLayerTreeOwner::EnsureLayersConnected(
     return;
   }
 
-  mLayersConnected =
-      renderer->GetCompositorBridgeChild()->SendNotifyChildRecreated(
-          mLayersId, GetEmbedderLayersId(mBrowserParent), &mCompositorOptions);
+  CompositorBridgeChild* compositor = renderer->GetCompositorBridgeChild();
+  CompositorOptions compositorOptions;
+  mLayersConnected = compositor->SendNotifyChildRecreated(
+      mLayersId, GetEmbedderLayersId(mBrowserParent), &compositorOptions);
+  mCompositorOptions = compositor->GetWidgetOptions();
+  MOZ_ASSERT_IF(mLayersConnected, mCompositorOptions == compositorOptions);
   aCompositorOptions = Some(mCompositorOptions);
 }
 

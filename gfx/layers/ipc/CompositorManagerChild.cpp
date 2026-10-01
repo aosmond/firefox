@@ -171,14 +171,14 @@ CompositorManagerChild::CreateWidgetCompositorBridge(
     return nullptr;
   }
 
-  bridge->InitForWidget(aProcessToken, aNamespace);
+  bridge->InitForWidget(aProcessToken, aNamespace, aOptions);
   return bridge.forget();
 }
 
 /* static */
 already_AddRefed<CompositorBridgeChild>
 CompositorManagerChild::CreateSameProcessWidgetCompositorBridge(
-    uint32_t aNamespace) {
+    uint32_t aNamespace, const CompositorOptions& aOptions) {
   MOZ_ASSERT(XRE_IsParentProcess());
   MOZ_ASSERT(NS_IsMainThread());
   if (NS_WARN_IF(!sInstance || !sInstance->CanSend())) {
@@ -193,7 +193,7 @@ CompositorManagerChild::CreateSameProcessWidgetCompositorBridge(
     return nullptr;
   }
 
-  bridge->InitForWidget(1, aNamespace);
+  bridge->InitForWidget(1, aNamespace, aOptions);
   return bridge.forget();
 }
 

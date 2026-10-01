@@ -39,7 +39,8 @@ class CompositorManagerChild : public PCompositorManagerChild {
       uint64_t aInnerWindowId);
 
   static already_AddRefed<CompositorBridgeChild>
-  CreateSameProcessWidgetCompositorBridge(uint32_t aNamespace);
+  CreateSameProcessWidgetCompositorBridge(uint32_t aNamespace,
+                                          const CompositorOptions& aOptions);
 
   static CompositorManagerChild* GetInstance() {
     MOZ_ASSERT(NS_IsMainThread());

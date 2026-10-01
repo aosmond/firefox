@@ -225,7 +225,8 @@ void CompositorBridgeChild::InitForContent(uint32_t aNamespace) {
 }
 
 void CompositorBridgeChild::InitForWidget(uint64_t aProcessToken,
-                                          uint32_t aNamespace) {
+                                          uint32_t aNamespace,
+                                          const CompositorOptions& aOptions) {
   MOZ_ASSERT(NS_IsMainThread());
   MOZ_ASSERT(aProcessToken);
   MOZ_ASSERT(aNamespace);
@@ -233,6 +234,14 @@ void CompositorBridgeChild::InitForWidget(uint64_t aProcessToken,
   mCanSend = true;
   mProcessToken = aProcessToken;
   mIdNamespace = aNamespace;
+  mWidgetOptions = Some(aOptions);
+}
+
+const CompositorOptions& CompositorBridgeChild::GetWidgetOptions() const {
+  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_RELEASE_ASSERT(mWidgetOptions,
+                     "Must only be called for widget CompositorBridgeChild");
+  return *mWidgetOptions;
 }
 
 RefPtr<WebRenderLayerManager> CompositorBridgeChild::CreateLayerManager(
