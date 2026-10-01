@@ -18847,7 +18847,7 @@
   # 2: Never use lockdown.
 -   name: security.sandbox.gmp.widevine.win32k-lockdown
     type: RelaxedAtomicUint32
-    value: 0
+    value: 1
     mirror: always
 
   # Whether ACG is enabled (dynamic code blocked) for compatible plugins.
