@@ -105,7 +105,8 @@ class GMPParent final : public PGMPParent,
   bool NeedsMonitorInfo() const {
     return mPluginType == GMPPluginType::Widevine;
   }
-  void UpdateMonitorInfo(const nsTArray<GMPMonitorInfo>& aMonitors);
+  void UpdateMonitorInfo(const nsTArray<GMPMonitorInfo>& aMonitors,
+                         uint32_t aDisplaySettingsUniqueness);
 #endif
 
   // A GMP can either be a single instance shared across all NodeIds (like

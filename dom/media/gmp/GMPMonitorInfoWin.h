@@ -16,9 +16,15 @@ namespace mozilla::gmp {
 // processes which cannot make win32k system calls.
 nsTArray<GMPMonitorInfo> CollectMonitorInfo();
 
+// Queries the display settings uniqueness value from the parent process to send
+// to GMP processes which cannot make win32k system calls. This changes whenever
+// the display settings change.
+uint32_t QueryDisplaySettingsUniqueness();
+
 // Replaces the monitor information used to service the hooked monitor APIs in
 // the GMP process.
-void SetMonitorInfo(nsTArray<GMPMonitorInfo>&& aMonitors);
+void SetMonitorInfo(nsTArray<GMPMonitorInfo>&& aMonitors,
+                    uint32_t aDisplaySettingsUniqueness);
 
 // Implementations of the monitor APIs using the monitor information provided
 // by SetMonitorInfo. These are used by the hooks installed by
@@ -27,6 +33,7 @@ BOOL WINAPI CachedEnumDisplayMonitors(HDC aDC, LPCRECT aClip,
                                       MONITORENUMPROC aCallback, LPARAM aData);
 BOOL WINAPI CachedGetMonitorInfoW(HMONITOR aMonitor, LPMONITORINFO aInfo);
 BOOL WINAPI CachedGetMonitorInfoA(HMONITOR aMonitor, LPMONITORINFO aInfo);
+ULONG WINAPI CachedDdQueryDisplaySettingsUniqueness();
 
 // Hooks the monitor APIs in the GMP process so that they are serviced from the
 // monitor information provided by the parent process, since win32k system

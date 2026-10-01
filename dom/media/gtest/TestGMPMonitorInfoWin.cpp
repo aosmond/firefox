@@ -65,7 +65,7 @@ static BOOL CALLBACK RecordMonitor(HMONITOR aMonitor, HDC aDC, LPRECT aRect,
 
 TEST(GMPMonitorInfoWin, EnumerateAll)
 {
-  SetMonitorInfo(MakeMonitors());
+  SetMonitorInfo(MakeMonitors(), 1);
 
   EnumerateState state;
   EXPECT_TRUE(CachedEnumDisplayMonitors(nullptr, nullptr, RecordMonitor,
@@ -83,7 +83,7 @@ TEST(GMPMonitorInfoWin, EnumerateAll)
 
 TEST(GMPMonitorInfoWin, EnumerateClipped)
 {
-  SetMonitorInfo(MakeMonitors());
+  SetMonitorInfo(MakeMonitors(), 1);
 
   EnumerateState state;
   RECT clip{1800, 100, 2000, 200};
@@ -98,7 +98,7 @@ TEST(GMPMonitorInfoWin, EnumerateClipped)
 
 TEST(GMPMonitorInfoWin, EnumerateClippedExcludesAdjacentMonitor)
 {
-  SetMonitorInfo(MakeMonitors());
+  SetMonitorInfo(MakeMonitors(), 1);
 
   EnumerateState state;
   RECT clip{1920, 0, 1930, 10};
@@ -111,7 +111,7 @@ TEST(GMPMonitorInfoWin, EnumerateClippedExcludesAdjacentMonitor)
 
 TEST(GMPMonitorInfoWin, EnumerateStopsWhenCallbackFails)
 {
-  SetMonitorInfo(MakeMonitors());
+  SetMonitorInfo(MakeMonitors(), 1);
 
   EnumerateState state;
   state.mStopAfter = 1;
@@ -123,7 +123,7 @@ TEST(GMPMonitorInfoWin, EnumerateStopsWhenCallbackFails)
 
 TEST(GMPMonitorInfoWin, EnumerateEmpty)
 {
-  SetMonitorInfo({});
+  SetMonitorInfo({}, 1);
 
   EnumerateState state;
   EXPECT_TRUE(CachedEnumDisplayMonitors(nullptr, nullptr, RecordMonitor,
@@ -133,7 +133,7 @@ TEST(GMPMonitorInfoWin, EnumerateEmpty)
 
 TEST(GMPMonitorInfoWin, EnumerateRejectsUnsupportedArguments)
 {
-  SetMonitorInfo(MakeMonitors());
+  SetMonitorInfo(MakeMonitors(), 1);
 
   EnumerateState state;
   EXPECT_FALSE(CachedEnumDisplayMonitors(reinterpret_cast<HDC>(0x1), nullptr,
@@ -148,7 +148,7 @@ TEST(GMPMonitorInfoWin, EnumerateRejectsUnsupportedArguments)
 
 TEST(GMPMonitorInfoWin, GetMonitorInfo)
 {
-  SetMonitorInfo(MakeMonitors());
+  SetMonitorInfo(MakeMonitors(), 1);
 
   MONITORINFO info{};
   info.cbSize = sizeof(info);
@@ -167,7 +167,7 @@ TEST(GMPMonitorInfoWin, GetMonitorInfo)
 
 TEST(GMPMonitorInfoWin, GetMonitorInfoEx)
 {
-  SetMonitorInfo(MakeMonitors());
+  SetMonitorInfo(MakeMonitors(), 1);
 
   MONITORINFOEXW infoW{};
   infoW.cbSize = sizeof(infoW);
@@ -193,7 +193,7 @@ TEST(GMPMonitorInfoWin, GetMonitorInfoTruncatesDeviceName)
   monitors.AppendElement(GMPMonitorInfo(
       reinterpret_cast<uintptr_t>(kPrimary), gfx::IntRect(0, 0, 100, 100),
       gfx::IntRect(0, 0, 100, 100), 0, longName));
-  SetMonitorInfo(std::move(monitors));
+  SetMonitorInfo(std::move(monitors), 1);
 
   MONITORINFOEXW info{};
   info.cbSize = sizeof(info);
@@ -205,7 +205,7 @@ TEST(GMPMonitorInfoWin, GetMonitorInfoTruncatesDeviceName)
 
 TEST(GMPMonitorInfoWin, GetMonitorInfoRejectsInvalidArguments)
 {
-  SetMonitorInfo(MakeMonitors());
+  SetMonitorInfo(MakeMonitors(), 1);
 
   EXPECT_FALSE(CachedGetMonitorInfoW(kPrimary, nullptr));
   EXPECT_EQ(::GetLastError(), static_cast<DWORD>(ERROR_INVALID_PARAMETER));
@@ -225,7 +225,7 @@ TEST(GMPMonitorInfoWin, GetMonitorInfoRejectsInvalidArguments)
 
 TEST(GMPMonitorInfoWin, GetMonitorInfoUnknownMonitor)
 {
-  SetMonitorInfo(MakeMonitors());
+  SetMonitorInfo(MakeMonitors(), 1);
 
   MONITORINFO info{};
   info.cbSize = sizeof(info);
@@ -237,13 +237,23 @@ TEST(GMPMonitorInfoWin, GetMonitorInfoUnknownMonitor)
   EXPECT_EQ(::GetLastError(), static_cast<DWORD>(ERROR_INVALID_MONITOR_HANDLE));
 }
 
+TEST(GMPMonitorInfoWin, DisplaySettingsUniqueness)
+{
+  SetMonitorInfo(MakeMonitors(), 42);
+  EXPECT_EQ(CachedDdQueryDisplaySettingsUniqueness(), 42u);
+
+  SetMonitorInfo({}, 43);
+  EXPECT_EQ(CachedDdQueryDisplaySettingsUniqueness(), 43u);
+}
+
 TEST(GMPMonitorInfoWin, SetMonitorInfoReplacesMonitors)
 {
-  SetMonitorInfo(MakeMonitors());
+  SetMonitorInfo(MakeMonitors(), 1);
 
   nsTArray<GMPMonitorInfo> monitors = MakeMonitors();
   monitors.RemoveElementAt(0);
-  SetMonitorInfo(std::move(monitors));
+  SetMonitorInfo(std::move(monitors), 2);
+  EXPECT_EQ(CachedDdQueryDisplaySettingsUniqueness(), 2u);
 
   EnumerateState state;
   EXPECT_TRUE(CachedEnumDisplayMonitors(nullptr, nullptr, RecordMonitor,
@@ -261,7 +271,9 @@ TEST(GMPMonitorInfoWin, SetMonitorInfoReplacesMonitors)
 // when given the monitor information collected from the system.
 TEST(GMPMonitorInfoWin, MatchesSystem)
 {
-  SetMonitorInfo(CollectMonitorInfo());
+  SetMonitorInfo(CollectMonitorInfo(), QueryDisplaySettingsUniqueness());
+  EXPECT_EQ(CachedDdQueryDisplaySettingsUniqueness(),
+            QueryDisplaySettingsUniqueness());
 
   EnumerateState expected;
   EXPECT_TRUE(::EnumDisplayMonitors(nullptr, nullptr, RecordMonitor,

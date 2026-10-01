@@ -85,7 +85,8 @@ class GMPChild : public PGMPChild {
   mozilla::ipc::IPCResult RecvUnblockUntrustedModulesThread();
 
   mozilla::ipc::IPCResult RecvUpdateMonitorInfo(
-      nsTArray<GMPMonitorInfo>&& aMonitors);
+      nsTArray<GMPMonitorInfo>&& aMonitors,
+      const uint32_t& aDisplaySettingsUniqueness);
 #endif  // defined(XP_WIN)
 
   void ActorDestroy(ActorDestroyReason aWhy) override;

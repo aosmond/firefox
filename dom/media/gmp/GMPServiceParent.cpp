@@ -415,10 +415,11 @@ void GeckoMediaPluginServiceParent::UpdateMonitorInfo() {
   AssertOnGMPThread();
 
   nsTArray<GMPMonitorInfo> monitors = CollectMonitorInfo();
+  uint32_t displaySettingsUniqueness = QueryDisplaySettingsUniqueness();
 
   MutexAutoLock lock(mMutex);
   for (const auto& plugin : mPlugins) {
-    plugin->UpdateMonitorInfo(monitors);
+    plugin->UpdateMonitorInfo(monitors, displaySettingsUniqueness);
   }
 }
 #endif

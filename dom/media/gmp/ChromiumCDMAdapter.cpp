@@ -23,6 +23,8 @@
 #  include <unordered_map>
 #  include <vector>
 
+#  include "GMPCharUpperWin.h"
+#  include "GMPMitigationPolicyWin.h"
 #  include "GMPMonitorInfoWin.h"
 #  include "WinUtils.h"
 #  include "mozilla/WindowsProcessMitigations.h"
@@ -283,6 +285,8 @@ static void InitializeHooks() {
 
   if (IsWin32kLockedDown()) {
     gmp::InitializeMonitorHooks();
+    gmp::InitializeMitigationPolicyHook(L"widevinecdm.dll");
+    gmp::InitializeCharUpperHook();
   }
 }
 #endif

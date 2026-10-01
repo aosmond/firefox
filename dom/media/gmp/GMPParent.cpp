@@ -466,7 +466,8 @@ nsresult GMPParent::LoadProcess() {
     // This must be sent before StartPlugin to ensure the plugin has the monitor
     // information before it is loaded.
     if (NeedsMonitorInfo()) {
-      if (!SendUpdateMonitorInfo(CollectMonitorInfo())) {
+      if (!SendUpdateMonitorInfo(CollectMonitorInfo(),
+                                 QueryDisplaySettingsUniqueness())) {
         GMP_PARENT_LOG_DEBUG("{}: Failed to send monitor info to child process",
                              __FUNCTION__);
         return NS_ERROR_FAILURE;
@@ -504,7 +505,8 @@ void GMPParent::OnPreferenceChange(const mozilla::dom::Pref& aPref) {
 }
 
 #if defined(XP_WIN)
-void GMPParent::UpdateMonitorInfo(const nsTArray<GMPMonitorInfo>& aMonitors) {
+void GMPParent::UpdateMonitorInfo(const nsTArray<GMPMonitorInfo>& aMonitors,
+                                  uint32_t aDisplaySettingsUniqueness) {
   MOZ_ASSERT(GMPEventTarget()->IsOnCurrentThread());
 
   if (mState != GMPState::Loaded || !NeedsMonitorInfo()) {
@@ -512,7 +514,7 @@ void GMPParent::UpdateMonitorInfo(const nsTArray<GMPMonitorInfo>& aMonitors) {
   }
 
   GMP_PARENT_LOG_DEBUG("{}", __FUNCTION__);
-  (void)SendUpdateMonitorInfo(aMonitors);
+  (void)SendUpdateMonitorInfo(aMonitors, aDisplaySettingsUniqueness);
 }
 #endif
 

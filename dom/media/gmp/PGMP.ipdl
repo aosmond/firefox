@@ -77,7 +77,8 @@ child:
 
   // Provides the current display monitor information, used to service monitor
   // queries if the process cannot make win32k system calls.
-  async UpdateMonitorInfo(GMPMonitorInfo[] aMonitors);
+  async UpdateMonitorInfo(GMPMonitorInfo[] aMonitors,
+                          uint32_t aDisplaySettingsUniqueness);
 #endif  // defined(XP_WIN)
 
   // Test-only method.

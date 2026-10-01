@@ -787,8 +787,9 @@ mozilla::ipc::IPCResult GMPChild::RecvUnblockUntrustedModulesThread() {
 }
 
 mozilla::ipc::IPCResult GMPChild::RecvUpdateMonitorInfo(
-    nsTArray<GMPMonitorInfo>&& aMonitors) {
-  SetMonitorInfo(std::move(aMonitors));
+    nsTArray<GMPMonitorInfo>&& aMonitors,
+    const uint32_t& aDisplaySettingsUniqueness) {
+  SetMonitorInfo(std::move(aMonitors), aDisplaySettingsUniqueness);
   return IPC_OK();
 }
 #endif  // defined(XP_WIN)

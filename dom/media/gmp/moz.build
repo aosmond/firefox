@@ -102,6 +102,8 @@ UNIFIED_SOURCES += [
 
 if CONFIG["TARGET_OS"] == "WINNT":
     UNIFIED_SOURCES += [
+        "GMPCharUpperWin.cpp",
+        "GMPMitigationPolicyWin.cpp",
         "GMPMonitorInfoWin.cpp",
     ]
 

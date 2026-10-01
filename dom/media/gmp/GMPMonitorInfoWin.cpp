@@ -50,6 +50,24 @@ nsTArray<GMPMonitorInfo> CollectMonitorInfo() {
   return monitors;
 }
 
+using DdQueryDisplaySettingsUniquenessFn = ULONG(WINAPI*)();
+
+// gdi32 does not export DdQueryDisplaySettingsUniqueness by name, only as the
+// DirectDraw entry point GdiEntry13, per ddrawgdi.h.
+static constexpr char kDdQueryDisplaySettingsUniquenessExport[] = "GdiEntry13";
+
+uint32_t QueryDisplaySettingsUniqueness() {
+  static const auto sQuery =
+      reinterpret_cast<DdQueryDisplaySettingsUniquenessFn>(
+          ::GetProcAddress(::GetModuleHandleW(L"gdi32.dll"),
+                           kDdQueryDisplaySettingsUniquenessExport));
+  if (!sQuery) {
+    GMP_LOG_DEBUG("QueryDisplaySettingsUniqueness: unavailable");
+    return 0;
+  }
+  return sQuery();
+}
+
 namespace {
 
 struct CachedMonitor {
@@ -64,8 +82,10 @@ struct CachedMonitor {
 
 static StaticRWLock sMonitorLock;
 static StaticAutoPtr<nsTArray<CachedMonitor>> sMonitors;
+static uint32_t sDisplaySettingsUniqueness = 0;
 
-void SetMonitorInfo(nsTArray<GMPMonitorInfo>&& aMonitors) {
+void SetMonitorInfo(nsTArray<GMPMonitorInfo>&& aMonitors,
+                    uint32_t aDisplaySettingsUniqueness) {
   auto monitors = MakeUnique<nsTArray<CachedMonitor>>(aMonitors.Length());
   for (const auto& monitor : aMonitors) {
     CachedMonitor* cached = monitors->AppendElement();
@@ -76,9 +96,16 @@ void SetMonitorInfo(nsTArray<GMPMonitorInfo>&& aMonitors) {
     wcsncpy_s(cached->mDeviceName, monitor.mDeviceName().get(), _TRUNCATE);
   }
 
-  GMP_LOG_DEBUG("SetMonitorInfo: {} monitors", monitors->Length());
+  GMP_LOG_DEBUG("SetMonitorInfo: {} monitors, uniqueness {}",
+                monitors->Length(), aDisplaySettingsUniqueness);
   StaticAutoWriteLock lock(sMonitorLock);
   sMonitors = monitors.release();
+  sDisplaySettingsUniqueness = aDisplaySettingsUniqueness;
+}
+
+ULONG WINAPI CachedDdQueryDisplaySettingsUniqueness() {
+  StaticAutoReadLock lock(sMonitorLock);
+  return sDisplaySettingsUniqueness;
 }
 
 MOZ_RUNINIT static WindowsDllInterceptor sUser32Intercept;
@@ -89,6 +116,11 @@ static WindowsDllInterceptor::FuncHookType<decltype(&::GetMonitorInfoW)>
     sOriginalGetMonitorInfoW;
 static WindowsDllInterceptor::FuncHookType<decltype(&::GetMonitorInfoA)>
     sOriginalGetMonitorInfoA;
+
+MOZ_RUNINIT static WindowsDllInterceptor sGdi32Intercept;
+
+static WindowsDllInterceptor::FuncHookType<DdQueryDisplaySettingsUniquenessFn>
+    sOriginalDdQueryDisplaySettingsUniqueness;
 
 BOOL WINAPI CachedEnumDisplayMonitors(HDC aDC, LPCRECT aClip,
                                       MONITORENUMPROC aCallback, LPARAM aData) {
@@ -215,6 +247,15 @@ void InitializeMonitorHooks() {
   if (!sOriginalGetMonitorInfoA.Set(sUser32Intercept, "GetMonitorInfoA",
                                     &CachedGetMonitorInfoA)) {
     NS_WARNING("Failed to hook GetMonitorInfoA");
+  }
+
+  // This reads from memory shared with win32k, which is not mapped into the
+  // process when win32k system calls are disabled.
+  sGdi32Intercept.Init("gdi32.dll");
+  if (!sOriginalDdQueryDisplaySettingsUniqueness.Set(
+          sGdi32Intercept, kDdQueryDisplaySettingsUniquenessExport,
+          &CachedDdQueryDisplaySettingsUniqueness)) {
+    NS_WARNING("Failed to hook DdQueryDisplaySettingsUniqueness");
   }
 }
 
