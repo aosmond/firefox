@@ -185,12 +185,18 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
       return media::DecodeSupportSet{};
     }
 
-    // In GPU process, only support decoding if video. This only gives a hint of
-    // what the GPU decoder *may* support. The actual check will occur in
-    // CreateVideoDecoder.
+    // In GPU process, only support decoding if video, or audio with a CDM on
+    // Android. This only gives a hint of what the GPU decoder *may* support.
+    // The actual check will occur when creating the decoder.
     const auto& trackInfo = aParams.mConfig;
     if (XRE_IsGPUProcess() && !trackInfo.GetAsVideoInfo()) {
+#if defined(MOZ_WIDGET_ANDROID) && defined(FFVPX_VERSION)
+      if (!aParams.mCDM) {
+        return media::DecodeSupportSet{};
+      }
+#else
       return media::DecodeSupportSet{};
+#endif
     }
 
     // Temporary - forces use of VPXDecoder when alpha is present.
@@ -268,6 +274,19 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 #endif
     }
 
+#if defined(MOZ_WIDGET_ANDROID) && defined(FFVPX_VERSION) && \
+    defined(MOZ_USE_HWDECODE)
+    if (!supports.contains(media::DecodeSupport::HardwareDecode) &&
+        aParams.mCDM && audioCodec != AV_CODEC_ID_NONE &&
+        StaticPrefs::media_ffvpx_hw_enabled() &&
+        FFmpegDataDecoder<V>::FindHardwareAVCodec(mLib, audioCodec,
+                                                  AV_HWDEVICE_TYPE_NONE)) {
+      // Audio decoding with a CDM requires MediaCodec, which may support more
+      // codecs than we otherwise use it for.
+      supports += media::DecodeSupport::HardwareDecode;
+    }
+#endif
+
 #ifndef MOZ_WIDGET_ANDROID
     MOZ_ASSERT_IF(XRE_IsGPUProcess(),
                   !supports.contains(media::DecodeSupport::SoftwareDecode));
@@ -343,10 +362,6 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
 
   already_AddRefed<MediaDataDecoder> CreateAudioDecoder(
       const CreateDecoderParams& aParams) {
-    if (XRE_IsGPUProcess()) {
-      // Only allow video in the GPU process.
-      return nullptr;
-    }
     if (Supports(SupportDecoderParams(aParams), nullptr).isEmpty()) {
       return nullptr;
     }

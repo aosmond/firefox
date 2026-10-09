@@ -1003,10 +1003,13 @@ void GPUProcessManager::OnProcessUnexpectedShutdown(GPUProcessHost* aHost) {
     } else {
       MOZ_DIAGNOSTIC_ASSERT(!gfxConfig::IsEnabled(Feature::GPU_PROCESS));
     }
-  } else if (mUnstableProcessAttempts >
-                 uint32_t(StaticPrefs::
-                              layers_gpu_process_max_restarts_with_decoder()) &&
-             mDecodeVideoOnGpuProcess) {
+  } else if (
+      // On Android, we only stop decoding in the GPU process if it is disabled.
+      !kIsAndroid &&
+      mUnstableProcessAttempts >
+          uint32_t(
+              StaticPrefs::layers_gpu_process_max_restarts_with_decoder()) &&
+      mDecodeVideoOnGpuProcess) {
     mDecodeVideoOnGpuProcess = false;
     mozilla::glean::gpu_process::crash_fallbacks.Get("decoding_disabled"_ns)
         .Add(1);
@@ -1532,7 +1535,10 @@ void GPUProcessManager::CreateContentRemoteMediaManager(
     ipc::Endpoint<PRemoteMediaManagerChild>* aOutEndpoint) {
   MOZ_DIAGNOSTIC_ASSERT(IsGPUReady());
 
-  if (!mGPUChild || !StaticPrefs::media_gpu_process_decoder() ||
+  // The same endpoint is used for both decoding and encoding.
+  if (!mGPUChild ||
+      !(StaticPrefs::media_gpu_process_decoder() ||
+        StaticPrefs::media_gpu_process_encoder()) ||
       !mDecodeVideoOnGpuProcess) {
     return;
   }

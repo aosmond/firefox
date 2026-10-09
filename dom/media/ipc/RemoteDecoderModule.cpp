@@ -71,9 +71,14 @@ media::DecodeSupportSet RemoteDecoderModule::Supports(
   }
 #endif
 #ifdef ANDROID
-  if ((aParams.mCDM && mLocation != RemoteMediaIn::RddProcess) ||
-      (!aParams.mCDM && aParams.mConfig.IsAudio() &&
-       mLocation != RemoteMediaIn::UtilityProcess_Generic)) {
+  // Decoders using a CDM must be in the same process as the CDM. Otherwise
+  // audio is only decoded in the utility process.
+  if (aParams.mCDM) {
+    if (aParams.mCDM->GetLocation() != mLocation) {
+      support = {};
+    }
+  } else if (aParams.mConfig.IsAudio() &&
+             mLocation != RemoteMediaIn::UtilityProcess_Generic) {
     support = {};
   }
 #endif
