@@ -25,6 +25,7 @@
 #include "mozilla/dom/ContentChild.h"  // for launching RDD w/ ContentChild
 #include "mozilla/gfx/2D.h"
 #include "mozilla/gfx/DataSurfaceHelpers.h"
+#include "mozilla/gfx/gfxVars.h"
 #include "mozilla/ipc/BackgroundChild.h"
 #include "mozilla/ipc/Endpoint.h"
 #include "mozilla/ipc/PBackgroundChild.h"
@@ -177,6 +178,18 @@ void RemoteMediaManagerChild::Init() {
 }
 
 /* static */
+bool RemoteMediaManagerChild::IsGpuProcessDecodingAvailable() {
+  return StaticPrefs::media_gpu_process_decoder() &&
+         gfx::gfxVars::GPUProcessEnabled();
+}
+
+/* static */
+bool RemoteMediaManagerChild::IsGpuProcessEncodingAvailable() {
+  return StaticPrefs::media_gpu_process_encoder() &&
+         gfx::gfxVars::GPUProcessEnabled();
+}
+
+/* static */
 void RemoteMediaManagerChild::InitForGPUProcess(
     Endpoint<PRemoteMediaManagerChild>&& aVideoManager) {
   MOZ_ASSERT(NS_IsMainThread());
@@ -296,6 +309,11 @@ nsCOMPtr<nsISerialEventTarget> RemoteMediaManagerChild::GetManagerThread() {
 media::DecodeSupportSet RemoteMediaManagerChild::Supports(
     RemoteMediaIn aLocation, const SupportDecoderParams& aParams,
     DecoderDoctorDiagnostics* aDiagnostics) {
+  if (aLocation == RemoteMediaIn::GpuProcess &&
+      !IsGpuProcessDecodingAvailable()) {
+    return {};
+  }
+
   Maybe<media::MediaCodecsSupported> supported;
   switch (aLocation) {
     case RemoteMediaIn::GpuProcess:
@@ -311,6 +329,17 @@ media::DecodeSupportSet RemoteMediaManagerChild::Supports(
     default:
       return {};
   }
+#ifdef MOZ_WIDGET_ANDROID
+  // The GPU process reports its support without a CDM. With a CDM, audio may
+  // be decoded there, and video may use the MediaCodec software decoders,
+  // since decoding always uses MediaCodec.
+  if (aLocation == RemoteMediaIn::GpuProcess && aParams.mCDM) {
+    // This matches what KeySystemConfig uses. If the GPU process is unable to
+    // create the decoder, creation fails since it cannot fallback to software
+    // decoding.
+    supported = Some(gfx::gfxVars::PlatformMediaCodecsSupported());
+  }
+#endif
   if (!supported) {
     // We haven't received the correct information yet from either the GPU or
     // the RDD process nor the Utility process.
@@ -403,6 +432,13 @@ RemoteMediaManagerChild::CreateAudioDecoder(const CreateDecoderParams& aParams,
         __func__);
   }
 
+  if (aLocation == RemoteMediaIn::GpuProcess && !aParams.mCDM) {
+    return PlatformDecoderModule::CreateDecoderPromise::CreateAndReject(
+        MediaResult(NS_ERROR_DOM_MEDIA_NOT_SUPPORTED_ERR,
+                    "GPU process requires a CDM to perform audio decoding"),
+        __func__);
+  }
+
   RefPtr<GenericNonExclusivePromise> launchPromise;
   if (StaticPrefs::media_utility_process_enabled() &&
       (aLocation == RemoteMediaIn::UtilityProcess_Generic ||
@@ -411,6 +447,8 @@ RemoteMediaManagerChild::CreateAudioDecoder(const CreateDecoderParams& aParams,
     launchPromise = LaunchUtilityProcessIfNeeded(aLocation);
   } else if (aLocation == RemoteMediaIn::UtilityProcess_MFMediaEngineCDM) {
     launchPromise = LaunchUtilityProcessIfNeeded(aLocation);
+  } else if (aLocation == RemoteMediaIn::GpuProcess) {
+    launchPromise = EnsureGPUProcessReady();
   } else if (StaticPrefs::media_allow_audio_non_utility() || aParams.mCDM) {
     launchPromise = LaunchRDDProcessIfNeeded();
   } else {
@@ -521,14 +559,9 @@ RemoteMediaManagerChild::CreateVideoDecoder(const CreateDecoderParams& aParams,
 
 /* static */
 RefPtr<RemoteCDMProxy> RemoteMediaManagerChild::CreateCDM(
-    RemoteMediaIn aLocation, dom::MediaKeys* aKeys, const nsAString& aKeySystem,
+    dom::MediaKeys* aKeys, const nsAString& aKeySystem,
     bool aDistinctiveIdentifierRequired, bool aPersistentStateRequired) {
   MOZ_ASSERT(NS_IsMainThread());
-
-  if (NS_WARN_IF(aLocation != RemoteMediaIn::RddProcess)) {
-    MOZ_ASSERT_UNREACHABLE("Cannot use CDM outside RDD process");
-    return nullptr;
-  }
 
   if (!StaticPrefs::media_ffvpx_hw_enabled()) {
     return nullptr;
@@ -540,15 +573,22 @@ RefPtr<RemoteCDMProxy> RemoteMediaManagerChild::CreateCDM(
     return nullptr;
   }
 
-  if (!GetTrackSupport(aLocation).contains(TrackSupport::DecodeVideo)) {
-    return nullptr;
+  // The CDM must be in the same process as the audio and video decoders which
+  // use it. We use the GPU process if enabled, and RemoteCDMProxy will fallback
+  // to the RDD process if it becomes disabled before it initializes.
+  RemoteMediaIn location;
+  RefPtr<GenericNonExclusivePromise> p;
+  if (IsGpuProcessDecodingAvailable()) {
+    location = RemoteMediaIn::GpuProcess;
+    p = EnsureGPUProcessReady();
+  } else {
+    location = RemoteMediaIn::RddProcess;
+    p = LaunchRDDProcessIfNeeded();
   }
-
-  RefPtr<GenericNonExclusivePromise> p = LaunchRDDProcessIfNeeded();
-  LOG("Create CDM in {}", RemoteMediaInToStr(aLocation));
+  LOG("Create CDM in {}", RemoteMediaInToStr(location));
 
   return MakeRefPtr<RemoteCDMProxy>(
-      std::move(managerThread), std::move(p), aLocation, aKeys, aKeySystem,
+      std::move(managerThread), std::move(p), location, aKeys, aKeySystem,
       aDistinctiveIdentifierRequired, aPersistentStateRequired);
 }
 
@@ -612,6 +652,11 @@ RemoteMediaManagerChild::Construct(RefPtr<RemoteDecoderChild>&& aChild,
 /* static */
 EncodeSupportSet RemoteMediaManagerChild::Supports(RemoteMediaIn aLocation,
                                                    CodecType aCodec) {
+  if (aLocation == RemoteMediaIn::GpuProcess &&
+      !IsGpuProcessEncodingAvailable()) {
+    return EncodeSupportSet{};
+  }
+
   Maybe<media::MediaCodecsSupported> supported;
   switch (aLocation) {
     case RemoteMediaIn::GpuProcess:
@@ -975,6 +1020,12 @@ TrackSupportSet RemoteMediaManagerChild::GetTrackSupport(
       if (StaticPrefs::media_use_remote_encoder_video_platform()) {
         s += TrackSupport::EncodeVideo;
       }
+#ifdef ANDROID
+      // Audio decoding is only permitted with a CDM, so that the CDM may be
+      // shared with the video decoder. RemoteDecoderModule::Supports enforces
+      // this.
+      s += TrackSupport::DecodeAudio;
+#endif
       break;
     case RemoteMediaIn::RddProcess:
       s = TrackSupport::DecodeVideo;
@@ -984,9 +1035,9 @@ TrackSupportSet RemoteMediaManagerChild::GetTrackSupport(
       }
 #ifndef ANDROID
       // Only use RDD for audio coding if we don't have the utility process. If
-      // we have a CDM (which we can't determine here) on Android, then we want
-      // to perform both the video and audio decoding in the RDD so that they
-      // can share the CDM instance.
+      // we have a CDM (which we can't determine here) on Android, and the GPU
+      // process is not available, then we want to perform both the video and
+      // audio decoding in the RDD so that they can share the CDM instance.
       if (!StaticPrefs::media_utility_process_enabled())
 #endif
       {

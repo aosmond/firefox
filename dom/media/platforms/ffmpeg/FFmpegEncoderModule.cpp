@@ -36,6 +36,9 @@ template <int V>
   if (!XRE_IsGPUProcess())
 #  else
   if (!XRE_IsRDDProcess() &&
+#    ifdef MOZ_WIDGET_ANDROID
+      !XRE_IsGPUProcess() &&
+#    endif
       !(XRE_IsParentProcess() && PR_GetEnv("MOZ_RUN_GTEST")))
 #  endif
   {
