@@ -173,6 +173,12 @@ class RemoteMediaManagerChild final
   // A thread-safe method to launch the RDD process if it hasn't launched yet.
   static RefPtr<GenericNonExclusivePromise> LaunchRDDProcessIfNeeded();
 
+  // A thread-safe method to wait for the GPU process manager to be available.
+  // If the GPU process is recovering from a crash, this waits until it is
+  // recreated. It is rejected if the GPU process, or decoding in it, is
+  // disabled.
+  static RefPtr<GenericNonExclusivePromise> EnsureGPUProcessReady();
+
   // The location for decoding, Rdd or Gpu process.
   const RemoteMediaIn mLocation;
 };
