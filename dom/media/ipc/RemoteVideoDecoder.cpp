@@ -111,11 +111,11 @@ MediaResult RemoteVideoDecoderChild::InitIPDL(
 
   if (!manager->CanSend()) {
     if (mLocation == RemoteMediaIn::GpuProcess) {
-      // The manager doesn't support sending messages because we've just crashed
-      // and are working on reinitialization. We immediately reject the promise
-      // when Init() is called and the caller can try again. Hopefully by then
-      // the new manager is ready, or we've notified the caller of it being no
-      // longer available. If not, then the cycle repeats until we're ready.
+      // The manager doesn't support sending messages because the GPU process
+      // crashed after RemoteMediaManagerChild::EnsureGPUProcessReady resolved.
+      // Constructing the decoder will then fail, and the caller will be
+      // notified once the GPU process has been recreated, or is no longer
+      // available.
       return NS_OK;
     }
 

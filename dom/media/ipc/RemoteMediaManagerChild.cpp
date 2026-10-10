@@ -76,6 +76,39 @@ static EnumeratedArray<RemoteMediaIn, StaticRefPtr<RemoteMediaManagerChild>,
 
 static StaticAutoPtr<nsTArray<RefPtr<Runnable>>> sRecreateTasks;
 
+// Only accessed from sRemoteMediaManagerChildThread. Settled when we are next
+// given an endpoint for the GPU process manager, or told that there is none.
+static StaticAutoPtr<MozPromiseHolder<GenericNonExclusivePromise>>
+    sGPUProcessRecreatedHolder;
+
+static RefPtr<GenericNonExclusivePromise> WaitForGPUProcessManager() {
+  auto* manager =
+      RemoteMediaManagerChild::GetSingleton(RemoteMediaIn::GpuProcess);
+  if (!manager) {
+    return GenericNonExclusivePromise::CreateAndReject(NS_ERROR_NOT_AVAILABLE,
+                                                       __func__);
+  }
+  if (!manager->CanSend()) {
+    if (!sGPUProcessRecreatedHolder) {
+      sGPUProcessRecreatedHolder =
+          new MozPromiseHolder<GenericNonExclusivePromise>();
+    }
+    RefPtr<GenericNonExclusivePromise> p =
+        sGPUProcessRecreatedHolder->Ensure(__func__);
+    return p->Then(
+        GetCurrentSerialEventTarget(), __func__,
+        [](const GenericNonExclusivePromise::ResolveOrRejectValue& aValue)
+            -> RefPtr<GenericNonExclusivePromise> {
+          if (aValue.IsReject()) {
+            return GenericNonExclusivePromise::CreateAndReject(
+                aValue.RejectValue(), __func__);
+          }
+          return WaitForGPUProcessManager();
+        });
+  }
+  return GenericNonExclusivePromise::CreateAndResolve(true, __func__);
+}
+
 // Per-location codec support state collected from the remote processes.
 // mSupported holds the snapshot delivered over IPC (Nothing until the remote
 // process reports in); mHolder fulfills any pending EnsureCodecSupportFor()
@@ -196,6 +229,11 @@ void RemoteMediaManagerChild::Shutdown() {
               p = nullptr;
             }
           }
+          if (sGPUProcessRecreatedHolder) {
+            sGPUProcessRecreatedHolder->RejectIfExists(NS_ERROR_ABORT,
+                                                       __func__);
+            sGPUProcessRecreatedHolder = nullptr;
+          }
           ipc::BackgroundChild::CloseForCurrentThread();
         })));
     childThread->Shutdown();
@@ -213,9 +251,11 @@ void RemoteMediaManagerChild::Shutdown() {
   }
   MOZ_ASSERT(managerThread->IsOnCurrentThread());
 
-  // If we've already been recreated, then run the task immediately.
+  // If we've already been recreated, then run the task immediately. If we were
+  // not given an endpoint, then the GPU process, or decoding in it, is disabled
+  // and we will not be recreated, so run the task immediately as well.
   auto* manager = GetSingleton(RemoteMediaIn::GpuProcess);
-  if (manager && manager != aDyingManager && manager->CanSend()) {
+  if (!manager || (manager != aDyingManager && manager->CanSend())) {
     RefPtr<Runnable> task = aTask;
     task->Run();
   } else {
@@ -400,11 +440,9 @@ RemoteMediaManagerChild::CreateAudioDecoder(const CreateDecoderParams& aParams,
       [aLocation](nsresult aResult) {
         return PlatformDecoderModule::CreateDecoderPromise::CreateAndReject(
             MediaResult(aResult,
-                        aLocation == RemoteMediaIn::GpuProcess
-                            ? "Couldn't start GPU process"
-                            : (aLocation == RemoteMediaIn::RddProcess
-                                   ? "Couldn't start RDD process"
-                                   : "Couldn't start Utility process")),
+                        nsPrintfCString("Couldn't create decoder in %s process",
+                                        RemoteMediaInToStr(aLocation))
+                            .get()),
             __func__);
       });
 }
@@ -450,7 +488,7 @@ RemoteMediaManagerChild::CreateVideoDecoder(const CreateDecoderParams& aParams,
 
   RefPtr<GenericNonExclusivePromise> p;
   if (aLocation == RemoteMediaIn::GpuProcess) {
-    p = GenericNonExclusivePromise::CreateAndResolve(true, __func__);
+    p = EnsureGPUProcessReady();
   } else if (aLocation == RemoteMediaIn::UtilityProcess_MFMediaEngineCDM) {
     p = LaunchUtilityProcessIfNeeded(aLocation);
   } else {
@@ -471,9 +509,13 @@ RemoteMediaManagerChild::CreateVideoDecoder(const CreateDecoderParams& aParams,
         }
         return Construct(std::move(child), std::move(params), aLocation);
       },
-      [](nsresult aResult) {
+      [aLocation](nsresult aResult) {
         return PlatformDecoderModule::CreateDecoderPromise::CreateAndReject(
-            MediaResult(aResult, "Couldn't start RDD process"), __func__);
+            MediaResult(aResult,
+                        nsPrintfCString("Couldn't create decoder in %s process",
+                                        RemoteMediaInToStr(aLocation))
+                            .get()),
+            __func__);
       });
 }
 
@@ -676,7 +718,7 @@ RemoteMediaManagerChild::InitializeEncoder(
       location == RemoteMediaIn::UtilityProcess_WMF) {
     p = LaunchUtilityProcessIfNeeded(location);
   } else if (location == RemoteMediaIn::GpuProcess) {
-    p = GenericNonExclusivePromise::CreateAndResolve(true, __func__);
+    p = EnsureGPUProcessReady();
   } else if (location == RemoteMediaIn::RddProcess) {
     p = LaunchRDDProcessIfNeeded();
   } else {
@@ -715,7 +757,11 @@ RemoteMediaManagerChild::InitializeEncoder(
         LOG("Create encoder in {} failed, cannot start process",
             RemoteMediaInToStr(location));
         return PlatformEncoderModule::CreateEncoderPromise::CreateAndReject(
-            MediaResult(aResult, "Couldn't start encode process"), __func__);
+            MediaResult(aResult,
+                        nsPrintfCString("Couldn't create encoder in %s process",
+                                        RemoteMediaInToStr(location))
+                            .get()),
+            __func__);
       });
 }
 
@@ -801,6 +847,19 @@ RemoteMediaManagerChild::LaunchRDDProcessIfNeeded() {
 
   rddLaunchPromise = p;
   return rddLaunchPromise;
+}
+
+/* static */
+RefPtr<GenericNonExclusivePromise>
+RemoteMediaManagerChild::EnsureGPUProcessReady() {
+  nsCOMPtr<nsISerialEventTarget> managerThread = GetManagerThread();
+  if (!managerThread) {
+    // We got shutdown.
+    return GenericNonExclusivePromise::CreateAndReject(NS_ERROR_FAILURE,
+                                                       __func__);
+  }
+
+  return InvokeAsync(managerThread, __func__, &WaitForGPUProcessManager);
 }
 
 /* static */
@@ -985,6 +1044,7 @@ void RemoteMediaManagerChild::OpenRemoteMediaManagerChildForProcess(
   MOZ_ASSERT(managerThread->IsOnCurrentThread());
 
   // For GPU process, make sure we always dispatch everything in sRecreateTasks,
+  // and resolve any pending promises waiting for the GPU process manager,
   // even if we fail since this is as close to being recreated as we will ever
   // be.
   auto runRecreateTasksIfNeeded = MakeScopeExit([aLocation]() {
@@ -993,6 +1053,10 @@ void RemoteMediaManagerChild::OpenRemoteMediaManagerChildForProcess(
         task->Run();
       }
       sRecreateTasks->Clear();
+
+      if (sGPUProcessRecreatedHolder) {
+        sGPUProcessRecreatedHolder->ResolveIfExists(true, __func__);
+      }
     }
   });
 
@@ -1286,6 +1350,9 @@ RemoteMediaManagerChild::EnsureCodecSupportFor(RemoteMediaIn aLocation,
       break;
     case RemoteMediaIn::RddProcess:
       launchPromise = LaunchRDDProcessIfNeeded();
+      break;
+    case RemoteMediaIn::GpuProcess:
+      launchPromise = EnsureGPUProcessReady();
       break;
     default:
       break;
