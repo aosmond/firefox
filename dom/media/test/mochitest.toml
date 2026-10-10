@@ -838,6 +838,12 @@ run-if = [
 ]
 tags = "hls"
 
+["test_android_gpu_process_decoding.html"]
+run-if = [
+  "os == 'android'",
+]
+scheme = "https"
+
 ["test_hw_video_decoding.html"]
 run-if = [
   "os == 'mac' && os_version != '10.15'", # Bug 1942396

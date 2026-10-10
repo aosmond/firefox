@@ -391,6 +391,18 @@ class FFmpegDecoderModule : public PlatformDecoderModule {
     if (Supports(SupportDecoderParams(aParams), nullptr).isEmpty()) {
       return nullptr;
     }
+#ifdef MOZ_WIDGET_ANDROID
+    // If only a platform decoder can be used, then it must be used in the GPU
+    // process instead, unless we were given a CDM in this process.
+    if (!aParams.mCDM && FFmpegVideoDecoder<V>::ShouldDecodeInGPUProcess() &&
+        !IsSWDecodingSupported(
+            FFmpegVideoDecoder<V>::GetCodecId(aParams.mConfig.mMimeType),
+            SupportDecoderParams(aParams))) {
+      MOZ_LOG_FMT(sPDMLog, LogLevel::Debug,
+                  "FFmpeg video decoder must be created in the GPU process");
+      return nullptr;
+    }
+#endif
     auto decoder = MakeRefPtr<FFmpegVideoDecoder<V>>(
         mLib, aParams.VideoConfig(), aParams.mKnowsCompositor,
         aParams.mImageContainer,

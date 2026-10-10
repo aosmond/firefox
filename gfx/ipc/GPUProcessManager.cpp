@@ -1030,7 +1030,8 @@ void GPUProcessManager::OnProcessUnexpectedShutdown(GPUProcessHost* aHost) {
       MOZ_DIAGNOSTIC_ASSERT(!gfxConfig::IsEnabled(Feature::GPU_PROCESS));
     }
   } else if (
-      // On Android, we only stop decoding in the GPU process if it is disabled.
+      // On Android, we only stop decoding in the GPU process if it is disabled,
+      // since we only fallback to platform decoding in the RDD process then.
       !kIsAndroid &&
       mUnstableProcessAttempts >
           uint32_t(

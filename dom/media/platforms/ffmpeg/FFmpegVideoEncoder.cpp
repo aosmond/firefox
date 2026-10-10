@@ -393,6 +393,11 @@ bool FFmpegVideoEncoder<LIBAV_VER>::SvcEnabled() const {
 
 bool FFmpegVideoEncoder<LIBAV_VER>::ShouldTryHardware() const {
 #ifdef MOZ_WIDGET_ANDROID
+  if (FFmpegEncoderModule<LIBAV_VER>::ShouldEncodeInGPUProcess()) {
+    FFMPEGV_LOG("Platform encoder must be used in the GPU process");
+    return false;
+  }
+
   // mediacodecenc doesn't expose MediaCodec temporal layering (ts-schema), and
   // per-frame layer ids are only reported on Android 17+ by encoders supporting
   // a webrtc.svc schema.

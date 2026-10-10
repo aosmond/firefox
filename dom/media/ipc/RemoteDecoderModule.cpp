@@ -81,6 +81,12 @@ media::DecodeSupportSet RemoteDecoderModule::Supports(
   } else if (aParams.mConfig.IsAudio() &&
              mLocation != RemoteMediaIn::UtilityProcess_Generic) {
     support = {};
+  } else if (mLocation == RemoteMediaIn::RddProcess &&
+             RemoteMediaManagerChild::IsGpuProcessDecodingAvailable()) {
+    // Platform decoders must be used in the GPU process, unless it is disabled.
+    // Pure software decoding may still be performed in the RDD process since it
+    // is not permitted in the GPU process.
+    support -= media::DecodeSupport::HardwareDecode;
   }
   if (const auto* videoInfo = aParams.mConfig.GetAsVideoInfo()) {
     const media::MediaCodec codec =

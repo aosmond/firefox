@@ -904,6 +904,10 @@ bool FFmpegVideoDecoder<LIBAV_VER>::ShouldDisableHWDecoding(
     return false;
   }
 #    endif
+  if (ShouldDecodeInGPUProcess()) {
+    FFMPEG_LOG("Platform decoder must be used in the GPU process");
+    return true;
+  }
   switch (mCodecID) {
     case AV_CODEC_ID_H264:
     case AV_CODEC_ID_HEVC:
@@ -2562,6 +2566,11 @@ bool FFmpegVideoDecoder<LIBAV_VER>::MediaCodecSupportsColorDepth(
               media::MCSInfo::GetMediaCodecFromMimeType(aMimeType), support,
               aColorDepth)
               .isEmpty();
+}
+
+/* static */ bool FFmpegVideoDecoder<LIBAV_VER>::ShouldDecodeInGPUProcess() {
+  return XRE_IsRDDProcess() && StaticPrefs::media_gpu_process_decoder() &&
+         gfx::gfxVars::GPUProcessEnabled();
 }
 #endif
 
