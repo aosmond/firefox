@@ -132,6 +132,13 @@ class FFmpegVideoDecoder<LIBAV_VER>
 
   static AVCodecID GetCodecId(const nsACString& aMimeType);
 
+#ifdef MOZ_WIDGET_ANDROID
+  // Whether or not platform decoding must be performed in the GPU process
+  // instead of this process. We only fallback to the RDD process if the GPU
+  // process is disabled.
+  static bool ShouldDecodeInGPUProcess();
+#endif
+
 #ifdef CUSTOMIZED_BUFFER_ALLOCATION
   int GetVideoBuffer(struct AVCodecContext* aCodecContext, AVFrame* aFrame,
                      int aFlags);

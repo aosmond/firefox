@@ -393,6 +393,11 @@ bool FFmpegVideoEncoder<LIBAV_VER>::SvcEnabled() const {
 
 bool FFmpegVideoEncoder<LIBAV_VER>::ShouldTryHardware() const {
 #ifdef MOZ_WIDGET_ANDROID
+  if (FFmpegEncoderModule<LIBAV_VER>::ShouldEncodeInGPUProcess()) {
+    FFMPEGV_LOG("Platform encoder must be used in the GPU process");
+    return false;
+  }
+
   // On Android, the MediaCodec encoders are the only ones available to us,
   // which may be implemented in hardware or software.
   if (mCodecID == AV_CODEC_ID_H264 || mCodecID == AV_CODEC_ID_HEVC) {

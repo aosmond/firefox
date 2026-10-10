@@ -20,6 +20,13 @@ class FFmpegEncoderModule final : public PlatformEncoderModule {
 
   static void Init(const FFmpegLibWrapper* aLib);
 
+#ifdef MOZ_WIDGET_ANDROID
+  // Whether or not platform encoding must be performed in the GPU process
+  // instead of this process. We only fallback to the RDD process if the GPU
+  // process is disabled.
+  static bool ShouldEncodeInGPUProcess();
+#endif
+
   static already_AddRefed<PlatformEncoderModule> Create(
       const FFmpegLibWrapper* aLib) {
     RefPtr<PlatformEncoderModule> pem = new FFmpegEncoderModule(aLib);

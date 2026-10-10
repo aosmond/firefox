@@ -153,7 +153,11 @@ EncodeSupportSet FFmpegEncoderModule<V>::SupportsCodec(CodecType aCodec) const {
 #endif
   EncodeSupportSet supports;
 #ifdef MOZ_USE_HWDECODE
-  if (StaticPrefs::media_ffvpx_hw_enabled()) {
+  if (StaticPrefs::media_ffvpx_hw_enabled()
+#  ifdef MOZ_WIDGET_ANDROID
+      && !ShouldEncodeInGPUProcess()
+#  endif
+  ) {
     // We don't need to check the gfxVars again because we check them when we
     // populated sSupportedHWCodecs.
     auto hwCodecs = sSupportedHWCodecs.Lock();
@@ -192,6 +196,14 @@ EncodeSupportSet FFmpegEncoderModule<V>::SupportsCodec(CodecType aCodec) const {
   }
   return supports;
 }
+
+#ifdef MOZ_WIDGET_ANDROID
+template <int V>
+/* static */ bool FFmpegEncoderModule<V>::ShouldEncodeInGPUProcess() {
+  return XRE_IsRDDProcess() && StaticPrefs::media_gpu_process_encoder() &&
+         gfx::gfxVars::GPUProcessEnabled();
+}
+#endif
 
 template <int V>
 already_AddRefed<MediaDataEncoder> FFmpegEncoderModule<V>::CreateVideoEncoder(
