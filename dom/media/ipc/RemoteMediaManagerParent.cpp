@@ -48,6 +48,11 @@ using namespace gfx;
 
 StaticRefPtr<TaskQueue> sRemoteMediaManagerParentThread;
 
+// Only accessed from sRemoteMediaManagerParentThread. Pending promise settled
+// when we are next given a video bridge, or it is shut down.
+static StaticRefPtr<GenericNonExclusivePromise::Private>
+    sVideoBridgeRecreatedPromise;
+
 void RemoteMediaManagerParent::StoreImage(const SurfaceDescriptorGPUVideo& aSD,
                                           Image* aImage,
                                           TextureClient* aTexture) {
@@ -111,11 +116,43 @@ void RemoteMediaManagerParent::ShutdownThreads() {
 /* static */
 void RemoteMediaManagerParent::ShutdownVideoBridge() {
   if (sRemoteMediaManagerParentThread) {
-    RefPtr<Runnable> task =
-        NS_NewRunnableFunction("RemoteMediaManagerParent::ShutdownVideoBridge",
-                               []() { VideoBridgeChild::Shutdown(); });
+    RefPtr<Runnable> task = NS_NewRunnableFunction(
+        "RemoteMediaManagerParent::ShutdownVideoBridge", []() {
+          VideoBridgeChild::Shutdown();
+          if (RefPtr<GenericNonExclusivePromise::Private> p =
+                  sVideoBridgeRecreatedPromise.forget()) {
+            p->Reject(NS_ERROR_ABORT, __func__);
+          }
+        });
     SyncRunnable::DispatchToThread(sRemoteMediaManagerParentThread, task);
   }
+}
+
+/* static */
+RefPtr<GenericNonExclusivePromise>
+RemoteMediaManagerParent::WaitForVideoBridge() {
+  MOZ_ASSERT(OnManagerThread());
+
+  // The compositor is being recreated. Check again once we are given a new
+  // video bridge.
+  RefPtr<VideoBridgeChild> videoBridge = VideoBridgeChild::GetSingleton();
+  if (videoBridge && !videoBridge->CanSend()) {
+    if (!sVideoBridgeRecreatedPromise) {
+      sVideoBridgeRecreatedPromise =
+          new GenericNonExclusivePromise::Private(__func__);
+    }
+    return sVideoBridgeRecreatedPromise->Then(
+        sRemoteMediaManagerParentThread, __func__,
+        [](const GenericNonExclusivePromise::ResolveOrRejectValue& aValue)
+            -> RefPtr<GenericNonExclusivePromise> {
+          if (aValue.IsReject()) {
+            return GenericNonExclusivePromise::CreateAndReject(
+                aValue.RejectValue(), __func__);
+          }
+          return WaitForVideoBridge();
+        });
+  }
+  return GenericNonExclusivePromise::CreateAndResolve(true, __func__);
 }
 
 /* static */
@@ -185,9 +222,15 @@ bool RemoteMediaManagerParent::CreateVideoBridgeToOtherProcess(
     return false;
   }
 
-  RefPtr<Runnable> task =
-      NewRunnableFunction("gfx::VideoBridgeChild::Open",
-                          &VideoBridgeChild::Open, std::move(aEndpoint));
+  RefPtr<Runnable> task = NS_NewRunnableFunction(
+      "gfx::VideoBridgeChild::Open",
+      [endpoint = std::move(aEndpoint)]() mutable {
+        VideoBridgeChild::Open(std::move(endpoint));
+        if (RefPtr<GenericNonExclusivePromise::Private> p =
+                sVideoBridgeRecreatedPromise.forget()) {
+          p->Resolve(true, __func__);
+        }
+      });
   MOZ_ALWAYS_SUCCEEDS(sRemoteMediaManagerParentThread->Dispatch(task.forget()));
   return true;
 }

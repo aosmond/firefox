@@ -5,6 +5,7 @@
 #define include_dom_media_ipc_RemoteMediaManagerParent_h
 
 #include "GPUVideoImage.h"
+#include "mozilla/MozPromise.h"
 #include "mozilla/PRemoteMediaManagerParent.h"
 #include "mozilla/dom/ipc/IdType.h"
 #include "mozilla/layers/VideoBridgeChild.h"
@@ -56,6 +57,11 @@ class RemoteMediaManagerParent final : public PRemoteMediaManagerParent,
   static void ShutdownThreads();
 
   static void ShutdownVideoBridge();
+
+  // Must be called on manager thread. If the compositor is being recreated,
+  // waits until we are given a new video bridge. It is rejected if the video
+  // bridge is shut down.
+  static RefPtr<GenericNonExclusivePromise> WaitForVideoBridge();
 
   static bool OnManagerThread();
   static void Dispatch(already_AddRefed<nsIRunnable> aRunnable);

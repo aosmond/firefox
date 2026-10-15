@@ -182,11 +182,47 @@ RemoteVideoDecoderParent::RemoteVideoDecoderParent(
   }
 }
 
+void RemoteVideoDecoderParent::ActorDestroy(ActorDestroyReason aWhy) {
+  MOZ_ASSERT(OnManagerThread());
+  mVideoBridgeRequest.DisconnectIfExists();
+  RemoteDecoderParent::ActorDestroy(aWhy);
+}
+
 IPCResult RemoteVideoDecoderParent::RecvConstruct(
     ConstructResolver&& aResolver) {
-  if (mDecoder || mShutdown) {
+  if (mDecoder || mShutdown || mVideoBridgeRequest.Exists()) {
     aResolver(MediaResult(NS_ERROR_ALREADY_INITIALIZED, __func__));
     return IPC_OK();
+  }
+
+  if (!mKnowsCompositor) {
+    CreateDecoder(std::move(aResolver));
+    return IPC_OK();
+  }
+
+  // If the compositor is being recreated, wait for the new video bridge so that
+  // we can share the decoded frames with it.
+  RemoteMediaManagerParent::WaitForVideoBridge()
+      ->Then(GetCurrentSerialEventTarget(), __func__,
+             [self = RefPtr{this}, resolver = std::move(aResolver)](
+                 const GenericNonExclusivePromise::ResolveOrRejectValue&
+                     aValue) mutable {
+               self->mVideoBridgeRequest.Complete();
+               if (aValue.IsReject()) {
+                 resolver(MediaResult(NS_ERROR_DOM_MEDIA_CANCELED, __func__));
+                 return;
+               }
+               self->CreateDecoder(std::move(resolver));
+             })
+      ->Track(mVideoBridgeRequest);
+  return IPC_OK();
+}
+
+void RemoteVideoDecoderParent::CreateDecoder(ConstructResolver&& aResolver) {
+  MOZ_ASSERT(OnManagerThread());
+  if (mDecoder || mShutdown) {
+    aResolver(MediaResult(NS_ERROR_ALREADY_INITIALIZED, __func__));
+    return;
   }
 
   auto imageContainer = MakeRefPtr<layers::ImageContainer>(
@@ -229,7 +265,6 @@ IPCResult RemoteVideoDecoderParent::RecvConstruct(
                                       do_AddRef(self->mDecodeTaskQueue.get()));
         resolver(NS_OK);
       });
-  return IPC_OK();
 }
 
 MediaResult RemoteVideoDecoderParent::ProcessDecodedData(
