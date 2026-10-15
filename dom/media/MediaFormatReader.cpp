@@ -398,8 +398,7 @@ void MediaFormatReader::DecoderFactory::DoCreateDecoder(Data& aData) {
 
       p = platform->CreateDecoder(
           {*ownerData.GetCurrentInfo()->GetAsVideoInfo(),
-           mOwner->mKnowsCompositor, mOwner->GetImageContainer(),
-           mOwner->mCrashHelper,
+           mOwner->GetImageContainer(), mOwner->mCrashHelper,
            CreateDecoderParams::UseNullDecoder(ownerData.mIsNullDecode),
            TrackType::kVideoTrack, std::move(onWaitingForKeyEvent),
            CreateDecoderParams::VideoFrameRate(
@@ -915,7 +914,6 @@ MediaFormatReader::MediaFormatReader(MediaFormatReaderInit& aInit,
       mPendingNotifyDataArrived(false),
       mLastReportedNumDecodedFrames(0),
       mPreviousDecodedKeyframeTime_us(sNoPreviousDecodedKeyframe),
-      mKnowsCompositor(aInit.mKnowsCompositor),
       mInitDone(false),
       mTrackDemuxersMayBlock(false),
       mSeekScheduled(false),
@@ -3551,12 +3549,6 @@ void MediaFormatReader::GetDebugInfo(dom::MediaFormatReaderDebugInfo& aInfo) {
 void MediaFormatReader::SetVideoNullDecode(bool aIsNullDecode) {
   MOZ_ASSERT(OnTaskQueue());
   return SetNullDecode(TrackType::kVideoTrack, aIsNullDecode);
-}
-
-void MediaFormatReader::UpdateCompositor(
-    already_AddRefed<layers::KnowsCompositor> aCompositor) {
-  MOZ_ASSERT(OnTaskQueue());
-  mKnowsCompositor = aCompositor;
 }
 
 void MediaFormatReader::SetNullDecode(TrackType aTrack, bool aIsNullDecode) {

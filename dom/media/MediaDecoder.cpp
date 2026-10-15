@@ -16,10 +16,11 @@
 #include "MediaResource.h"
 #include "MediaShutdownManager.h"
 #include "MediaTrackGraph.h"
+#include "PDMFactory.h"
 #include "TelemetryProbesReporter.h"
 #include "VideoFrameContainer.h"
 #include "VideoUtils.h"
-#include "WindowRenderer.h"
+#include "gfxPlatform.h"
 #include "mozilla/AbstractThread.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/StaticPrefs_media.h"
@@ -123,8 +124,6 @@ void MediaDecoder::NotifyOwnerActivityChanged(bool aIsOwnerInvisible,
   MOZ_DIAGNOSTIC_ASSERT(!IsShutdown());
   SetElementVisibility(aIsOwnerInvisible, aIsOwnerConnected,
                        aIsOwnerInBackground, aHasOwnerPendingCallbacks);
-
-  NotifyCompositor();
 }
 
 void MediaDecoder::Pause() {
@@ -559,6 +558,11 @@ void MediaDecoder::FinishShutdown() {
 nsresult MediaDecoder::CreateAndInitStateMachine(bool aIsLiveStream,
                                                  bool aDisableExternalEngine) {
   MOZ_ASSERT(NS_IsMainThread());
+  // The graphics devices are lazily initialized with WebRender, and decoders in
+  // this process may need them.
+  if (!PDMFactory::AllDecodersAreRemote()) {
+    gfxPlatform::GetPlatform()->EnsureDevicesInitialized();
+  }
   SetStateMachine(CreateStateMachine(aDisableExternalEngine));
 
   NS_ENSURE_TRUE(GetStateMachine(), NS_ERROR_FAILURE);
@@ -1131,27 +1135,6 @@ void MediaDecoder::DurationChanged() {
 
   if (CurrentPosition().ToSeconds() > mDuration.match(DurationToDouble())) {
     Seek(mDuration.match(DurationToDouble()), SeekTarget::Accurate);
-  }
-}
-
-already_AddRefed<KnowsCompositor> MediaDecoder::GetCompositor() {
-  MediaDecoderOwner* owner = GetOwner();
-  Document* ownerDoc = owner ? owner->GetDocument() : nullptr;
-  WindowRenderer* renderer =
-      ownerDoc ? nsContentUtils::WindowRendererForDocument(ownerDoc) : nullptr;
-  RefPtr<KnowsCompositor> knows =
-      renderer ? renderer->AsKnowsCompositor() : nullptr;
-  return knows ? knows->GetForMedia().forget() : nullptr;
-}
-
-void MediaDecoder::NotifyCompositor() {
-  RefPtr<KnowsCompositor> knowsCompositor = GetCompositor();
-  if (knowsCompositor) {
-    nsCOMPtr<nsIRunnable> r =
-        NewRunnableMethod<already_AddRefed<KnowsCompositor>&&>(
-            "MediaFormatReader::UpdateCompositor", mReader,
-            &MediaFormatReader::UpdateCompositor, knowsCompositor.forget());
-    (void)mReader->OwnerThread()->Dispatch(r.forget());
   }
 }
 
