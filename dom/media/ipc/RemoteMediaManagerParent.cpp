@@ -266,7 +266,6 @@ already_AddRefed<PRemoteDecoderParent>
 RemoteMediaManagerParent::AllocPRemoteDecoderParent(
     const RemoteDecoderInfoIPDL& aRemoteDecoderInfo,
     const CreateDecoderParams::OptionSet& aOptions,
-    const Maybe<layers::TextureFactoryIdentifier>& aIdentifier,
     const Maybe<uint64_t>& aMediaEngineId, const Maybe<TrackingId>& aTrackingId,
     PRemoteCDMParent* aCDM) {
   RefPtr<TaskQueue> decodeTaskQueue =
@@ -281,8 +280,8 @@ RemoteMediaManagerParent::AllocPRemoteDecoderParent(
         aRemoteDecoderInfo.get_VideoDecoderInfoIPDL();
     return MakeAndAddRef<RemoteVideoDecoderParent>(
         this, decoderInfo.videoInfo(), decoderInfo.framerate(), aOptions,
-        aIdentifier, sRemoteMediaManagerParentThread, decodeTaskQueue,
-        aMediaEngineId, aTrackingId, cdm);
+        sRemoteMediaManagerParentThread, decodeTaskQueue, aMediaEngineId,
+        aTrackingId, cdm);
   }
 
   if (aRemoteDecoderInfo.type() == RemoteDecoderInfoIPDL::TAudioInfo) {

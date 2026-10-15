@@ -80,8 +80,7 @@ MediaResult RemoteAudioDecoderChild::InitIPDL(
   }
 
   if (!manager->SendPRemoteDecoderConstructor(this, aAudioInfo, aOptions,
-                                              Nothing(), aMediaEngineId,
-                                              Nothing(), cdm)) {
+                                              aMediaEngineId, Nothing(), cdm)) {
     return MediaResult(
         NS_ERROR_DOM_MEDIA_FATAL_ERR,
         RESULT_DETAIL("RemoteMediaManager unable to construct."));

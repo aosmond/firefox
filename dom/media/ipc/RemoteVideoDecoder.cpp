@@ -94,11 +94,8 @@ MediaResult RemoteVideoDecoderChild::ProcessOutput(
 MediaResult RemoteVideoDecoderChild::InitIPDL(
     const VideoInfo& aVideoInfo, float aFramerate,
     const CreateDecoderParams::OptionSet& aOptions,
-    Maybe<layers::TextureFactoryIdentifier> aIdentifier,
     const Maybe<uint64_t>& aMediaEngineId, const Maybe<TrackingId>& aTrackingId,
     PRemoteCDMActor* aCDM) {
-  MOZ_ASSERT_IF(mLocation == RemoteMediaIn::GpuProcess, aIdentifier);
-
   RefPtr<RemoteMediaManagerChild> manager =
       RemoteMediaManagerChild::GetSingleton(mLocation);
 
@@ -150,9 +147,8 @@ MediaResult RemoteVideoDecoderChild::InitIPDL(
   }
 
   VideoDecoderInfoIPDL decoderInfo(aVideoInfo, aFramerate);
-  if (!manager->SendPRemoteDecoderConstructor(this, decoderInfo, aOptions,
-                                              aIdentifier, aMediaEngineId,
-                                              aTrackingId, cdm)) {
+  if (!manager->SendPRemoteDecoderConstructor(
+          this, decoderInfo, aOptions, aMediaEngineId, aTrackingId, cdm)) {
     return MediaResult(
         NS_ERROR_DOM_MEDIA_FATAL_ERR,
         RESULT_DETAIL("RemoteMediaManager unable to construct."));
@@ -164,39 +160,26 @@ MediaResult RemoteVideoDecoderChild::InitIPDL(
 RemoteVideoDecoderParent::RemoteVideoDecoderParent(
     RemoteMediaManagerParent* aParent, const VideoInfo& aVideoInfo,
     float aFramerate, const CreateDecoderParams::OptionSet& aOptions,
-    const Maybe<layers::TextureFactoryIdentifier>& aIdentifier,
     nsISerialEventTarget* aManagerThread, TaskQueue* aDecodeTaskQueue,
     const Maybe<uint64_t>& aMediaEngineId, Maybe<TrackingId> aTrackingId,
     RemoteCDMParent* aCDM)
     : RemoteDecoderParent(aParent, aOptions, aManagerThread, aDecodeTaskQueue,
                           aMediaEngineId, std::move(aTrackingId), aCDM),
       mVideoInfo(aVideoInfo),
-      mFramerate(aFramerate) {
-  if (aIdentifier) {
-    // Check to see if we have a direct PVideoBridge connection to the
-    // destination process specified in aIdentifier, and create a
-    // KnowsCompositor representing that connection if so. If this fails, then
-    // we fall back to returning the decoded frames directly via Output().
-    mKnowsCompositor =
-        KnowsCompositorVideo::TryCreateForIdentifier(*aIdentifier);
-  }
-}
+      mFramerate(aFramerate) {}
 
 void RemoteVideoDecoderParent::ActorDestroy(ActorDestroyReason aWhy) {
   MOZ_ASSERT(OnManagerThread());
   mVideoBridgeRequest.DisconnectIfExists();
+  mIdentifierRequest.DisconnectIfExists();
   RemoteDecoderParent::ActorDestroy(aWhy);
 }
 
 IPCResult RemoteVideoDecoderParent::RecvConstruct(
     ConstructResolver&& aResolver) {
-  if (mDecoder || mShutdown || mVideoBridgeRequest.Exists()) {
+  if (mDecoder || mShutdown || mVideoBridgeRequest.Exists() ||
+      mIdentifierRequest.Exists()) {
     aResolver(MediaResult(NS_ERROR_ALREADY_INITIALIZED, __func__));
-    return IPC_OK();
-  }
-
-  if (!mKnowsCompositor) {
-    CreateDecoder(std::move(aResolver));
     return IPC_OK();
   }
 
@@ -212,17 +195,62 @@ IPCResult RemoteVideoDecoderParent::RecvConstruct(
                  resolver(MediaResult(NS_ERROR_DOM_MEDIA_CANCELED, __func__));
                  return;
                }
-               self->CreateDecoder(std::move(resolver));
+               self->RequestTextureFactoryIdentifier(std::move(resolver));
              })
       ->Track(mVideoBridgeRequest);
   return IPC_OK();
 }
 
-void RemoteVideoDecoderParent::CreateDecoder(ConstructResolver&& aResolver) {
+void RemoteVideoDecoderParent::RequestTextureFactoryIdentifier(
+    ConstructResolver&& aResolver) {
+  MOZ_ASSERT(OnManagerThread());
+  RefPtr<layers::VideoBridgeChild> videoBridge =
+      layers::VideoBridgeChild::GetSingleton();
+  if (!videoBridge || !videoBridge->CanSend()) {
+    CreateDecoder(Nothing(), std::move(aResolver));
+    return;
+  }
+
+  // Ask the compositor for the identifier used by the content process, since
+  // the content process may not have the current one, e.g. if the GPU process
+  // is being recreated.
+  videoBridge->SendGetTextureFactoryIdentifier(mParent->GetContentId())
+      ->Then(GetCurrentSerialEventTarget(), __func__,
+             [self = RefPtr{this}, resolver = std::move(aResolver)](
+                 layers::VideoBridgeChild::GetTextureFactoryIdentifierPromise::
+                     ResolveOrRejectValue&& aValue) mutable {
+               self->mIdentifierRequest.Complete();
+               self->CreateDecoder(
+                   aValue.IsResolve() ? aValue.ResolveValue() : Nothing(),
+                   std::move(resolver));
+             })
+      ->Track(mIdentifierRequest);
+}
+
+void RemoteVideoDecoderParent::CreateDecoder(
+    const Maybe<layers::TextureFactoryIdentifier>& aIdentifier,
+    ConstructResolver&& aResolver) {
   MOZ_ASSERT(OnManagerThread());
   if (mDecoder || mShutdown) {
     aResolver(MediaResult(NS_ERROR_ALREADY_INITIALIZED, __func__));
     return;
+  }
+
+  // Decoders in the GPU process must share their frames with the compositor,
+  // so let the content process use another process instead.
+  if (!aIdentifier && XRE_IsGPUProcess()) {
+    aResolver(MediaResult(NS_ERROR_DOM_MEDIA_FATAL_ERR,
+                          "No compositor for the content process"));
+    return;
+  }
+
+  if (aIdentifier) {
+    // Check to see if we have a direct PVideoBridge connection to the
+    // destination process specified in aIdentifier, and create a
+    // KnowsCompositor representing that connection if so. If this fails, then
+    // we fall back to returning the decoded frames directly via Output().
+    mKnowsCompositor =
+        KnowsCompositorVideo::TryCreateForIdentifier(*aIdentifier);
   }
 
   auto imageContainer = MakeRefPtr<layers::ImageContainer>(
