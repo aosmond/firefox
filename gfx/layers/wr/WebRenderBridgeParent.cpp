@@ -3257,6 +3257,14 @@ TextureFactoryIdentifier WebRenderBridgeParent::GetTextureFactoryIdentifier() {
   return ident;
 }
 
+Maybe<TextureFactoryIdentifier>
+WebRenderBridgeParent::MaybeGetTextureFactoryIdentifier() {
+  if (mDestroyed || mLateInit.isNothing() || !mLateInit->mApi) {
+    return Nothing();
+  }
+  return Some(GetTextureFactoryIdentifier());
+}
+
 wr::Epoch WebRenderBridgeParent::GetNextWrEpoch() {
   MOZ_RELEASE_ASSERT(mWrEpoch.mHandle != UINT32_MAX);
   mWrEpoch.mHandle++;

@@ -238,6 +238,10 @@ class WebRenderBridgeParent final : public PWebRenderBridgeParent,
   void RetrySkippedComposite();
 
   TextureFactoryIdentifier GetTextureFactoryIdentifier();
+  // Returns Nothing if we were destroyed, or if we are a root bridge which has
+  // not finished initializing. Content bridges are always initialized when
+  // created.
+  Maybe<TextureFactoryIdentifier> MaybeGetTextureFactoryIdentifier();
 
   void ExtractImageCompositeNotifications(
       nsTArray<ImageCompositeNotificationInfo>* aNotifications);
