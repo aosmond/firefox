@@ -12824,6 +12824,8 @@
   type: RelaxedAtomicBool
 #if defined(XP_WIN)
   value: true
+#elif defined(ANDROID)
+  value: @IS_NIGHTLY_BUILD@
 #else
   value: false
 #endif
@@ -12831,8 +12833,8 @@
 
 - name: media.gpu-process-encoder
   type: RelaxedAtomicBool
-#ifdef NIGHTLY_BUILD
-  value: @IS_XP_WIN@
+#if defined(XP_WIN) || defined(ANDROID)
+  value: @IS_NIGHTLY_BUILD@
 #else
   value: false
 #endif
