@@ -2539,6 +2539,23 @@ Maybe<MediaDataDecoder::PropertyValue> FFmpegVideoDecoder<
 }
 #endif
 
+#ifdef MOZ_WIDGET_ANDROID
+/* static */
+bool FFmpegVideoDecoder<LIBAV_VER>::MediaCodecSupportsColorDepth(
+    AVCodecID aCodec, const nsACString& aMimeType,
+    gfx::ColorDepth aColorDepth) {
+  // H264 and HEVC may use the platform software decoders.
+  media::DecodeSupportSet support{media::DecodeSupport::HardwareDecode};
+  if (aCodec == AV_CODEC_ID_H264 || aCodec == AV_CODEC_ID_HEVC) {
+    support += media::DecodeSupport::SoftwareDecode;
+  }
+  return !media::MCSInfo::GetMediaCodecDecodeSupportForColorDepth(
+              media::MCSInfo::GetMediaCodecFromMimeType(aMimeType), support,
+              aColorDepth)
+              .isEmpty();
+}
+#endif
+
 AVCodecID FFmpegVideoDecoder<LIBAV_VER>::GetCodecId(
     const nsACString& aMimeType) {
   if (MP4Decoder::IsH264(aMimeType)) {
@@ -3098,7 +3115,8 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::InitMediaCodecDecoder() {
                        RESULT_DETAIL("codec not allowed when minimal"));
   }
 
-  if (mInfo.mColorDepth > gfx::ColorDepth::COLOR_10) {
+  if (!MediaCodecSupportsColorDepth(mCodecID, mInfo.mMimeType,
+                                    mInfo.mColorDepth)) {
     return MediaResult(NS_ERROR_DOM_MEDIA_FATAL_ERR,
                        RESULT_DETAIL("not supported color depth"));
   }

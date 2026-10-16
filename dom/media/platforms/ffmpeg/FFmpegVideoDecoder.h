@@ -132,6 +132,13 @@ class FFmpegVideoDecoder<LIBAV_VER>
 
   static AVCodecID GetCodecId(const nsACString& aMimeType);
 
+#ifdef MOZ_WIDGET_ANDROID
+  // Returns true if MediaCodec can decode aCodec with aColorDepth.
+  static bool MediaCodecSupportsColorDepth(AVCodecID aCodec,
+                                           const nsACString& aMimeType,
+                                           gfx::ColorDepth aColorDepth);
+#endif
+
 #ifdef CUSTOMIZED_BUFFER_ALLOCATION
   int GetVideoBuffer(struct AVCodecContext* aCodecContext, AVFrame* aFrame,
                      int aFlags);

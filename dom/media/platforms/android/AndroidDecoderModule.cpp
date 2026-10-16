@@ -12,7 +12,6 @@
 #include "mozilla/StaticPrefs_media.h"
 #include "mozilla/gfx/gfxVars.h"
 #include "mozilla/java/GeckoAppShellWrappers.h"
-#include "mozilla/java/HardwareCodecCapabilityUtilsWrappers.h"
 #include "nsCharSeparatedTokenizer.h"
 #include "nsIGfxInfo.h"
 #include "nsPromiseFlatString.h"
@@ -111,16 +110,24 @@ DecodeSupportSet AndroidDecoderModule::SupportsMimeType(
       SLOG("Rejecting audio of type {}", PromiseFlatCString(aMimeType).get());
       return media::DecodeSupportSet{};
 
-    // H264 always reports software decode
-    case MediaCodec::H264:
-      return DecodeSupport::SoftwareDecode;
-
     case MediaCodec::HEVC:
       if (!StaticPrefs::media_hevc_enabled()) {
         SLOG("Rejecting HEVC as the preference is disabled");
         return media::DecodeSupportSet{};
       }
-      break;
+      [[fallthrough]];
+    case MediaCodec::H264: {
+      DecodeSupportSet support;
+      if (MCSInfo::SupportsSoftwareDecode(
+              gfx::gfxVars::PlatformMediaCodecsSupported(), codec)) {
+        support += DecodeSupport::SoftwareDecode;
+      }
+      if (codec == MediaCodec::H264 ? gfx::gfxVars::UseH264HwDecode()
+                                    : gfx::gfxVars::UseHEVCHwDecode()) {
+        support += DecodeSupport::HardwareDecode;
+      }
+      return support;
+    }
 
     // AV1 doesn't need any special handling.
     case MediaCodec::AV1:
@@ -192,17 +199,18 @@ media::DecodeSupportSet AndroidDecoderModule::Supports(
     return media::DecodeSupportSet{};
   }
 
-  // Check 10-bit video.
-  const TrackInfo& trackInfo = aParams.mConfig;
-  const VideoInfo* videoInfo = trackInfo.GetAsVideoInfo();
-  if (!videoInfo || videoInfo->mColorDepth != gfx::ColorDepth::COLOR_10) {
+  const VideoInfo* videoInfo = aParams.mConfig.GetAsVideoInfo();
+  if (!videoInfo) {
     return support;
   }
 
-  return java::HardwareCodecCapabilityUtils::Decodes10Bit(
-             TranslateMimeType(aParams.MimeType()))
-             ? support
-             : media::DecodeSupportSet{};
+  const MediaCodec codec =
+      MCSInfo::GetMediaCodecFromMimeType(aParams.MimeType());
+  return MCSInfo::GetMediaCodecDecodeSupportForSize(
+      codec,
+      MCSInfo::GetMediaCodecDecodeSupportForColorDepth(codec, support,
+                                                       videoInfo->mColorDepth),
+      videoInfo->mImage);
 }
 
 RefPtr<PlatformDecoderModule::CreateDecoderPromise>
