@@ -157,8 +157,7 @@ static void QueryMediaCodecsSupported(
     media::MediaCodecsSupported& aSupported10Bit, HwDecodeMaxSizes& aHwMaxSizes,
     nsCString& aUnmappedSwDecode, nsCString& aUnmappedHwDecode) {
   jni::ObjectArray::LocalRef supportedTypes =
-      java::HardwareCodecCapabilityUtils::GetSupportedMimeTypesWithAccelInfo(
-          true);
+      java::HardwareCodecCapabilityUtils::GetSupportedMimeTypesWithAccelInfo();
   for (size_t i = 0; i < supportedTypes->Length(); i++) {
     const nsCString s =
         jni::String::LocalRef(supportedTypes->GetElement(i))->ToCString();
