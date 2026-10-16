@@ -230,6 +230,8 @@ geckoview-isolated-process:
                 - "--setpref=media.ffmpeg.encoder.enabled=true"
                 - "--setpref=media.ffvpx-hw.enabled=true"
                 - "--setpref=media.gmp.android.isolated-process=true"
+                - "--setpref=media.gpu-process-decoder=true"
+                - "--setpref=media.gpu-process-encoder=true"
                 - "--setpref=media.rdd-ffvpx.enabled=true"
                 - "--setpref=media.rdd-opus.enabled=true"
                 - "--setpref=media.rdd-process.enabled=true"
