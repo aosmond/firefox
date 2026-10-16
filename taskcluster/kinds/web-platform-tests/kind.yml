@@ -153,6 +153,7 @@ tasks:
             - privatebrowsing
             - inc-origin-init
             - privatebrowsing-inc-origin-init
+            - geckoview-isolated-process
         run-on-projects:
             by-variant:
                 no-fission:
@@ -173,6 +174,10 @@ tasks:
                         default: built-projects
                 inc-origin-init: []
                 privatebrowsing-inc-origin-init: []
+                geckoview-isolated-process:
+                    by-test-platform:
+                        android-em.*/debug: built-projects
+                        default: []
                 default:
                     by-test-platform:
                         android.*: []
