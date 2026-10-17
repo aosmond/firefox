@@ -500,6 +500,16 @@ bool GPUProcessManager::EnsureCompositorManagerChild() {
   mGPUChild->SendInitCompositorManager(std::move(parentPipe), cmNamespace);
   MOZ_ALWAYS_TRUE(CompositorManagerChild::Init(std::move(childPipe),
                                                cmNamespace, mProcessToken));
+
+  CompositorManagerChild* manager = CompositorManagerChild::GetInstance();
+  if (!mQueuedUnmaps.IsEmpty()) {
+    LAYERTREE_LOG("Sending {} queued layer tree unmaps to GPU process {}",
+                  mQueuedUnmaps.Length(), mProcessToken);
+  }
+  for (const auto& [layersId, owningId] : mQueuedUnmaps) {
+    manager->SendRemoveLayerTreeIdMapping(layersId, owningId);
+  }
+  mQueuedUnmaps.Clear();
   return true;
 }
 
@@ -1283,6 +1293,7 @@ void GPUProcessManager::DestroyProcess(bool aUnexpectedShutdown) {
   mProcess = nullptr;
   mGPUChild = nullptr;
   mQueuedPrefs.Clear();
+  mQueuedUnmaps.Clear();
   if (mVsyncBridge) {
     mVsyncBridge->Close();
     mVsyncBridge = nullptr;
@@ -1708,6 +1719,14 @@ void GPUProcessManager::UnmapLayerTreeId(LayersId aLayersId,
           "going away",
           aLayersId, mProcessToken);
     }
+  } else if (mProcess) {
+    // The GPU process is launching, and may have been given this mapping when
+    // it was initialized.
+    LAYERTREE_LOG(
+        "Queueing unmap of layer tree {:x} until the GPU process "
+        "has launched",
+        aLayersId);
+    mQueuedUnmaps.AppendElement(std::pair(aLayersId, aOwningId));
   } else if (!gfxConfig::IsEnabled(Feature::GPU_PROCESS)) {
     CompositorBridgeParent::DeallocateLayerTreeId(aLayersId);
   }

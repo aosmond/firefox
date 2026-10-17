@@ -413,6 +413,10 @@ class GPUProcessManager final : public GPUProcessHost::Listener {
   // the initial map is passed in command-line arguments) to be sent
   // when the process can receive IPC messages.
   nsTArray<mozilla::dom::Pref> mQueuedPrefs;
+  // Layer tree mappings removed while the process was launching. It may have
+  // been given them when it was initialized, so they are sent once the UI
+  // process's CompositorManagerChild for it is created.
+  nsTArray<std::pair<LayersId, base::ProcessId>> mQueuedUnmaps;
 };
 
 }  // namespace gfx
