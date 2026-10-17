@@ -344,24 +344,26 @@ void CompositorBridgeParent::StopAndClearResources() {
     mApzcTreeManager = nullptr;
   }
 
-  if (mWrBridge) {
-    // Ensure we are not holding the sIndirectLayerTreesLock when destroying
-    // the WebRenderBridgeParent instances because it may block on WR.
-    std::vector<RefPtr<WebRenderBridgeParent>> indirectBridgeParents;
-    {  // scope lock
-      StaticMonitorAutoLock lock(sIndirectLayerTreesLock);
-      ForEachIndirectLayerTree([&](LayerTreeState* lts, LayersId) -> void {
-        if (lts->mWrBridge) {
-          indirectBridgeParents.emplace_back(lts->mWrBridge.forget());
-        }
-        lts->mParent = nullptr;
-      });
-    }
-    for (const RefPtr<WebRenderBridgeParent>& bridge : indirectBridgeParents) {
-      bridge->Destroy();
-    }
-    indirectBridgeParents.clear();
+  // Detach the layer trees from this compositor even if WebRender was never
+  // set up, otherwise they would keep it alive.
+  // Ensure we are not holding the sIndirectLayerTreesLock when destroying
+  // the WebRenderBridgeParent instances because it may block on WR.
+  std::vector<RefPtr<WebRenderBridgeParent>> indirectBridgeParents;
+  {  // scope lock
+    StaticMonitorAutoLock lock(sIndirectLayerTreesLock);
+    ForEachIndirectLayerTree([&](LayerTreeState* lts, LayersId) -> void {
+      if (lts->mWrBridge) {
+        indirectBridgeParents.emplace_back(lts->mWrBridge.forget());
+      }
+      lts->mParent = nullptr;
+    });
+  }
+  for (const RefPtr<WebRenderBridgeParent>& bridge : indirectBridgeParents) {
+    bridge->Destroy();
+  }
+  indirectBridgeParents.clear();
 
+  if (mWrBridge) {
     RefPtr<wr::WebRenderAPI> api = mWrBridge->GetWebRenderAPI();
     // Only clear it if the entry still exists. By shutdown the entry for
     // mRootLayerTreeID may already have been erased, and inserting one here
