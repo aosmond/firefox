@@ -4264,3 +4264,7 @@ pref("general.smoothScroll", true, sticky);
 #if defined(MOZ_ARTIFACT_BUILDS) && defined(XP_MACOSX)
   pref("dom.ipc.processLaunch.useMacPlists", true);
 #endif
+
+// Compositor, layer tree and GPU process lifetime logging, for testing.
+pref("logging.LayerTree", 4);
+pref("logging.GPUProcess", 4);
