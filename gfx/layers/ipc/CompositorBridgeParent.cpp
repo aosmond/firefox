@@ -993,17 +993,38 @@ mozilla::ipc::IPCResult CompositorBridgeParent::RecvNotifyChildCreated(
 mozilla::ipc::IPCResult CompositorBridgeParent::RecvNotifyChildRecreated(
     const LayersId& aChild, const LayersId& aEmbedderId,
     CompositorOptions* aOptions) {
+  RefPtr<GeckoContentController> oldController;
+  RefPtr<WebRenderBridgeParent> oldWrBridge;
   {
     StaticMonitorAutoLock lock(sIndirectLayerTreesLock);
 
-    if (sIndirectLayerTrees.find(aChild) != sIndirectLayerTrees.end()) {
-      LAYERTREE_LOG("Layer tree {:x} cannot be recreated, it already exists",
+    if (LayerTreeState* state = GetLayerTreeStateUnderLock(aChild, lock)) {
+      if (state->mParent) {
+        LAYERTREE_LOG(
+            "Layer tree {:x} cannot be recreated, it is attached to root "
+            "layer tree {:x}",
+            aChild, state->mParent->mRootLayerTreeID);
+        NS_WARNING("Invalid to register the same layer tree twice");
+        return IPC_FAIL_NO_REASON(this);
+      }
+
+      // The compositor this layer tree was attached to has been destroyed.
+      // Drop the actors the content process created for it, as erasing the
+      // state would, so that it can create new ones.
+      LAYERTREE_LOG("Layer tree {:x} reclaimed from a destroyed compositor",
                     aChild);
-      NS_WARNING("Invalid to register the same layer tree twice");
-      return IPC_FAIL_NO_REASON(this);
+      oldController = std::move(state->mController);
+      oldWrBridge = std::move(state->mWrBridge);
+      state->mApzcTreeManagerParent = nullptr;
     }
 
     NotifyChildCreated(aChild, aEmbedderId, "NotifyChildRecreated");
+  }
+  if (oldController) {
+    oldController->Destroy();
+  }
+  if (oldWrBridge) {
+    oldWrBridge->Destroy();
   }
   RefreshEmbedPolicies(aEmbedderId, LayersId{});
   *aOptions = mOptions;
