@@ -402,6 +402,12 @@ class CompositorBridgeParent final : public CompositorBridgeParentBase {
 
   static void DisconnectApzcTreeManager(APZCTreeManagerParent* aTreeManager);
 
+  static void DisconnectContentCompositorBridge(
+      ContentCompositorBridgeParent* aBridge);
+
+  static void DisconnectContentController(LayersId aLayersId,
+                                          GeckoContentController* aController);
+
   /**
    * Returns the unique layer tree identifier that corresponds to the root
    * tree of this compositor.

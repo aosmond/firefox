@@ -945,9 +945,34 @@ void CompositorBridgeParent::DisconnectApzcTreeManager(
     return;
   }
 
+  // A content process may have replaced its tree manager since this one was
+  // created, so only clear our own.
   CompositorBridgeParent::LayerTreeState& state = iter->second;
-  MOZ_ASSERT(state.mApzcTreeManagerParent == aTreeManager);
-  state.mApzcTreeManagerParent = nullptr;
+  if (state.mApzcTreeManagerParent == aTreeManager) {
+    state.mApzcTreeManagerParent = nullptr;
+  }
+}
+
+void CompositorBridgeParent::DisconnectContentCompositorBridge(
+    ContentCompositorBridgeParent* aBridge) {
+  MOZ_ASSERT(CompositorThreadHolder::IsInCompositorThread());
+  StaticMonitorAutoLock lock(sIndirectLayerTreesLock);
+  for (auto& it : sIndirectLayerTrees) {
+    if (it.second.mContentCompositorBridgeParent == aBridge) {
+      it.second.mContentCompositorBridgeParent = nullptr;
+    }
+  }
+}
+
+void CompositorBridgeParent::DisconnectContentController(
+    LayersId aLayersId, GeckoContentController* aController) {
+  MOZ_ASSERT(CompositorThreadHolder::IsInCompositorThread());
+  RefPtr<GeckoContentController> controller;
+  CallWithLayerTreeState(aLayersId, [&](LayerTreeState& aState) {
+    if (aState.mController == aController) {
+      controller = std::move(aState.mController);
+    }
+  });
 }
 
 mozilla::ipc::IPCResult CompositorBridgeParent::RecvNotifyChildCreated(

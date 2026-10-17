@@ -536,6 +536,7 @@ void RemoteContentController::ActorDestroy(ActorDestroyReason aWhy) {
   // This controller could possibly be kept alive longer after this
   // by a RefPtr, but it is no longer valid to send messages.
   mCanSend = false;
+  CompositorBridgeParent::DisconnectContentController(mLayersId, this);
 }
 
 void RemoteContentController::Destroy() {

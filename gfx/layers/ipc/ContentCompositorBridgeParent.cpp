@@ -40,6 +40,7 @@ void ContentCompositorBridgeParent::ActorDestroy(ActorDestroyReason aWhy) {
   LAYERTREE_LOG("Compositor bridge for content {} destroyed, reason {}",
                 GetContentId(), fmt::enums::format_as(aWhy));
   mCanSend = false;
+  CompositorBridgeParent::DisconnectContentCompositorBridge(this);
 
   // We must keep this object alive untill the code handling message
   // reception is finished on this thread.
