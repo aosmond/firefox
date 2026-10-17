@@ -305,11 +305,10 @@ bool ContentCompositorBridgeParent::SetTestSampleTime(const LayersId& aId,
   MOZ_ASSERT(aId.IsValid());
   const CompositorBridgeParent::LayerTreeState* state =
       CompositorBridgeParent::GetLayerTreeState(aId);
-  if (!state) {
+  if (!state || !state->mParent) {
     return false;
   }
 
-  MOZ_ASSERT(state->mParent);
   return state->mParent->SetTestSampleTime(aId, aTime);
 }
 
@@ -317,11 +316,10 @@ void ContentCompositorBridgeParent::LeaveTestMode(const LayersId& aId) {
   MOZ_ASSERT(aId.IsValid());
   const CompositorBridgeParent::LayerTreeState* state =
       CompositorBridgeParent::GetLayerTreeState(aId);
-  if (!state) {
+  if (!state || !state->mParent) {
     return;
   }
 
-  MOZ_ASSERT(state->mParent);
   state->mParent->LeaveTestMode(aId);
 }
 
@@ -331,11 +329,10 @@ void ContentCompositorBridgeParent::SetTestAsyncScrollOffset(
   MOZ_ASSERT(aLayersId.IsValid());
   const CompositorBridgeParent::LayerTreeState* state =
       CompositorBridgeParent::GetLayerTreeState(aLayersId);
-  if (!state) {
+  if (!state || !state->mParent) {
     return;
   }
 
-  MOZ_ASSERT(state->mParent);
   state->mParent->SetTestAsyncScrollOffset(aLayersId, aScrollId, aPoint);
 }
 
@@ -345,11 +342,10 @@ void ContentCompositorBridgeParent::SetTestAsyncZoom(
   MOZ_ASSERT(aLayersId.IsValid());
   const CompositorBridgeParent::LayerTreeState* state =
       CompositorBridgeParent::GetLayerTreeState(aLayersId);
-  if (!state) {
+  if (!state || !state->mParent) {
     return;
   }
 
-  MOZ_ASSERT(state->mParent);
   state->mParent->SetTestAsyncZoom(aLayersId, aScrollId, aZoom);
 }
 
