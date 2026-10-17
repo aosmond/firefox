@@ -827,26 +827,27 @@ RemoteTextureMap::RegisterTxnScheduler(base::ProcessId aForPid,
   return scheduler.forget();
 }
 
-void RemoteTextureMap::UnregisterTxnScheduler(base::ProcessId aForPid,
-                                              RemoteTextureTxnType aType) {
+void RemoteTextureMap::UnregisterTxnScheduler(
+    RemoteTextureTxnScheduler* aScheduler) {
   MonitorAutoLock lock(mMonitor);
 
-  const auto key = std::pair(aForPid, aType);
+  // Once the last reference to aScheduler was dropped, RegisterTxnScheduler
+  // may have replaced its entry with a new scheduler, so only erase our own.
+  const auto key = std::pair(aScheduler->mForPid, aScheduler->mType);
   auto it = mTxnSchedulers.find(key);
-  if (it == mTxnSchedulers.end()) {
-    MOZ_ASSERT_UNREACHABLE("Remote texture txn scheduler does not exist.");
-    return;
+  if (it != mTxnSchedulers.end() && it->second == aScheduler) {
+    mTxnSchedulers.erase(it);
   }
-  mTxnSchedulers.erase(it);
 }
 
 already_AddRefed<RemoteTextureTxnScheduler> RemoteTextureTxnScheduler::Create(
-    mozilla::ipc::IProtocol* aProtocol) {
+    mozilla::ipc::IProtocol* aProtocol, RemoteTextureTxnType aType) {
+  MOZ_ASSERT(aType);
   if (auto* instance = RemoteTextureMap::Get()) {
     if (auto* toplevel = aProtocol->ToplevelProtocol()) {
       auto pid = toplevel->OtherPidMaybeInvalid();
       if (pid != base::kInvalidProcessId) {
-        return instance->RegisterTxnScheduler(pid, toplevel->GetProtocolId());
+        return instance->RegisterTxnScheduler(pid, aType);
       }
     }
   }
@@ -855,7 +856,7 @@ already_AddRefed<RemoteTextureTxnScheduler> RemoteTextureTxnScheduler::Create(
 
 RemoteTextureTxnScheduler::~RemoteTextureTxnScheduler() {
   NotifyTxn(std::numeric_limits<RemoteTextureTxnId>::max());
-  RemoteTextureMap::Get()->UnregisterTxnScheduler(mForPid, mType);
+  RemoteTextureMap::Get()->UnregisterTxnScheduler(this);
 }
 
 void RemoteTextureTxnScheduler::NotifyTxn(RemoteTextureTxnId aTxnId) {

@@ -348,8 +348,9 @@ WebRenderBridgeParent::WebRenderBridgeParent(
       " root %d",
       wr::AsUint64(mPipelineId), IsRootWebRenderBridgeParent());
 
-  mRemoteTextureTxnScheduler =
-      RemoteTextureTxnScheduler::Create(aCompositorBridge);
+  mRemoteTextureTxnScheduler = RemoteTextureTxnScheduler::Create(
+      aCompositorBridge,
+      aCompositorBridge->GetCompositorManager()->GetNamespace());
 }
 
 WebRenderBridgeParent::WebRenderBridgeParent(
@@ -376,8 +377,9 @@ WebRenderBridgeParent::WebRenderBridgeParent(
       IsRootWebRenderBridgeParent());
 
   mLateInit->mAsyncImageManager->AddPipeline(mPipelineId, this);
-  mRemoteTextureTxnScheduler =
-      RemoteTextureTxnScheduler::Create(aCompositorBridge);
+  mRemoteTextureTxnScheduler = RemoteTextureTxnScheduler::Create(
+      aCompositorBridge,
+      aCompositorBridge->GetCompositorManager()->GetNamespace());
 }
 
 WebRenderBridgeParent::WebRenderBridgeParent(const wr::PipelineId& aPipelineId,

@@ -205,7 +205,7 @@ CompositorManagerChild::CompositorManagerChild(uint64_t aProcessToken,
       mResourceId(0),
       mCanSend(false),
       mSameProcess(aSameProcess),
-      mFwdTransactionCounter(this) {}
+      mFwdTransactionCounter(this, aNamespace) {}
 
 void CompositorManagerChild::ActorDestroy(ActorDestroyReason aReason) {
   mCanSend = false;

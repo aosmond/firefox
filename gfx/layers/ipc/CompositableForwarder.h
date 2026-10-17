@@ -37,14 +37,18 @@ class TextureClient;
  * to avoid issues.
  */
 struct FwdTransactionCounter {
-  explicit FwdTransactionCounter(mozilla::ipc::IToplevelProtocol* aToplevel)
-      : mFwdTransactionType(aToplevel->GetProtocolId()) {}
+  FwdTransactionCounter(mozilla::ipc::IToplevelProtocol* aToplevel,
+                        uint32_t aNamespace)
+      : mFwdTransactionType(aNamespace) {
+    MOZ_ASSERT(aNamespace);
+  }
 
   /**
-   * The ID of the top-level protocol. This is useful to tag the source of
-   * the transaction numbers in case different sources must be disambiguated.
+   * The namespace of the top-level protocol. This tags the source of the
+   * transaction numbers, so that different sources, including a replacement
+   * for the same protocol, can be disambiguated.
    */
-  mozilla::ipc::ProtocolId mFwdTransactionType;
+  RemoteTextureTxnType mFwdTransactionType;
 
   /**
    * Transaction id of ShadowLayerForwarder.
@@ -77,8 +81,7 @@ class FwdTransactionTracker {
     mFwdTransactionId = aCounter.mFwdTransactionId;
   }
 
-  Atomic<mozilla::ipc::ProtocolId> mFwdTransactionType{
-      (mozilla::ipc::ProtocolId)0};
+  Atomic<RemoteTextureTxnType> mFwdTransactionType{0};
   Atomic<uint64_t> mFwdTransactionId{0};
 
  private:
@@ -88,7 +91,7 @@ class FwdTransactionTracker {
 
 inline RemoteTextureTxnType ToRemoteTextureTxnType(
     const RefPtr<FwdTransactionTracker>& aTracker) {
-  return aTracker ? (RemoteTextureTxnType)aTracker->mFwdTransactionType : 0;
+  return aTracker ? aTracker->mFwdTransactionType : 0;
 }
 
 inline RemoteTextureTxnId ToRemoteTextureTxnId(
@@ -172,7 +175,7 @@ class CompositableForwarder : public KnowsCompositor {
   uint64_t GetFwdTransactionId() {
     return GetFwdTransactionCounter().mFwdTransactionId;
   }
-  mozilla::ipc::ProtocolId GetFwdTransactionType() {
+  RemoteTextureTxnType GetFwdTransactionType() {
     return GetFwdTransactionCounter().mFwdTransactionType;
   }
 

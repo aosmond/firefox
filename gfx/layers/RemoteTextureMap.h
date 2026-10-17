@@ -170,8 +170,10 @@ class RemoteTextureTxnScheduler final
  public:
   MOZ_DECLARE_REFCOUNTED_TYPENAME(RemoteTextureTxnScheduler)
 
+  // aType must be the namespace of the top-level protocol that issues the
+  // transaction ids, matching its FwdTransactionCounter.
   static already_AddRefed<RemoteTextureTxnScheduler> Create(
-      mozilla::ipc::IProtocol* aProtocol);
+      mozilla::ipc::IProtocol* aProtocol, RemoteTextureTxnType aType);
 
   ~RemoteTextureTxnScheduler();
 
@@ -478,8 +480,7 @@ class RemoteTextureMap {
                  const RemoteTextureOwnerId aOwnerId,
                  const base::ProcessId aForPid);
 
-  void UnregisterTxnScheduler(base::ProcessId aForPid,
-                              RemoteTextureTxnType aType);
+  void UnregisterTxnScheduler(RemoteTextureTxnScheduler* aScheduler);
 
   Monitor mMonitor MOZ_UNANNOTATED{"RemoteTextureMap::mMonitor"};
 

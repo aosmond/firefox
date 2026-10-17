@@ -400,7 +400,8 @@ mozilla::ipc::IPCResult CompositorManagerParent::RecvInitCanvasManager(
     Endpoint<PCanvasManagerParent>&& aEndpoint) {
   gfx::CanvasManagerParent::Init(std::move(aEndpoint), mSharedSurfacesHolder,
                                  mContentId);
-  mRemoteTextureTxnScheduler = RemoteTextureTxnScheduler::Create(this);
+  mRemoteTextureTxnScheduler =
+      RemoteTextureTxnScheduler::Create(this, mNamespace);
   return IPC_OK();
 }
 

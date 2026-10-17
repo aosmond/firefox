@@ -73,7 +73,8 @@ ImageBridgeParent::ImageBridgeParent(nsISerialEventTarget* aThread,
       mCompositorThreadHolder(CompositorThreadHolder::GetSingleton()) {
   MOZ_ASSERT(NS_IsMainThread());
   SetOtherEndpointProcInfo(aChildProcessInfo);
-  mRemoteTextureTxnScheduler = RemoteTextureTxnScheduler::Create(this);
+  mRemoteTextureTxnScheduler =
+      RemoteTextureTxnScheduler::Create(this, mNamespace);
 }
 
 ImageBridgeParent::~ImageBridgeParent() = default;
