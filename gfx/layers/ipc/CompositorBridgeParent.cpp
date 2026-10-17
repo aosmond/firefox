@@ -635,10 +635,17 @@ void CompositorBridgeParent::SetAPZBridgeParent(
   MOZ_RELEASE_ASSERT(XRE_IsGPUProcess());
   MOZ_ASSERT(NS_IsMainThread());
   StaticMonitorAutoLock lock(CompositorBridgeParent::sIndirectLayerTreesLock);
-  CompositorBridgeParent::LayerTreeState& state =
-      EnsureLayerTreeStateUnderLock(aLayersId, lock);
-  MOZ_ASSERT(!state.mApzBridgeParent);
-  state.mApzBridgeParent = std::move(aApzBridgeParent);
+  // The root may already have been torn down, in which case there is nothing
+  // to attach to.
+  CompositorBridgeParent::LayerTreeState* state =
+      GetLayerTreeStateUnderLock(aLayersId, lock);
+  if (!state) {
+    LAYERTREE_LOG("APZ bridge for root layer tree {:x} has no layer tree state",
+                  aLayersId);
+    return;
+  }
+  MOZ_ASSERT(!state->mApzBridgeParent);
+  state->mApzBridgeParent = std::move(aApzBridgeParent);
 }
 
 already_AddRefed<APZCTreeManagerParent>
@@ -703,7 +710,8 @@ CompositorBridgeParent*
 CompositorBridgeParent::GetCompositorBridgeParentFromLayersId(
     const LayersId& aLayersId) {
   StaticMonitorAutoLock lock(sIndirectLayerTreesLock);
-  return EnsureLayerTreeStateUnderLock(aLayersId, lock).mParent;
+  LayerTreeState* state = GetLayerTreeStateUnderLock(aLayersId, lock);
+  return state ? state->mParent.get() : nullptr;
 }
 
 /*static*/
@@ -1314,7 +1322,10 @@ void CompositorBridgeParent::EnsureWebRenderBridgeParentInitialized() {
 
   {
     StaticMonitorAutoLock lock(sIndirectLayerTreesLock);
-    EnsureLayerTreeStateUnderLock(mRootLayerTreeID, lock).mWebRenderAPI = api;
+    if (LayerTreeState* state =
+            GetLayerTreeStateUnderLock(mRootLayerTreeID, lock)) {
+      state->mWebRenderAPI = api;
+    }
   }
 
   mWrBridge->FinishInitialization(std::move(api), std::move(asyncMgr));

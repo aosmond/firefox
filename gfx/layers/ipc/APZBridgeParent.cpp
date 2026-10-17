@@ -246,13 +246,11 @@ mozilla::ipc::IPCResult APZBridgeParent::RecvSetLongTapEnabled(
 }
 
 void APZBridgeParent::ActorDestroy(ActorDestroyReason aWhy) {
-  // EnsureLayerTreeStateUnderLock mirrors the previous sIndirectLayerTrees[]
-  // access (insert-or-get), so this stays a behavior-preserving translation.
-  CompositorBridgeParent::WithIndirectLayerTreesLock(
-      [&](const StaticMonitorAutoLock& aProofOfLock) {
-        CompositorBridgeParent::EnsureLayerTreeStateUnderLock(mLayersId,
-                                                              aProofOfLock)
-            .mApzBridgeParent = nullptr;
+  CompositorBridgeParent::CallWithLayerTreeState(
+      mLayersId, [&](CompositorBridgeParent::LayerTreeState& aState) {
+        if (aState.mApzBridgeParent == this) {
+          aState.mApzBridgeParent = nullptr;
+        }
       });
   // We shouldn't need it after this
   mTreeManager = nullptr;

@@ -62,14 +62,14 @@ ContentCompositorBridgeParent::AllocPAPZCTreeManagerParent(
   return CompositorBridgeParent::WithIndirectLayerTreesLock(
       [&](const StaticMonitorAutoLock& aProofOfLock)
           -> already_AddRefed<PAPZCTreeManagerParent> {
-        CompositorBridgeParent::LayerTreeState& state =
-            CompositorBridgeParent::EnsureLayerTreeStateUnderLock(aLayersId,
-                                                                  aProofOfLock);
+        CompositorBridgeParent::LayerTreeState* state =
+            CompositorBridgeParent::GetLayerTreeStateUnderLock(aLayersId,
+                                                               aProofOfLock);
 
         // If the widget has shutdown its compositor, we may not have had a
         // chance yet to unmap our layers id, and we could get here without a
         // parent compositor. In this case return an empty APZCTM.
-        if (!state.mParent) {
+        if (!state || !state->mParent) {
           LAYERTREE_LOG(
               "Layer tree {:x} for content {} has no parent compositor, "
               "using a dummy APZ tree manager",
@@ -87,12 +87,12 @@ ContentCompositorBridgeParent::AllocPAPZCTreeManagerParent(
         }
 
         // If we do not have APZ enabled, we should gracefully fail.
-        if (!state.mParent->GetOptions().UseAPZ()) {
+        if (!state->mParent->GetOptions().UseAPZ()) {
           return nullptr;
         }
 
-        return state.mParent->AllocateAPZCTreeManagerParent(aProofOfLock,
-                                                            aLayersId, state);
+        return state->mParent->AllocateAPZCTreeManagerParent(aProofOfLock,
+                                                             aLayersId, *state);
       });
 }
 
@@ -108,13 +108,22 @@ already_AddRefed<PAPZParent> ContentCompositorBridgeParent::AllocPAPZParent(
 
   CompositorBridgeParent::WithIndirectLayerTreesLock(
       [&](const StaticMonitorAutoLock& aProofOfLock) {
-        CompositorBridgeParent::LayerTreeState& state =
-            CompositorBridgeParent::EnsureLayerTreeStateUnderLock(aLayersId,
-                                                                  aProofOfLock);
+        // Only the parent process may create the layer tree state. Without it,
+        // the controller will never be used.
+        CompositorBridgeParent::LayerTreeState* state =
+            CompositorBridgeParent::GetLayerTreeStateUnderLock(aLayersId,
+                                                               aProofOfLock);
+        if (!state) {
+          LAYERTREE_LOG(
+              "APZ controller for layer tree {:x}, content {} has "
+              "no layer tree state",
+              aLayersId, GetContentId());
+          return;
+        }
         LAYERTREE_LOG("APZ controller created for layer tree {:x}, content {}",
                       aLayersId, GetContentId());
-        MOZ_ASSERT(!state.mController);
-        state.mController = controller;
+        MOZ_ASSERT(!state->mController);
+        state->mController = controller;
       });
 
   return controller.forget();
@@ -138,17 +147,21 @@ ContentCompositorBridgeParent::AllocPWebRenderBridgeParent(
 
   CompositorBridgeParent::WithIndirectLayerTreesLock(
       [&](const StaticMonitorAutoLock& aProofOfLock) {
-        MOZ_ASSERT(CompositorBridgeParent::GetLayerTreeStateUnderLock(
-            layersId, aProofOfLock));
-        CompositorBridgeParent::LayerTreeState& state =
-            CompositorBridgeParent::EnsureLayerTreeStateUnderLock(layersId,
-                                                                  aProofOfLock);
-        MOZ_ASSERT(state.mWrBridge == nullptr);
-        cbp = state.mParent;
+        CompositorBridgeParent::LayerTreeState* state =
+            CompositorBridgeParent::GetLayerTreeStateUnderLock(layersId,
+                                                               aProofOfLock);
+        MOZ_ASSERT(state);
+        if (!state) {
+          return;
+        }
+        MOZ_ASSERT(state->mWrBridge == nullptr);
+        cbp = state->mParent;
         if (cbp) {
-          root = CompositorBridgeParent::EnsureLayerTreeStateUnderLock(
-                     cbp->RootLayerTreeId(), aProofOfLock)
-                     .mWrBridge;
+          if (CompositorBridgeParent::LayerTreeState* rootState =
+                  CompositorBridgeParent::GetLayerTreeStateUnderLock(
+                      cbp->RootLayerTreeId(), aProofOfLock)) {
+            root = rootState->mWrBridge;
+          }
         }
       });
 
@@ -178,14 +191,27 @@ ContentCompositorBridgeParent::AllocPWebRenderBridgeParent(
       this, aPipelineId, root->CompositorScheduler(), std::move(api),
       std::move(holder), cbp->GetVsyncInterval());
 
-  CompositorBridgeParent::WithIndirectLayerTreesLock(
+  bool attached = CompositorBridgeParent::WithIndirectLayerTreesLock(
       [&](const StaticMonitorAutoLock& aProofOfLock) {
-        CompositorBridgeParent::LayerTreeState& state =
-            CompositorBridgeParent::EnsureLayerTreeStateUnderLock(layersId,
-                                                                  aProofOfLock);
-        state.mContentCompositorBridgeParent = this;
-        state.mWrBridge = parent;
+        CompositorBridgeParent::LayerTreeState* state =
+            CompositorBridgeParent::GetLayerTreeStateUnderLock(layersId,
+                                                               aProofOfLock);
+        if (!state) {
+          return false;
+        }
+        state->mContentCompositorBridgeParent = this;
+        state->mWrBridge = parent;
+        return true;
       });
+
+  if (!attached) {
+    LAYERTREE_LOG("Layer tree {:x} for content {} has no parent compositor",
+                  layersId, GetContentId());
+    parent->Destroy();
+    nsCString error("NO_PARENT");
+    return WebRenderBridgeParent::CreateDestroyed(aPipelineId,
+                                                  std::move(error));
+  }
 
   LAYERTREE_LOG("Layer tree {:x} for content {} connected to root {:x}",
                 layersId, GetContentId(), cbp->RootLayerTreeId());
@@ -248,11 +274,11 @@ ContentCompositorBridgeParent::RecvCheckAndClearWRDidRasterize(
   CompositorBridgeParent::WithIndirectLayerTreesLock(
       [&](const StaticMonitorAutoLock& aProofOfLock) {
         LayersId rootId = state->mParent->RootLayerTreeId();
-        const CompositorBridgeParent::LayerTreeState& rootState =
-            CompositorBridgeParent::EnsureLayerTreeStateUnderLock(rootId,
-                                                                  aProofOfLock);
-        if (rootState.mWrBridge) {
-          api = rootState.mWrBridge->GetWebRenderAPI();
+        const CompositorBridgeParent::LayerTreeState* rootState =
+            CompositorBridgeParent::GetLayerTreeStateUnderLock(rootId,
+                                                               aProofOfLock);
+        if (rootState && rootState->mWrBridge) {
+          api = rootState->mWrBridge->GetWebRenderAPI();
         }
       });
 
@@ -266,8 +292,9 @@ ContentCompositorBridgeParent::RecvCheckAndClearWRDidRasterize(
 void ContentCompositorBridgeParent::DidCompositeLocked(
     LayersId aId, const VsyncId& aVsyncId, TimeStamp& aCompositeStart,
     TimeStamp& aCompositeEnd, const StaticMonitorAutoLock& aProofOfLock) {
-  if (CompositorBridgeParent::EnsureLayerTreeStateUnderLock(aId, aProofOfLock)
-          .mWrBridge) {
+  const CompositorBridgeParent::LayerTreeState* state =
+      CompositorBridgeParent::GetLayerTreeStateUnderLock(aId, aProofOfLock);
+  if (state && state->mWrBridge) {
     MOZ_ASSERT(false);  // this should never get called for a WR compositor
   }
 }
