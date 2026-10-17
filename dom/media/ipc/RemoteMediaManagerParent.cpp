@@ -21,6 +21,7 @@
 #include "mozilla/ipc/Endpoint.h"
 #include "mozilla/ipc/UtilityProcessChild.h"
 #include "mozilla/layers/ImageDataSerializer.h"
+#include "mozilla/layers/LayerTreeLog.h"
 #include "mozilla/layers/VideoBridgeChild.h"
 #include "mozilla/layers/VideoBridgeParent.h"
 #include "nsIObserverService.h"
@@ -215,7 +216,9 @@ RemoteMediaManagerParent::~RemoteMediaManagerParent() {
 }
 
 void RemoteMediaManagerParent::ActorDestroy(
-    mozilla::ipc::IProtocol::ActorDestroyReason) {
+    mozilla::ipc::IProtocol::ActorDestroyReason aWhy) {
+  LAYERTREE_LOG("Remote media manager for content {} destroyed, reason {}",
+                mContentId, fmt::enums::format_as(aWhy));
   mThread = nullptr;
 }
 
@@ -293,6 +296,7 @@ void RemoteMediaManagerParent::Open(
     // We can't recover from this.
     MOZ_CRASH("Failed to bind RemoteMediaManagerParent to endpoint");
   }
+  LAYERTREE_LOG("Remote media manager bound, content {}", mContentId);
 }
 
 mozilla::ipc::IPCResult RemoteMediaManagerParent::RecvReadback(

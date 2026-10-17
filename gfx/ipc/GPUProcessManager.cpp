@@ -37,6 +37,7 @@
 #include "mozilla/layers/ImageBridgeChild.h"
 #include "mozilla/layers/ImageBridgeParent.h"
 #include "mozilla/layers/InProcessCompositorSession.h"
+#include "mozilla/layers/LayerTreeLog.h"
 #include "mozilla/layers/LayerTreeOwnerTracker.h"
 #include "mozilla/layers/RemoteCompositorSession.h"
 #include "mozilla/layers/VideoBridgeParent.h"
@@ -47,6 +48,7 @@
 #ifdef MOZ_WIDGET_SUPPORTS_OOP_COMPOSITING
 #  include "mozilla/widget/CompositorWidgetChild.h"
 #endif
+#include "GPUProcessLog.h"
 #include "VRManagerChild.h"
 #include "VRManagerParent.h"
 #include "VsyncBridgeChild.h"
@@ -76,6 +78,8 @@ namespace mozilla {
 namespace gfx {
 
 using namespace mozilla::layers;
+
+LazyLogModule gGPUProcessLog("GPUProcess");
 
 static StaticAutoPtr<GPUProcessManager> sSingleton;
 
@@ -284,6 +288,8 @@ nsresult GPUProcessManager::LaunchGPUProcess() {
   geckoargs::ChildProcessArgs extraArgs;
   ipc::ProcessChild::AddPlatformBuildID(extraArgs);
 
+  GPUPROCESS_LOG("Launching GPU process, attempt {}", mTotalProcessAttempts);
+
   // The subprocess is launched asynchronously, so we wait for a callback to
   // acquire the IPDL actor.
   mProcess = new GPUProcessHost(this);
@@ -345,6 +351,7 @@ bool GPUProcessManager::MaybeDisableGPUProcess(const char* aMessage,
     MOZ_ASSERT(!gfxConfig::IsEnabled(Feature::GPU_PROCESS));
 
     gfxCriticalNote << aMessage;
+    GPUPROCESS_LOG("Disabling GPU process: {}", aMessage);
 
     gfxPlatform::DisableGPUProcess();
 
@@ -595,6 +602,8 @@ void GPUProcessManager::OnProcessLaunchComplete(GPUProcessHost* aHost) {
   if (NS_WARN_IF(!mProcess->IsConnected()) || NS_WARN_IF(!gpuChild) ||
       NS_WARN_IF(!gpuChild->EnsureGPUReady())) {
     ++mLaunchProcessAttempts;
+    GPUPROCESS_LOG("GPU process failed to launch, attempt {}",
+                   mLaunchProcessAttempts);
     if (mLaunchProcessAttempts >
         uint32_t(StaticPrefs::layers_gpu_process_max_launch_attempts())) {
       char disableMessage[64];
@@ -611,6 +620,8 @@ void GPUProcessManager::OnProcessLaunchComplete(GPUProcessHost* aHost) {
   mLaunchProcessAttempts = 0;
   mGPUChild = gpuChild;
   mProcessToken = mProcess->GetProcessToken();
+  GPUPROCESS_LOG("GPU process {} launched, pid {}", mProcessToken,
+                 mGPUChild->OtherPid());
 #if defined(XP_WIN)
   if (mAppInForeground) {
     SetProcessIsForeground();
@@ -755,6 +766,8 @@ void GPUProcessManager::DisableWebRenderConfig(wr::WebRenderError aError,
 
     // Disable WebRender
     wantRestart = FallbackFromAcceleration(aError, aMsg);
+    GPUPROCESS_LOG("Falling back from WebRender, error {}, want GPU process {}",
+                   fmt::enums::format_as(aError), wantRestart);
     gfxVars::SetUseWebRenderDCompVideoHwOverlayWin(false);
     gfxVars::SetUseWebRenderDCompVideoSwOverlayWin(false);
   }
@@ -911,6 +924,9 @@ void GPUProcessManager::OnInProcessDeviceReset(DeviceResetReason aReason,
       break;
   }
 
+  GPUPROCESS_LOG("Device reset in parent process, reason {} place {}",
+                 fmt::enums::format_as(aReason), fmt::enums::format_as(aPlace));
+
   if (OnDeviceReset(guilty)) {
     gfxCriticalNoteOnce << "In-process device reset threshold exceeded";
 #ifdef MOZ_WIDGET_GTK
@@ -932,6 +948,9 @@ void GPUProcessManager::OnRemoteProcessDeviceReset(
     const DeviceResetDetectPlace& aPlace) {
   gfxCriticalNote << "Detect DeviceReset " << aReason << " " << aPlace
                   << " in GPU process";
+  GPUPROCESS_LOG("Device reset in GPU process {}, reason {} place {}",
+                 mProcessToken, fmt::enums::format_as(aReason),
+                 fmt::enums::format_as(aPlace));
 
   if (OnDeviceReset(/* aTrackThreshold */ true)) {
     // If we have a stable GPU process, this may just be due to an OOM or bad
@@ -939,6 +958,7 @@ void GPUProcessManager::OnRemoteProcessDeviceReset(
     // to hopefully alleviate the situation.
     if (mProcess && (IsProcessStable(TimeStamp::Now()) ||
                      (kIsAndroid && !mAppInForeground))) {
+      GPUPROCESS_LOG("Too many device resets, restarting GPU process");
       mProcess->KillProcess(/* aGenerateMinidump */ false);
       mLastError = Some(wr::WebRenderError::EXCESSIVE_RESETS);
       mLastErrorMsg = Some(""_ns);
@@ -967,6 +987,8 @@ void GPUProcessManager::OnProcessUnexpectedShutdown(GPUProcessHost* aHost) {
     MOZ_CRASH("GPU process crashed and pref is set to crash the browser.");
   }
 
+  GPUPROCESS_LOG("GPU process {} shut down unexpectedly",
+                 aHost->GetProcessToken());
   CompositorManagerChild::OnGPUProcessLost(aHost->GetProcessToken());
   DestroyProcess(/* aUnexpectedShutdown */ true);
 
@@ -1096,6 +1118,12 @@ void GPUProcessManager::HandleProcessLost() {
   java::SurfaceControlManager::GetInstance()->OnGpuProcessLoss();
 #endif
 
+  GPUPROCESS_LOG(
+      "Handling GPU process loss, GPU process {}, app in "
+      "foreground {}",
+      gfxConfig::IsEnabled(Feature::GPU_PROCESS) ? "enabled" : "disabled",
+      mAppInForeground);
+
   // Re-launch the process if immediately if the GPU process is still enabled.
   // Except on Android if the app is in the background, where we want to wait
   // until the app is in the foreground again.
@@ -1119,6 +1147,7 @@ void GPUProcessManager::ReinitializeRendering() {
   // Notify content. This will ensure that each content process re-establishes
   // a connection to the compositor thread (whether it's in-process or in a
   // newly launched GPU process).
+  GPUPROCESS_LOG("Reinitializing rendering, GPU process {}", mProcessToken);
   nsTArray<RefPtr<GPUProcessListener>> listeners;
   listeners.AppendElements(mListeners);
   // Make sure any fallback renderers get destroyed first.
@@ -1188,6 +1217,9 @@ void GPUProcessManager::NotifyRemoteActorDestroyed(
     return;
   }
 
+  GPUPROCESS_LOG("Actor for GPU process {} destroyed before PGPU",
+                 aProcessToken);
+
   // One of the bridged top-level actors for the GPU process has been
   // prematurely terminated, and we're receiving a notification. This
   // can happen if the ActorDestroy for a bridged protocol fires
@@ -1233,6 +1265,7 @@ void GPUProcessManager::DestroyProcess(bool aUnexpectedShutdown) {
     return;
   }
 
+  GPUPROCESS_LOG("Destroying GPU process {}", mProcessToken);
   mProcess->Shutdown(aUnexpectedShutdown);
   mProcessToken = 0;
   mProcess = nullptr;
@@ -1290,6 +1323,9 @@ already_AddRefed<CompositorSession> GPUProcessManager::CreateTopLevelCompositor(
         aWidget, layerTreeId, aScale, aOptions, aUseExternalSurfaceSize,
         aSurfaceSize, AllocateNamespace(), aInnerWindowId);
   }
+
+  LAYERTREE_LOG("Created {} compositor for root layer tree {:x}",
+                mGPUChild ? "remote" : "in-process", layerTreeId);
 
 #if defined(MOZ_WIDGET_ANDROID)
   if (session) {
@@ -1392,11 +1428,19 @@ bool GPUProcessManager::CreateContentBridges(
                                 aOutImageBridge) ||
       !CreateContentVRManager(aOtherProcess, aChildId, vrManagerNamespace,
                               aOutVRBridge)) {
+    LAYERTREE_LOG("Failed to create compositor bridges for content {}",
+                  aChildId);
     return false;
   }
   // RemoteMediaManager is only supported in the GPU process, so we allow this
   // to be fallible.
   CreateContentRemoteMediaManager(aOtherProcess, aChildId, aOutVideoManager);
+
+  LAYERTREE_LOG(
+      "Created {} compositor bridges for content {}, compositor manager "
+      "namespace {}, compositor bridge namespace {}",
+      mGPUChild ? "remote" : "in-process", aChildId, compositorManagerNamespace,
+      compositorBridgeNamespace);
 
   // The order of the outparam namespaces must be kept in sync with
   // ContentChild::RecvInitRendering and ContentChild::RecvReinitRendering.
@@ -1675,6 +1719,9 @@ bool GPUProcessManager::AllocateAndConnectLayerTreeId(
 
   LayersId layersId = AllocateLayerTreeId();
   *aOutLayersId = layersId;
+  LAYERTREE_LOG("Allocated layer tree {:x} for pid {}, embedder {:x}, {}",
+                layersId, aOtherPid, aEmbedderLayersId,
+                aCompositorBridge ? "with compositor" : "without compositor");
 
   // We always map the layer ID in the parent process so that we can recover
   // from GPU process crashes. In that case, the tree will be shared with the

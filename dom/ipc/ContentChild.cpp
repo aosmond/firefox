@@ -114,6 +114,7 @@
 #include "mozilla/layers/CompositorManagerChild.h"
 #include "mozilla/layers/ContentProcessController.h"
 #include "mozilla/layers/ImageBridgeChild.h"
+#include "mozilla/layers/LayerTreeLog.h"
 #include "mozilla/layout/RemotePrintJobChild.h"
 #include "mozilla/loader/ScriptCacheActors.h"
 #include "mozilla/media/MediaChild.h"
@@ -1598,6 +1599,8 @@ mozilla::ipc::IPCResult ContentChild::RecvInitRendering(
     Endpoint<PRemoteMediaManagerChild>&& aVideoManager,
     nsTArray<uint32_t>&& namespaces) {
   MOZ_ASSERT(namespaces.Length() == 4);
+  LAYERTREE_LOG("Initializing rendering, compositor manager namespace {}",
+                namespaces[0]);
   const uint32_t compositorManagerNamespace = namespaces[0];
   const uint32_t compositorBridgeNamespace = namespaces[1];
   const uint32_t imageBridgeNamespace = namespaces[2];
@@ -1647,6 +1650,8 @@ mozilla::ipc::IPCResult ContentChild::RecvReinitRendering(
     Endpoint<PRemoteMediaManagerChild>&& aVideoManager,
     nsTArray<uint32_t>&& namespaces) {
   MOZ_ASSERT(namespaces.Length() == 4);
+  LAYERTREE_LOG("Reinitializing rendering, compositor manager namespace {}",
+                namespaces[0]);
   const uint32_t compositorManagerNamespace = namespaces[0];
   const uint32_t compositorBridgeNamespace = namespaces[1];
   const uint32_t imageBridgeNamespace = namespaces[2];
@@ -1695,6 +1700,7 @@ mozilla::ipc::IPCResult ContentChild::RecvReinitRendering(
 }
 
 mozilla::ipc::IPCResult ContentChild::RecvReinitRenderingForDeviceReset() {
+  LAYERTREE_LOG("Reinitializing rendering for device reset");
   gfxPlatform::GetPlatform()->CompositorUpdated();
 
   nsTArray<RefPtr<BrowserChild>> tabs = BrowserChild::GetAll();

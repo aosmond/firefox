@@ -379,7 +379,9 @@ class CompositorBridgeParent final : public CompositorBridgeParentBase {
   void ForceIsFirstPaint();
 
   // Returns the embedder aChild had before, if any.
-  LayersId NotifyChildCreated(LayersId aChild, LayersId aEmbedderId);
+  // aMessage names the message that attached the layer tree, for logging.
+  LayersId NotifyChildCreated(LayersId aChild, LayersId aEmbedderId,
+                              const char* aMessage);
 
   // Sends the embed policies of aNewEmbedder and aOldEmbedder to WebRender
   // after one of their children was added or moved between them.

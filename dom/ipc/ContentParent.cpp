@@ -175,6 +175,7 @@
 #include "mozilla/ipc/UtilityProcessManager.h"
 #include "mozilla/layers/CompositorThread.h"
 #include "mozilla/layers/ImageBridgeParent.h"
+#include "mozilla/layers/LayerTreeLog.h"
 #include "mozilla/layers/LayerTreeOwnerTracker.h"
 #include "mozilla/layers/PAPZParent.h"
 #include "mozilla/loader/ScriptCacheActors.h"
@@ -3138,6 +3139,8 @@ void ContentParent::OnCompositorUnexpectedShutdown() {
 }
 
 void ContentParent::OnCompositorDeviceReset() {
+  LAYERTREE_LOG("Device reset, reinitializing rendering for content {}",
+                ChildID());
   (void)SendReinitRenderingForDeviceReset();
 }
 

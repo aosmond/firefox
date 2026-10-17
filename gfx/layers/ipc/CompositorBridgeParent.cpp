@@ -50,6 +50,7 @@
 #include "mozilla/layers/FrameUniformityData.h"
 #include "mozilla/layers/GeckoContentController.h"
 #include "mozilla/layers/ImageBridgeParent.h"
+#include "mozilla/layers/LayerTreeLog.h"
 #include "mozilla/layers/LayerTreeOwnerTracker.h"
 #include "mozilla/layers/LayersTypes.h"
 #include "mozilla/layers/OMTASampler.h"
@@ -257,6 +258,8 @@ mozilla::ipc::IPCResult CompositorBridgeParent::RecvInitialize(
   MOZ_ASSERT(XRE_IsGPUProcess());
 
   mRootLayerTreeID = aRootLayerTreeId;
+  LAYERTREE_LOG("Widget compositor for root layer tree {:x} initialized",
+                mRootLayerTreeID);
 #ifdef XP_WIN
   // headless mode is probably always same-process; but just in case...
   if (widget::WinCompositorWidget* windows = mWidget->AsWindows()) {
@@ -405,6 +408,8 @@ void CompositorBridgeParent::StopAndClearResources() {
 }
 
 mozilla::ipc::IPCResult CompositorBridgeParent::RecvWillClose() {
+  LAYERTREE_LOG("Closing widget compositor for root layer tree {:x}",
+                mRootLayerTreeID);
   StopAndClearResources();
   // Once we get the WillClose message, the client side is going to go away
   // soon and we can't be guaranteed that sending messages will work.
@@ -418,6 +423,8 @@ void CompositorBridgeParent::DeferredDestroy() {
 }
 
 mozilla::ipc::IPCResult CompositorBridgeParent::RecvPause() {
+  LAYERTREE_LOG("Widget paused compositor for root layer tree {:x}",
+                mRootLayerTreeID);
   PauseComposition();
   return IPC_OK();
 }
@@ -432,12 +439,16 @@ mozilla::ipc::IPCResult CompositorBridgeParent::RecvRequestFxrOutput() {
 }
 
 mozilla::ipc::IPCResult CompositorBridgeParent::RecvResume() {
-  ResumeComposition();
+  bool resumed = ResumeComposition();
+  LAYERTREE_LOG("Widget resumed compositor for root layer tree {:x}: {}",
+                mRootLayerTreeID, resumed);
   return IPC_OK();
 }
 
 mozilla::ipc::IPCResult CompositorBridgeParent::RecvResumeAsync() {
-  ResumeComposition();
+  bool resumed = ResumeComposition();
+  LAYERTREE_LOG("Widget resumed compositor for root layer tree {:x}: {}",
+                mRootLayerTreeID, resumed);
   return IPC_OK();
 }
 
@@ -496,6 +507,9 @@ mozilla::ipc::IPCResult CompositorBridgeParent::RecvStopFrameTimeRecording(
 }
 
 void CompositorBridgeParent::ActorDestroy(ActorDestroyReason why) {
+  LAYERTREE_LOG(
+      "Widget compositor for root layer tree {:x} destroyed, reason {}",
+      mRootLayerTreeID, fmt::enums::format_as(why));
   mCanSend = false;
 
   StopAndClearResources();
@@ -934,7 +948,7 @@ mozilla::ipc::IPCResult CompositorBridgeParent::RecvNotifyChildCreated(
   LayersId oldEmbedder;
   {
     StaticMonitorAutoLock lock(sIndirectLayerTreesLock);
-    oldEmbedder = NotifyChildCreated(aChild, aEmbedderId);
+    oldEmbedder = NotifyChildCreated(aChild, aEmbedderId, "NotifyChildCreated");
   }
   RefreshEmbedPolicies(aEmbedderId, oldEmbedder);
   *aOptions = mOptions;
@@ -948,11 +962,13 @@ mozilla::ipc::IPCResult CompositorBridgeParent::RecvNotifyChildRecreated(
     StaticMonitorAutoLock lock(sIndirectLayerTreesLock);
 
     if (sIndirectLayerTrees.find(aChild) != sIndirectLayerTrees.end()) {
+      LAYERTREE_LOG("Layer tree {:x} cannot be recreated, it already exists",
+                    aChild);
       NS_WARNING("Invalid to register the same layer tree twice");
       return IPC_FAIL_NO_REASON(this);
     }
 
-    NotifyChildCreated(aChild, aEmbedderId);
+    NotifyChildCreated(aChild, aEmbedderId, "NotifyChildRecreated");
   }
   RefreshEmbedPolicies(aEmbedderId, LayersId{});
   *aOptions = mOptions;
@@ -960,10 +976,14 @@ mozilla::ipc::IPCResult CompositorBridgeParent::RecvNotifyChildRecreated(
 }
 
 LayersId CompositorBridgeParent::NotifyChildCreated(LayersId aChild,
-                                                    LayersId aEmbedderId) {
+                                                    LayersId aEmbedderId,
+                                                    const char* aMessage) {
   sIndirectLayerTreesLock.AssertCurrentThreadOwns();
   LayerTreeState& state = sIndirectLayerTrees.try_emplace(aChild).first->second;
   LayersId oldEmbedder = state.mEmbedderLayersId;
+  LAYERTREE_LOG(
+      "Layer tree {:x} attached to root layer tree {:x} by {}, embedder {:x}",
+      aChild, mRootLayerTreeID, aMessage, aEmbedderId);
   state.mParent = this;
   state.mEmbedderLayersId = aEmbedderId;
   return oldEmbedder;
@@ -1020,7 +1040,8 @@ mozilla::ipc::IPCResult CompositorBridgeParent::RecvMapAndNotifyChildCreated(
   LayersId oldEmbedder;
   {
     StaticMonitorAutoLock lock(sIndirectLayerTreesLock);
-    oldEmbedder = NotifyChildCreated(aChild, aEmbedderId);
+    oldEmbedder =
+        NotifyChildCreated(aChild, aEmbedderId, "MapAndNotifyChildCreated");
   }
   RefreshEmbedPolicies(aEmbedderId, oldEmbedder);
   *aOptions = mOptions;
@@ -1092,6 +1113,9 @@ mozilla::ipc::IPCResult CompositorBridgeParent::RecvAdoptChild(
           break;
         }
       }
+      LAYERTREE_LOG("Layer tree {:x} moving from root layer tree {:x} to {:x}",
+                    child, childState.mParent->mRootLayerTreeID,
+                    mRootLayerTreeID);
       oldApzUpdater = childState.mParent->mApzUpdater;
     }
     if (mWrBridge) {
@@ -1119,7 +1143,7 @@ mozilla::ipc::IPCResult CompositorBridgeParent::RecvAdoptChild(
     StaticMonitorAutoLock lock(sIndirectLayerTreesLock);
     // Update sIndirectLayerTrees[child].mParent after
     // WebRenderBridgeParent::UpdateWebRender().
-    oldEmbedder = NotifyChildCreated(child, embedderId);
+    oldEmbedder = NotifyChildCreated(child, embedderId, "AdoptChild");
   }
   RefreshEmbedPolicies(embedderId, oldEmbedder);
 
@@ -1457,6 +1481,7 @@ void EraseLayerState(LayersId aId) {
             apz = parent->GetAPZUpdater();
           }
           wrBridge = state->mWrBridge;
+          LAYERTREE_LOG("Erasing layer tree {:x}", aId);
           CompositorBridgeParent::EraseLayerTreeStateUnderLock(aId, aProof);
         }
       });
