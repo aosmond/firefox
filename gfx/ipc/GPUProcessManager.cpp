@@ -1430,6 +1430,14 @@ bool GPUProcessManager::CreateContentBridges(
     ipc::Endpoint<PVRManagerChild>* aOutVRBridge,
     ipc::Endpoint<PRemoteMediaManagerChild>* aOutVideoManager,
     dom::ContentParentId aChildId, nsTArray<uint32_t>* aNamespaces) {
+  // Setting up the protocols may disable the GPU process, so do it before
+  // creating any of the bridges, so that they all go to the same process.
+  if (!EnsureProtocolsReady()) {
+    LAYERTREE_LOG("Failed to create compositor bridges for content {}",
+                  aChildId);
+    return false;
+  }
+
   const uint32_t compositorManagerNamespace = AllocateNamespace();
   const uint32_t compositorBridgeNamespace = AllocateNamespace();
   const uint32_t imageBridgeNamespace = AllocateNamespace();
