@@ -437,15 +437,6 @@ bool RenderCompositorANGLE::BeginFrame() {
     return false;
   }
 
-  if (RenderThread::Get()->SyncObjectNeeded() && mSyncObject) {
-    if (!mSyncObject->Synchronize(/* aFallible */ true)) {
-      // It's timeout or other error. Handle the device-reset here.
-      RenderThread::Get()->HandleDeviceReset(
-          gfx::DeviceResetDetectPlace::WR_SYNC_OBJRCT,
-          gfx::DeviceResetReason::UNKNOWN);
-      return false;
-    }
-  }
   return true;
 }
 
