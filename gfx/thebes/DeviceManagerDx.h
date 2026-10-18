@@ -73,6 +73,10 @@ class DeviceManagerDx final {
 
   unsigned GetCompositorFeatureLevel() const;
   bool TextureSharingWorks();
+  // These return Nothing() until the compositor device status is known.
+  Maybe<bool> CompositorDeviceSupportsVideo();
+  Maybe<bool> CompositorDeviceSupportsFences();
+  Maybe<uint32_t> GetCompositorAdapterVendorId();
   bool IsWARP();
   bool IsWARPLocked() MOZ_REQUIRES(mDeviceLock);
   bool CanUseNV12();
@@ -217,7 +221,6 @@ class DeviceManagerDx final {
       MOZ_GUARDED_BY(mDeviceLock);
   RefPtr<layers::DeviceAttachmentsD3D11> mCompositorAttachments
       MOZ_GUARDED_BY(mDeviceLock);
-  bool mCompositorDeviceSupportsVideo MOZ_GUARDED_BY(mDeviceLock);
   bool mSupportsDCompositionTexture MOZ_GUARDED_BY(mDeviceLock);
   Maybe<D3D11DeviceStatus> mDeviceStatus MOZ_GUARDED_BY(mDeviceLock);
   Maybe<DeviceResetReason> mDeviceResetReason MOZ_GUARDED_BY(mDeviceLock);

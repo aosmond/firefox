@@ -21,6 +21,7 @@
 #include "mozilla/layers/CompositorBridgeChild.h"
 #include "mozilla/layers/CompositorThread.h"
 #include "mozilla/layers/DeviceAttachmentsD3D11.h"
+#include "mozilla/layers/FenceD3D11.h"
 #include "nsPrintfCString.h"
 #include "nsString.h"
 
@@ -65,7 +66,6 @@ void DeviceManagerDx::Shutdown() { sInstance = nullptr; }
 
 DeviceManagerDx::DeviceManagerDx()
     : mDeviceLock("gfxWindowsPlatform.mDeviceLock"),
-      mCompositorDeviceSupportsVideo(false),
       mSupportsDCompositionTexture(false) {
   // Set up the D3D11 feature levels we can ask for.
   mFeatureLevels.AppendElement(D3D_FEATURE_LEVEL_11_1);
@@ -928,14 +928,13 @@ void DeviceManagerDx::CreateCompositorDevice(FeatureState& d3d11) {
   }
 
   RefPtr<ID3D11Device> device;
+  bool supportsVideo = true;
   if (!CreateCompositorDeviceHelper(d3d11, adapter, true, device)) {
     // Try again without video support and record that it failed.
-    mCompositorDeviceSupportsVideo = false;
+    supportsVideo = false;
     if (!CreateCompositorDeviceHelper(d3d11, adapter, false, device)) {
       return;
     }
-  } else {
-    mCompositorDeviceSupportsVideo = true;
   }
 
   // Only test this when not using WARP since it can fail and cause
@@ -986,7 +985,8 @@ void DeviceManagerDx::CreateCompositorDevice(FeatureState& d3d11) {
   int32_t sequenceNumber = GetNextDeviceCounter();
   mDeviceStatus = Some(D3D11DeviceStatus(
       false, textureSharingWorks, featureLevel, DxgiAdapterDesc::From(desc),
-      sequenceNumber, formatOptions));
+      sequenceNumber, formatOptions, supportsVideo,
+      layers::FenceD3D11::IsSupportedByDevice(device)));
   mCompositorDevice->SetExceptionMode(0);
 }
 
@@ -1089,7 +1089,8 @@ void DeviceManagerDx::CreateWARPCompositorDevice() {
   int32_t sequenceNumber = GetNextDeviceCounter();
   mDeviceStatus = Some(D3D11DeviceStatus(
       true, textureSharingWorks, featureLevel, DxgiAdapterDesc::From(desc),
-      sequenceNumber, formatOptions));
+      sequenceNumber, formatOptions, /* supportsVideo */ false,
+      layers::FenceD3D11::IsSupportedByDevice(device)));
   mCompositorDevice->SetExceptionMode(0);
 
   reporterWARP.SetSuccessful();
@@ -1161,19 +1162,11 @@ RefPtr<ID3D11Device> DeviceManagerDx::CreateDecoderDevice(
     return nullptr;
   }
 
-  bool isAMD = mDeviceStatus->adapter().VendorId == 0x1002;
-  bool reuseDevice = false;
-  if (gfxVars::ReuseDecoderDevice()) {
-    reuseDevice = true;
-  } else if (isAMD) {
-    reuseDevice = true;
-    gfxCriticalNoteOnce << "Always have to reuse decoder device on AMD";
-  }
-
+  const bool reuseDevice = gfxVars::ReuseDecoderDevice();
   if (reuseDevice) {
     // Use mCompositorDevice for decoder device only for hardware WebRender.
     if (aFlags.contains(DeviceFlag::isHardwareWebRenderInUse) &&
-        mCompositorDevice && mCompositorDeviceSupportsVideo &&
+        mCompositorDevice && mDeviceStatus->supportsVideo() &&
         !mDecoderDevice) {
       mDecoderDevice = mCompositorDevice;
 
@@ -1540,6 +1533,30 @@ bool DeviceManagerDx::TextureSharingWorks() {
     return false;
   }
   return mDeviceStatus->textureSharingWorks();
+}
+
+Maybe<bool> DeviceManagerDx::CompositorDeviceSupportsVideo() {
+  MutexAutoLock lock(mDeviceLock);
+  if (!mDeviceStatus) {
+    return Nothing();
+  }
+  return Some(mDeviceStatus->supportsVideo());
+}
+
+Maybe<bool> DeviceManagerDx::CompositorDeviceSupportsFences() {
+  MutexAutoLock lock(mDeviceLock);
+  if (!mDeviceStatus) {
+    return Nothing();
+  }
+  return Some(mDeviceStatus->supportsFences());
+}
+
+Maybe<uint32_t> DeviceManagerDx::GetCompositorAdapterVendorId() {
+  MutexAutoLock lock(mDeviceLock);
+  if (!mDeviceStatus) {
+    return Nothing();
+  }
+  return Some(mDeviceStatus->adapter().VendorId);
 }
 
 bool DeviceManagerDx::CanInitializeKeyedMutexTextures() {
