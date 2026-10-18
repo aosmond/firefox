@@ -7839,14 +7839,14 @@
 # Disable reuse decoder device even when it is required, e.g. on AMD.
 - name: gfx.direct3d11.reuse-decoder-device-force-disabled
   type: bool
-  value: false
+  value: true
   mirror: once
 
 # Whether to use D3D11 fences for D3D11 textures when the device supports them.
 # This does not affect fences created by WebGPU or DirectComposition.
 - name: gfx.direct3d11.fences-enabled
   type: bool
-  value: true
+  value: false
   mirror: once
 
 - name: gfx.direct3d11.allow-keyed-mutex
