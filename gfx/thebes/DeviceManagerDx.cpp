@@ -22,6 +22,7 @@
 #include "mozilla/layers/CompositorThread.h"
 #include "mozilla/layers/DeviceAttachmentsD3D11.h"
 #include "mozilla/layers/FenceD3D11.h"
+#include "mozilla/layers/SyncObject.h"
 #include "nsPrintfCString.h"
 #include "nsString.h"
 
@@ -981,6 +982,7 @@ void DeviceManagerDx::CreateCompositorDevice(FeatureState& d3d11) {
   uint32_t featureLevel = device->GetFeatureLevel();
   auto formatOptions = D3D11Checks::FormatOptions(device);
   mCompositorDevice = device;
+  CreateCompositorSyncObject();
 
   int32_t sequenceNumber = GetNextDeviceCounter();
   mDeviceStatus = Some(D3D11DeviceStatus(
@@ -1085,6 +1087,7 @@ void DeviceManagerDx::CreateWARPCompositorDevice() {
 
   auto formatOptions = D3D11Checks::FormatOptions(device);
   mCompositorDevice = device;
+  CreateCompositorSyncObject();
 
   int32_t sequenceNumber = GetNextDeviceCounter();
   mDeviceStatus = Some(D3D11DeviceStatus(
@@ -1287,6 +1290,7 @@ void DeviceManagerDx::ResetDevices() {
 void DeviceManagerDx::ResetDevicesLocked() {
   mAdapter = nullptr;
   mCompositorAttachments = nullptr;
+  mCompositorSyncObject = nullptr;
   mCompositorDevice = nullptr;
   mContentDevice = nullptr;
   mCanvasDevice = nullptr;
@@ -1618,6 +1622,7 @@ void DeviceManagerDx::GetCompositorDevices(
     RefPtr<ID3D11Device>* aOutDevice,
     RefPtr<layers::DeviceAttachmentsD3D11>* aOutAttachments) {
   RefPtr<ID3D11Device> device;
+  RefPtr<layers::SyncObjectHost> syncObject;
   {
     MutexAutoLock lock(mDeviceLock);
     if (!mCompositorDevice) {
@@ -1631,12 +1636,13 @@ void DeviceManagerDx::GetCompositorDevices(
 
     // Otherwise, we'll try to create attachments outside the lock.
     device = mCompositorDevice;
+    syncObject = mCompositorSyncObject;
   }
 
   // We save the attachments object even if it fails to initialize, so the
   // compositor can grab the failure ID.
   RefPtr<layers::DeviceAttachmentsD3D11> attachments =
-      layers::DeviceAttachmentsD3D11::Create(device);
+      layers::DeviceAttachmentsD3D11::Create(device, syncObject);
   {
     MutexAutoLock lock(mDeviceLock);
     if (device != mCompositorDevice) {
@@ -1647,6 +1653,27 @@ void DeviceManagerDx::GetCompositorDevices(
 
   *aOutDevice = device;
   *aOutAttachments = attachments;
+}
+
+void DeviceManagerDx::GetCompositorDeviceAndSyncObject(
+    RefPtr<ID3D11Device>* aOutDevice,
+    RefPtr<layers::SyncObjectHost>* aOutSyncObject) {
+  MutexAutoLock lock(mDeviceLock);
+  *aOutDevice = mCompositorDevice;
+  *aOutSyncObject = mCompositorSyncObject;
+}
+
+void DeviceManagerDx::CreateCompositorSyncObject() {
+  MOZ_ASSERT(mCompositorDevice);
+  mCompositorSyncObject = nullptr;
+
+  RefPtr<layers::SyncObjectHost> syncObject =
+      layers::SyncObjectHost::CreateSyncObjectHost(mCompositorDevice);
+  if (!syncObject->Init()) {
+    gfxCriticalNote << "Failed to initialize the compositor sync object";
+    return;
+  }
+  mCompositorSyncObject = std::move(syncObject);
 }
 
 /* static */

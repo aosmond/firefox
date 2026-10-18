@@ -165,11 +165,9 @@ bool RenderCompositorANGLE::Initialize(nsACString& aError) {
     }
   }
 
-  mSyncObject = layers::SyncObjectHost::CreateSyncObjectHost(mDevice);
-  if (!mSyncObject->Init()) {
-    // Some errors occur. Clear the mSyncObject here.
-    // Then, there will be no texture synchronization.
-    aError.Assign("RcANGLE(create SyncObject failed)"_ns);
+  mSyncObject = RenderThread::Get()->SingletonGLSyncObject();
+  if (!mSyncObject) {
+    aError.Assign("RcANGLE(no SyncObject)"_ns);
     return false;
   }
 

@@ -42,6 +42,7 @@ namespace mozilla {
 class ScopedGfxFeatureReporter;
 namespace layers {
 class DeviceAttachmentsD3D11;
+class SyncObjectHost;
 }  // namespace layers
 
 namespace gfx {
@@ -122,6 +123,12 @@ class DeviceManagerDx final {
       RefPtr<ID3D11Device>* aOutDevice,
       RefPtr<layers::DeviceAttachmentsD3D11>* aOutAttachments);
 
+  // Returns the compositor device together with the sync object shared by all
+  // compositors using it. The sync object is null if it failed to initialize.
+  void GetCompositorDeviceAndSyncObject(
+      RefPtr<ID3D11Device>* aOutDevice,
+      RefPtr<layers::SyncObjectHost>* aOutSyncObject);
+
   void ImportDeviceInfo(const D3D11DeviceStatus& aDeviceStatus);
 
   // Returns whether the device info was exported.
@@ -173,6 +180,7 @@ class DeviceManagerDx final {
       MOZ_REQUIRES(mDeviceLock);
 
   void CreateWARPCompositorDevice() MOZ_REQUIRES(mDeviceLock);
+  void CreateCompositorSyncObject() MOZ_REQUIRES(mDeviceLock);
   bool CreateVRDevice() MOZ_REQUIRES(mDeviceLock);
 
   mozilla::gfx::FeatureStatus CreateContentDevice() MOZ_REQUIRES(mDeviceLock);
@@ -220,6 +228,8 @@ class DeviceManagerDx final {
   RefPtr<IDCompositionDevice2> mDirectCompositionDevice
       MOZ_GUARDED_BY(mDeviceLock);
   RefPtr<layers::DeviceAttachmentsD3D11> mCompositorAttachments
+      MOZ_GUARDED_BY(mDeviceLock);
+  RefPtr<layers::SyncObjectHost> mCompositorSyncObject
       MOZ_GUARDED_BY(mDeviceLock);
   bool mSupportsDCompositionTexture MOZ_GUARDED_BY(mDeviceLock);
   Maybe<D3D11DeviceStatus> mDeviceStatus MOZ_GUARDED_BY(mDeviceLock);
