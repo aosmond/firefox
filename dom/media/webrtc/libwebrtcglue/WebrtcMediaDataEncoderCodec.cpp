@@ -169,11 +169,7 @@ WebrtcMediaDataEncoder::WebrtcMediaDataEncoder(
   PodZero(&mCodecSpecific.codecSpecific);
 }
 
-WebrtcMediaDataEncoder::~WebrtcMediaDataEncoder() {
-  if (mEncoder) {
-    Shutdown();
-  }
-}
+WebrtcMediaDataEncoder::~WebrtcMediaDataEncoder() { Shutdown(); }
 
 static void InitCodecSpecficInfo(webrtc::CodecSpecificInfo& aInfo,
                                  const webrtc::VideoCodec* aCodecSettings,
@@ -221,12 +217,13 @@ int32_t WebrtcMediaDataEncoder::InitEncode(
     return WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
   }
 
-  if (mEncoder) {
-    // Clean existing encoder.
-    Shutdown();
-  }
+  // Clean existing encoder, including any being recreated.
+  Shutdown();
 
-  RefPtr<MediaDataEncoder> encoder = CreateEncoder(aCodecSettings);
+  SetupConfig(aCodecSettings);
+  Maybe<EncoderConfig> config = CreateEncoderConfig(aCodecSettings);
+  RefPtr<MediaDataEncoder> encoder =
+      config ? mFactory->CreateEncoder(*config, mTaskQueue) : nullptr;
   if (!encoder) {
     LOG("Fail to create encoder. Falling back to SW");
     return WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
@@ -240,6 +237,7 @@ int32_t WebrtcMediaDataEncoder::InitEncode(
     return WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
   }
   mEncoder = std::move(encoder);
+  mCodecSettings = Some(*aCodecSettings);
   return WEBRTC_VIDEO_CODEC_OK;
 }
 
@@ -254,11 +252,8 @@ bool WebrtcMediaDataEncoder::SetupConfig(
   return true;
 }
 
-already_AddRefed<MediaDataEncoder> WebrtcMediaDataEncoder::CreateEncoder(
+Maybe<EncoderConfig> WebrtcMediaDataEncoder::CreateEncoderConfig(
     const webrtc::VideoCodec* aCodecSettings) {
-  if (!SetupConfig(aCodecSettings)) {
-    return nullptr;
-  }
   LOG("Request platform encoder for {}, bitRate={} bps, frameRate={}",
       mInfo.mMimeType.get(), mBitrateAdjuster.GetTargetBitrateBps(),
       aCodecSettings->maxFramerate);
@@ -279,7 +274,7 @@ already_AddRefed<MediaDataEncoder> WebrtcMediaDataEncoder::CreateEncoder(
     }
     default:
       MOZ_ASSERT_UNREACHABLE("Unsupported codec type");
-      return nullptr;
+      return Nothing();
   }
 
   CodecType type;
@@ -319,14 +314,83 @@ already_AddRefed<MediaDataEncoder> WebrtcMediaDataEncoder::CreateEncoder(
     default:
       MOZ_MAKE_COMPILER_ASSUME_IS_UNREACHABLE("Unsupported codec type");
   }
-  EncoderConfig config(
+  return Some(EncoderConfig(
       type, {aCodecSettings->width, aCodecSettings->height}, Usage::Realtime,
       EncoderConfig::SampleFormat(dom::ImageBitmapFormat::YUV420P),
       aCodecSettings->maxFramerate, keyframeInterval,
       mBitrateAdjuster.GetTargetBitrateBps(), mMinBitrateBps, mMaxBitrateBps,
       BitrateMode::Variable, HardwarePreference::None, ScalabilityMode::None,
-      specific);
-  return mFactory->CreateEncoder(config, mTaskQueue);
+      specific));
+}
+
+void WebrtcMediaDataEncoder::RecreateEncoder(uint32_t aGeneration) {
+  MOZ_ASSERT(mCodecSettings);
+  LOG("Recreate encoder after remote crash");
+
+  if (RefPtr<MediaDataEncoder> encoder = std::move(mEncoder)) {
+    encoder->Shutdown();
+  }
+
+  Maybe<EncoderConfig> config = CreateEncoderConfig(mCodecSettings.ptr());
+  RefPtr<PlatformEncoderModule::CreateEncoderPromise> p =
+      config ? mFactory->CreateEncoderAsync(*config, mTaskQueue)
+             : PlatformEncoderModule::CreateEncoderPromise::CreateAndReject(
+                   MediaResult(NS_ERROR_DOM_MEDIA_FATAL_ERR), __func__);
+
+  // We use CreateEncoderAsync so that we may fallback to another encoder module
+  // if the remote process is now unavailable.
+  p->Then(
+       mTaskQueue, __func__,
+       [](RefPtr<MediaDataEncoder>&& aEncoder)
+           -> RefPtr<PlatformEncoderModule::CreateEncoderPromise> {
+         return aEncoder->Init()->Then(
+             GetCurrentSerialEventTarget(), __func__,
+             [aEncoder](
+                 const MediaDataEncoder::InitPromise::ResolveOrRejectValue&
+                     aValue)
+                 -> RefPtr<PlatformEncoderModule::CreateEncoderPromise> {
+               if (aValue.IsReject()) {
+                 aEncoder->Shutdown();
+                 return PlatformEncoderModule::CreateEncoderPromise::
+                     CreateAndReject(aValue.RejectValue(), __func__);
+               }
+               return PlatformEncoderModule::CreateEncoderPromise::
+                   CreateAndResolve(aEncoder, __func__);
+             });
+       },
+       [](const MediaResult& aError)
+           -> RefPtr<PlatformEncoderModule::CreateEncoderPromise> {
+         return PlatformEncoderModule::CreateEncoderPromise::CreateAndReject(
+             aError, __func__);
+       })
+      ->Then(mTaskQueue, __func__,
+             [self = RefPtr(this), this,
+              aGeneration](PlatformEncoderModule::CreateEncoderPromise::
+                               ResolveOrRejectValue&& aValue) {
+               RefPtr<MediaDataEncoder> encoder;
+               if (aValue.IsResolve()) {
+                 encoder = std::move(aValue.ResolveValue());
+               } else {
+                 LOG("Fail to recreate encoder: {}",
+                     aValue.RejectValue().Description());
+               }
+
+               {
+                 MutexAutoLock lock(mCallbackMutex);
+                 if (aGeneration == mEncoderGeneration) {
+                   mRecreating = false;
+                   // Encode will swap in the new encoder, or try to recreate
+                   // it again if this attempt failed.
+                   mReplacementEncoder = std::move(encoder);
+                   return;
+                 }
+               }
+
+               // We were shut down or reinitialized while recreating.
+               if (encoder) {
+                 encoder->Shutdown();
+               }
+             });
 }
 
 WebrtcVideoEncoder::EncoderInfo WebrtcMediaDataEncoder::GetEncoderInfo() const {
@@ -364,10 +428,20 @@ int32_t WebrtcMediaDataEncoder::RegisterEncodeCompleteCallback(
 
 int32_t WebrtcMediaDataEncoder::Shutdown() {
   LOG("Release encoder");
+  RefPtr<MediaDataEncoder> replacement;
   {
     MutexAutoLock lock(mCallbackMutex);
     mCallback = nullptr;
     mError = NS_OK;
+    // Ignore any outstanding results from the current encoder, or a
+    // replacement still being created.
+    ++mEncoderGeneration;
+    mRecreating = false;
+    mRecreateAttempts = 0;
+    replacement = std::move(mReplacementEncoder);
+  }
+  if (replacement) {
+    media::Await(do_AddRef(mTaskQueue), replacement->Shutdown());
   }
   {
     MutexAutoLock lock(mPendingMutex);
@@ -471,25 +545,62 @@ int32_t WebrtcMediaDataEncoder::Encode(
     return WEBRTC_VIDEO_CODEC_ERR_PARAMETER;
   }
 
-  if (!mEncoder) {
-    return WEBRTC_VIDEO_CODEC_UNINITIALIZED;
-  }
+  RefPtr<MediaDataEncoder> replacement;
+  bool recreate = false;
+  uint32_t generation;
   {
     MutexAutoLock lock(mCallbackMutex);
     if (!mCallback) {
       return WEBRTC_VIDEO_CODEC_UNINITIALIZED;
     }
-    if (NS_FAILED(mError)) {
+    if (mReplacementEncoder) {
+      replacement = std::move(mReplacementEncoder);
+      mError = NS_OK;
+    } else if (mRecreating) {
       return WEBRTC_VIDEO_CODEC_ERROR;
+    } else if (NS_FAILED(mError)) {
+      if (mError != NS_ERROR_DOM_MEDIA_REMOTE_CRASHED_RDD_OR_GPU_ERR &&
+          mError != NS_ERROR_DOM_MEDIA_REMOTE_CRASHED_UTILITY_ERR) {
+        return WEBRTC_VIDEO_CODEC_ERROR;
+      }
+      if (mRecreateAttempts >= kMaxRecreateAttempts) {
+        return WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE;
+      }
+      ++mRecreateAttempts;
+      ++mEncoderGeneration;
+      mRecreating = true;
+      recreate = true;
     }
+    generation = mEncoderGeneration;
+  }
+
+  if (recreate) {
+    // The remote process hosting the encoder crashed. Drop frames until the
+    // replacement is ready, rather than blocking until the remote process is
+    // recreated.
+    RecreateEncoder(generation);
+    return WEBRTC_VIDEO_CODEC_ERROR;
+  }
+
+  const bool recreated = !!replacement;
+  if (recreated) {
+    LOG("Use recreated encoder");
+    mEncoder = std::move(replacement);
+  }
+
+  if (!mEncoder) {
+    return WEBRTC_VIDEO_CODEC_UNINITIALIZED;
   }
 
   LOG_V("Encode frame, type {} size {}", static_cast<int>((*aFrameTypes)[0]),
         aInputFrame.size());
   MOZ_ASSERT(aInputFrame.video_frame_buffer()->type() ==
              webrtc::VideoFrameBuffer::Type::kI420);
+  // Start the recreated encoder with a keyframe since the receiver needs one to
+  // resume decoding.
   RefPtr<VideoData> data = CreateVideoDataFromWebrtcVideoFrame(
-      aInputFrame, (*aFrameTypes)[0] == webrtc::VideoFrameType::kVideoFrameKey,
+      aInputFrame,
+      recreated || (*aFrameTypes)[0] == webrtc::VideoFrameType::kVideoFrameKey,
       TimeUnit::FromSeconds(1.0 / mMaxFrameRate));
   if (!data) {
     return WEBRTC_VIDEO_CODEC_ERROR;
@@ -526,10 +637,17 @@ int32_t WebrtcMediaDataEncoder::Encode(
 
   mEncoder->Encode(data)->Then(
       mTaskQueue, __func__,
-      [self = RefPtr(this), this,
-       displaySize](MediaDataEncoder::EncodedData aFrames) {
+      [self = RefPtr(this), this, displaySize,
+       generation](MediaDataEncoder::EncodedData aFrames) {
         LOG_V("Received encoded frame, nums {} width {} height {}",
               aFrames.Length(), displaySize.width, displaySize.height);
+        {
+          MutexAutoLock lock(mCallbackMutex);
+          if (generation != mEncoderGeneration) {
+            // This encoder was replaced or shut down.
+            return;
+          }
+        }
         for (auto& frame : aFrames) {
           const TimeUnit& frameTime = frame->mTime;
           Maybe<PendingFrame> matched;
@@ -574,7 +692,7 @@ int32_t WebrtcMediaDataEncoder::Encode(
           }
 
           MutexAutoLock lock(mCallbackMutex);
-          if (!mCallback) {
+          if (!mCallback || generation != mEncoderGeneration) {
             return;
           }
           for (uint32_t rtp : droppedRtps) {
@@ -587,22 +705,27 @@ int32_t WebrtcMediaDataEncoder::Encode(
             LOG_V("Send encoded image");
             mCallback->OnEncodedImage(image, &mCodecSpecific);
             mBitrateAdjuster.Update(image.size());
+            mRecreateAttempts = 0;
           }
         }
       },
-      [self = RefPtr(this), this](const MediaResult& aError) {
+      [self = RefPtr(this), this, generation](const MediaResult& aError) {
+        MutexAutoLock lock(mCallbackMutex);
+        if (generation != mEncoderGeneration) {
+          // This encoder was replaced or shut down.
+          return;
+        }
         // Encoder errored asynchronously; drain any pending inputs and
         // report them as drops to honour the EncodedImageCallback contract.
         AutoTArray<uint32_t, kMaxFramesInFlight> droppedTimestamps;
         {
-          MutexAutoLock lock(mPendingMutex);
+          MutexAutoLock pendingLock(mPendingMutex);
           droppedTimestamps.SetCapacity(mPendingFrames.Length());
           for (const auto& pendingFrame : mPendingFrames) {
             droppedTimestamps.AppendElement(pendingFrame.mRtpTimestamp);
           }
           mPendingFrames.Clear();
         }
-        MutexAutoLock lock(mCallbackMutex);
         if (mCallback) {
           for (uint32_t ts : droppedTimestamps) {
             // We never call image.set_end_of_temporal_unit(true) on the

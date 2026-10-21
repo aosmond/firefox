@@ -54,18 +54,34 @@ class WebrtcMediaDataEncoder : public RefCountedWebrtcVideoEncoder {
   virtual ~WebrtcMediaDataEncoder();
 
   bool SetupConfig(const webrtc::VideoCodec* aCodecSettings);
-  already_AddRefed<MediaDataEncoder> CreateEncoder(
+  Maybe<EncoderConfig> CreateEncoderConfig(
       const webrtc::VideoCodec* aCodecSettings);
   bool InitEncoder();
+  // Asynchronously creates a replacement for an encoder whose remote process
+  // crashed. aGeneration identifies this attempt.
+  void RecreateEncoder(uint32_t aGeneration);
 
   const RefPtr<TaskQueue> mTaskQueue;
   const RefPtr<PEMFactory> mFactory;
   RefPtr<MediaDataEncoder> mEncoder;
+  // The settings given to InitEncode, used to recreate the encoder.
+  Maybe<webrtc::VideoCodec> mCodecSettings;
+
+  // How many times we may consecutively recreate the encoder without it
+  // producing any output, before giving up.
+  static constexpr uint32_t kMaxRecreateAttempts = 3;
 
   Mutex mCallbackMutex;
   webrtc::EncodedImageCallback* mCallback MOZ_GUARDED_BY(mCallbackMutex) =
       nullptr;
   MediaResult mError MOZ_GUARDED_BY(mCallbackMutex) = NS_OK;
+  // Incremented when the encoder is replaced or shut down, so that results
+  // from a previous encoder, or from a stale recreation attempt, are ignored.
+  uint32_t mEncoderGeneration MOZ_GUARDED_BY(mCallbackMutex) = 0;
+  // A recreated encoder waiting to be used by the next Encode call.
+  RefPtr<MediaDataEncoder> mReplacementEncoder MOZ_GUARDED_BY(mCallbackMutex);
+  bool mRecreating MOZ_GUARDED_BY(mCallbackMutex) = false;
+  uint32_t mRecreateAttempts MOZ_GUARDED_BY(mCallbackMutex) = 0;
 
   // Per-frame metadata captured before passing a frame to the underlying
   // MediaDataEncoder, used to recover values that aren't derivable from
