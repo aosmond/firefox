@@ -67,8 +67,7 @@ RemoteMediaDataEncoder::Construct() {
         LOGD("[{}] Construct resolved code={}", fmt::ptr(self.get()),
              aResult.Description());
         if (NS_FAILED(aResult.Code())) {
-          self->mConstructPromise.RejectIfExists(aResult, __func__);
-          self->mInitPromise.RejectIfExists(aResult, __func__);
+          self->ConstructFailed(aResult);
           return;
         }
         self->mHasConstructed = true;
@@ -82,11 +81,19 @@ RemoteMediaDataEncoder::Construct() {
         RemoteMediaManagerChild::HandleRejectionError(
             self->GetManager(), self->mLocation, aReason,
             [self](const MediaResult& aError) {
-              self->mConstructPromise.RejectIfExists(aError, __func__);
-              self->mInitPromise.RejectIfExists(aError, __func__);
+              self->ConstructFailed(aError);
             });
       });
   return mConstructPromise.Ensure(__func__);
+}
+
+void RemoteMediaDataEncoder::ConstructFailed(const MediaResult& aError) {
+  MOZ_ASSERT(mThread->IsOnCurrentThread());
+  if (!mConstructError) {
+    mConstructError = Some(aError);
+  }
+  mConstructPromise.RejectIfExists(aError, __func__);
+  mInitPromise.RejectIfExists(aError, __func__);
 }
 
 void RemoteMediaDataEncoder::DoSendInit() {
@@ -138,6 +145,10 @@ RefPtr<MediaDataEncoder::InitPromise> RemoteMediaDataEncoder::Init() {
         // mConstructPromise might not have been created yet either because we
         // may have delayed dispatching related to the process launching.
         // mHasConstructed will be set when the construct IPDL call returns.
+        if (self->mConstructError) {
+          return MediaDataEncoder::InitPromise::CreateAndReject(
+              *self->mConstructError, __func__);
+        }
         if (self->mHasConstructed) {
           self->DoSendInit();
         } else {

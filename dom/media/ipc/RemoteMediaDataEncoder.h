@@ -25,6 +25,9 @@ class RemoteMediaDataEncoder final : public MediaDataEncoder {
   RemoteMediaDataEncoderChild* GetChild() const { return mChild; }
 
   RefPtr<PlatformEncoderModule::CreateEncoderPromise> Construct();
+  // Rejects construction, and any current or future initialization, with
+  // aError. Must be called on the manager thread.
+  void ConstructFailed(const MediaResult& aError);
 
   // MediaDataEncoder
   RefPtr<MediaDataEncoder::InitPromise> Init() override;
@@ -56,6 +59,7 @@ class RemoteMediaDataEncoder final : public MediaDataEncoder {
   const RemoteMediaIn mLocation;
   bool mRemoteCrashed = false;
   bool mHasConstructed = false;
+  Maybe<MediaResult> mConstructError;
 
   MozPromiseHolder<PlatformEncoderModule::CreateEncoderPromise>
       mConstructPromise;

@@ -69,8 +69,16 @@ already_AddRefed<MediaDataEncoder> RemoteEncoderModule::CreateEncoder(
   // This returns a promise, but we know that once it returns, the only
   // interactions the caller can do will require a dispatch to the manager
   // thread. The necessary IPDL constructor events are already queued so the
-  // order of events is preserved.
-  RemoteMediaManagerChild::InitializeEncoder(RefPtr{encoder}, aConfig);
+  // order of events is preserved. If we fail before constructing, then we need
+  // to ensure the caller's initialization is rejected.
+  RemoteMediaManagerChild::InitializeEncoder(RefPtr{encoder}, aConfig)
+      ->Then(encoder->GetManagerThread(), __func__,
+             [encoder](const PlatformEncoderModule::CreateEncoderPromise::
+                           ResolveOrRejectValue& aValue) {
+               if (aValue.IsReject()) {
+                 encoder->ConstructFailed(aValue.RejectValue());
+               }
+             });
 
   return encoder.forget();
 }
