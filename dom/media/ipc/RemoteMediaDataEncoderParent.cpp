@@ -9,6 +9,7 @@
 #include "PEMFactory.h"
 #include "RemoteMediaManagerParent.h"
 #include "mozilla/dom/WebCodecsUtils.h"
+#include "nsXULAppAPI.h"
 
 namespace mozilla {
 
@@ -72,7 +73,34 @@ IPCResult RemoteMediaDataEncoderParent::RecvConstruct(
                }
 
                self->mEncoder = std::move(aValue.ResolveValue());
-               resolver(MediaResult(NS_OK));
+               if (!XRE_IsGPUProcess()) {
+                 resolver(MediaResult(NS_OK));
+                 return;
+               }
+
+               // Encoders in the GPU process cannot fallback to software
+               // encoding if initialization fails, so we initialize now to
+               // allow the content process to fallback to another process.
+               self->mEncoder->Init()->Then(
+                   GetCurrentSerialEventTarget(), __func__,
+                   [self, resolver](
+                       MediaDataEncoder::InitPromise::ResolveOrRejectValue&&
+                           aInitValue) {
+                     if (!self->mEncoder) {
+                       resolver(MediaResult(NS_ERROR_ABORT, __func__));
+                       return;
+                     }
+
+                     if (aInitValue.IsReject()) {
+                       self->mEncoder->Shutdown();
+                       self->mEncoder = nullptr;
+                       resolver(aInitValue.RejectValue());
+                       return;
+                     }
+
+                     self->mInitialized = true;
+                     resolver(MediaResult(NS_OK));
+                   });
              });
   return IPC_OK();
 }
@@ -89,6 +117,11 @@ IPCResult RemoteMediaDataEncoderParent::RecvInit(InitResolver&& aResolver) {
   }
   mInitAttempted = true;
 
+  if (mInitialized) {
+    ResolveInit(aResolver);
+    return IPC_OK();
+  }
+
   mEncoder->Init()->Then(
       GetCurrentSerialEventTarget(), __func__,
       [self = RefPtr{this}, resolver = std::move(aResolver)](
@@ -104,13 +137,16 @@ IPCResult RemoteMediaDataEncoderParent::RecvInit(InitResolver&& aResolver) {
         }
 
         self->mInitialized = true;
-
-        nsCString hardwareReason;
-        bool hardware = self->mEncoder->IsHardwareAccelerated(hardwareReason);
-        resolver(EncodeInitCompletionIPDL{self->mEncoder->GetDescriptionName(),
-                                          hardware, std::move(hardwareReason)});
+        self->ResolveInit(resolver);
       });
   return IPC_OK();
+}
+
+void RemoteMediaDataEncoderParent::ResolveInit(const InitResolver& aResolver) {
+  nsCString hardwareReason;
+  bool hardware = mEncoder->IsHardwareAccelerated(hardwareReason);
+  aResolver(EncodeInitCompletionIPDL{mEncoder->GetDescriptionName(), hardware,
+                                     std::move(hardwareReason)});
 }
 
 IPCResult RemoteMediaDataEncoderParent::RecvEncode(

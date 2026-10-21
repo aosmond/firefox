@@ -49,6 +49,8 @@ class RemoteMediaDataEncoderParent final
  protected:
   virtual ~RemoteMediaDataEncoderParent();
 
+  void ResolveInit(const InitResolver& aResolver);
+
   RefPtr<MediaDataEncoder> mEncoder;
   RefPtr<layers::BufferRecycleBin> mBufferRecycleBin;
   const EncoderConfig mConfig;

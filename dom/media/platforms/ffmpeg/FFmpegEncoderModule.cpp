@@ -189,7 +189,11 @@ EncodeSupportSet FFmpegEncoderModule<V>::SupportsCodec(CodecType aCodec) const {
           }
           break;
         default:
-          supports += EncodeSupport::HardwareEncode;
+          // FFmpegVideoEncoder::ShouldTryHardware will refuse to use
+          // MediaCodec for these codecs when minimal.
+          if (!StaticPrefs::media_ffvpx_hw_minimal()) {
+            supports += EncodeSupport::HardwareEncode;
+          }
           break;
       }
 #  else
