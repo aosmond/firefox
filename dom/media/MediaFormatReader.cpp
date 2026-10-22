@@ -2702,6 +2702,20 @@ void MediaFormatReader::Update(TrackType aTrack) {
       return;
     }
 
+    // If only the decoder needed replacing, the data should be fine, so resume
+    // from the last sample returned rather than skipping ahead, which may not
+    // be possible if there is no keyframe left. If we already resumed from
+    // there, the data itself may be the problem, so skip it instead.
+    if (needsNewDecoder && decoder.mLastDecodedSampleTime &&
+        decoder.mLastDecodedSampleTime != decoder.mLastRecoverySampleTime) {
+      LOG("{} resuming from last sample time: {}", TrackTypeToStr(aTrack),
+          decoder.mLastDecodedSampleTime.ref().mStart.ToMicroseconds());
+      decoder.mLastRecoverySampleTime = decoder.mLastDecodedSampleTime;
+      InternalSeek(aTrack, InternalSeekTarget(
+                               decoder.mLastDecodedSampleTime.ref(), true));
+      return;
+    }
+
     TimeUnit nextKeyframe;
     if (aTrack == TrackType::kVideoTrack &&
         NS_SUCCEEDED(

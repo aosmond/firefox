@@ -176,7 +176,9 @@ class TestMediaFormatReader : public ::testing::Test {
   }
 
   // Expect a video decoder whose priming drain after the internal seek fails
-  // with a non-fatal error, driving the decode-error recovery skip.
+  // with a non-fatal decode error, driving the decode-error recovery skip. The
+  // error must not require a new decoder, since recovery would then resume
+  // from the last sample instead of skipping.
   void ExpectDecoderWithFailingPrimingDrain() {
     EXPECT_CALL(*mPdm, CreateVideoDecoder)
         .Times(testing::AnyNumber())
@@ -188,8 +190,8 @@ class TestMediaFormatReader : public ::testing::Test {
           });
           EXPECT_CALL(*mVideoDecoder, Drain).Times(1);
           EXPECT_CALL(*mVideoDecoder, Drain).WillOnce([] {
-            return DecodePromise::CreateAndReject(
-                NS_ERROR_DOM_MEDIA_NEED_NEW_DECODER, __func__);
+            return DecodePromise::CreateAndReject(NS_ERROR_DOM_MEDIA_DECODE_ERR,
+                                                  __func__);
           });
           // The mock decoder holds decoded frames back until this many are
           // queued, modelling decode-reorder (DPB) latency, so decoded output
@@ -591,10 +593,40 @@ TEST_F(TestMediaFormatReader, WaitingForDemuxAfterInternalSeek) {
   drainPromise.Reject(NS_ERROR_ILLEGAL_DURING_SHUTDOWN, __func__);
 }
 
+// Tolerates one decode error, so that the reader recovers from it by skipping
+// ahead instead of treating it as fatal, as pre-release builds do by default.
+class TestMediaFormatReaderWithDecodeErrorTolerance
+    : public TestMediaFormatReader {
+ protected:
+  static constexpr const char* kMaxDecodeErrorPref =
+      "media.video-max-decode-error";
+
+  void SetUp() override {
+    if (Preferences::HasUserValue(kMaxDecodeErrorPref)) {
+      mMaxDecodeErrorUserValue.emplace(
+          Preferences::GetUint(kMaxDecodeErrorPref));
+    }
+    ASSERT_NS_SUCCEEDED(Preferences::SetUint(kMaxDecodeErrorPref, 1));
+    TestMediaFormatReader::SetUp();
+  }
+
+  void TearDown() override {
+    TestMediaFormatReader::TearDown();
+    nsresult rv = mMaxDecodeErrorUserValue
+                      ? Preferences::SetUint(kMaxDecodeErrorPref,
+                                             *mMaxDecodeErrorUserValue)
+                      : Preferences::ClearUser(kMaxDecodeErrorPref);
+    EXPECT_NS_SUCCEEDED(rv);
+  }
+
+  Maybe<uint32_t> mMaxDecodeErrorUserValue;
+};
+
 // A skip-to-next-keyframe started by the decode-error recovery path has no
 // pending video promise, so a later frame request that also wants to skip must
 // not start a second skip on the still-live skip request.
-TEST_F(TestMediaFormatReader, VideoSkipDoesNotReenterAcrossErrorRecovery) {
+TEST_F(TestMediaFormatReaderWithDecodeErrorTolerance,
+       VideoSkipDoesNotReenterAcrossErrorRecovery) {
   PDMFactory::AutoForcePDM autoForcePDM(mPdm);
   // Set up a reader whose decode-error recovery skips to the next keyframe. A
   // keyframe ahead of position zero means a plain frame request does not skip
@@ -662,6 +694,176 @@ class RecreateOnNthDecodeDecoder final : public MockVideoDataDecoder {
   const uint32_t mDecodeNumber;
   uint32_t mDecodeCount = 0;
 };
+
+// A MockVideoDataDecoder that fails to decode the sample at aFailTime as if
+// the remote process hosting it crashed.
+class CrashOnSampleDecoder final : public MockVideoDataDecoder {
+ public:
+  CrashOnSampleDecoder(const CreateDecoderParams& aParams,
+                       const TimeUnit& aFailTime)
+      : MockVideoDataDecoder(aParams), mFailTime(aFailTime) {}
+
+  RefPtr<DecodePromise> Decode(MediaRawData* aSample) override {
+    if (aSample->mTime == mFailTime) {
+      return DecodePromise::CreateAndReject(
+          NS_ERROR_DOM_MEDIA_REMOTE_CRASHED_RDD_OR_GPU_ERR, __func__);
+    }
+    return DummyMediaDataDecoder::Decode(aSample);
+  }
+
+ private:
+  ~CrashOnSampleDecoder() override = default;
+  const TimeUnit mFailTime;
+};
+
+// Recovery from a decoder that needed replacing, with a track demuxer that
+// honours seeks and keyframes.
+class DecoderRecoveryTest : public TestMediaFormatReader {
+ protected:
+  static constexpr int64_t kFrameRate = 30;
+
+  static TimeUnit FrameTime(size_t aIndex) {
+    return TimeUnit(static_cast<int64_t>(aIndex), kFrameRate);
+  }
+
+  // Set up aCount samples, of which those at aKeyframes are keyframes. The
+  // first video decoder fails at the sample at aFailIndex, and so do the
+  // following ones if aEveryDecoderFails.
+  void SetUpTrack(size_t aCount, std::initializer_list<size_t> aKeyframes,
+                  size_t aFailIndex, bool aEveryDecoderFails) {
+    for (size_t i = 0; i < aCount; ++i) {
+      mKeyframes.AppendElement(false);
+    }
+    for (size_t keyframe : aKeyframes) {
+      mKeyframes[keyframe] = true;
+    }
+
+    EXPECT_CALL(*mPdm, CreateVideoDecoder)
+        .Times(testing::AnyNumber())
+        .WillRepeatedly([this, aFailIndex, aEveryDecoderFails](
+                            const CreateDecoderParams& aParams) {
+          ++mDecoderCount;
+          RefPtr<MockVideoDataDecoder> decoder;
+          if (mDecoderCount == 1 || aEveryDecoderFails) {
+            decoder = new CrashOnSampleDecoder(aParams, FrameTime(aFailIndex));
+          } else {
+            decoder = new MockVideoDataDecoder(aParams);
+          }
+          EXPECT_CALL(*decoder, Drain).Times(testing::AnyNumber());
+          EXPECT_CALL(*decoder, IsHardwareAccelerated)
+              .Times(testing::AnyNumber());
+          return do_AddRef(decoder);
+        });
+
+    // The demuxer state is only accessed on the demuxer thread once the reader
+    // has started.
+    EXPECT_CALL(*mTrackDemuxer, MockGetSamples)
+        .Times(testing::AnyNumber())
+        .WillRepeatedly([this] {
+          if (mNextSample == mKeyframes.Length()) {
+            return SamplesPromise::CreateAndReject(
+                NS_ERROR_DOM_MEDIA_END_OF_STREAM, __func__);
+          }
+          const size_t index = mNextSample++;
+          return ResolveOneSample(
+              MakeRawSample(FrameTime(index), FrameTime(1), mKeyframes[index]));
+        });
+    ON_CALL(*mTrackDemuxer, Seek).WillByDefault([this](const TimeUnit& aTime) {
+      ++mSeekCount;
+      size_t keyframe = 0;
+      for (size_t i = 0; i < mKeyframes.Length() && FrameTime(i) <= aTime;
+           ++i) {
+        if (mKeyframes[i]) {
+          keyframe = i;
+        }
+      }
+      mNextSample = keyframe;
+      return SeekPromise::CreateAndResolve(FrameTime(keyframe), __func__);
+    });
+    ON_CALL(*mTrackDemuxer, GetNextRandomAccessPoint)
+        .WillByDefault([this](TimeUnit* aTime) {
+          *aTime = TimeUnit::FromInfinity();
+          for (size_t i = mNextSample; i < mKeyframes.Length(); ++i) {
+            if (mKeyframes[i]) {
+              *aTime = FrameTime(i);
+              break;
+            }
+          }
+          return NS_OK;
+        });
+    ON_CALL(*mTrackDemuxer, SkipToNextRandomAccessPoint)
+        .WillByDefault([this](const TimeUnit&) {
+          ++mSkipCount;
+          const size_t start = mNextSample;
+          while (mNextSample < mKeyframes.Length() &&
+                 !mKeyframes[mNextSample]) {
+            ++mNextSample;
+          }
+          return MediaTrackDemuxer::SkipAccessPointPromise::CreateAndResolve(
+              static_cast<uint32_t>(mNextSample - start), __func__);
+        });
+  }
+
+  // Read every frame until the end of the stream, returning their times.
+  nsTArray<TimeUnit> ReadAllFrames() {
+    (void)WaitForResolve(mProxy->ReadMetadata());
+    nsTArray<TimeUnit> times;
+    for (size_t i = 0; i < mKeyframes.Length() + 10; ++i) {
+      auto result = WaitFor(mProxy->RequestVideoData(TimeUnit(), false));
+      if (result.isErr()) {
+        EXPECT_EQ(result.unwrapErr().Code(), NS_ERROR_DOM_MEDIA_END_OF_STREAM);
+        break;
+      }
+      times.AppendElement(result.unwrap()->mTime);
+    }
+    return times;
+  }
+
+  nsTArray<TimeUnit> FrameTimes(std::initializer_list<size_t> aIndices) {
+    nsTArray<TimeUnit> times;
+    for (size_t index : aIndices) {
+      times.AppendElement(FrameTime(index));
+    }
+    return times;
+  }
+
+  nsTArray<bool> mKeyframes;
+  size_t mNextSample = 0;
+  int mSeekCount = 0;
+  int mSkipCount = 0;
+  int mDecoderCount = 0;
+};
+
+// When a decoder needs replacing and there is no keyframe left to skip to, e.g.
+// near the end of a looping video, the replacement decoder resumes from the
+// last sample returned without losing any frames.
+TEST_F(DecoderRecoveryTest, ResumesFromLastSampleWithoutKeyframeAhead) {
+  PDMFactory::AutoForcePDM autoForcePDM(mPdm);
+  SetUpTrack(6, {0}, /* aFailIndex */ 3, /* aEveryDecoderFails */ false);
+
+  nsTArray<TimeUnit> times = ReadAllFrames();
+  FinishShutdown();
+
+  EXPECT_EQ(times, FrameTimes({0, 1, 2, 3, 4, 5}));
+  EXPECT_EQ(mDecoderCount, 2);
+  EXPECT_EQ(mSeekCount, 1);
+  EXPECT_EQ(mSkipCount, 0);
+}
+
+// If the replacement decoder fails again before making any progress, the data
+// itself may be the problem, so it is skipped as before.
+TEST_F(DecoderRecoveryTest, SkipsAheadWhenFailingAgainWithoutProgress) {
+  PDMFactory::AutoForcePDM autoForcePDM(mPdm);
+  SetUpTrack(9, {0, 6}, /* aFailIndex */ 3, /* aEveryDecoderFails */ true);
+
+  nsTArray<TimeUnit> times = ReadAllFrames();
+  FinishShutdown();
+
+  EXPECT_EQ(times, FrameTimes({0, 1, 2, 6, 7, 8}));
+  EXPECT_EQ(mDecoderCount, 3);
+  EXPECT_EQ(mSeekCount, 1);
+  EXPECT_EQ(mSkipCount, 1);
+}
 
 class VideoRateTest : public TestMediaFormatReader {
  protected:
@@ -963,16 +1165,13 @@ TEST_F(VideoRateTest, DecodeErrorRecreationUsesCurrentRate) {
   AddSample(thirdDuration, kFirstStreamID);
   AddSample(fourthDuration, kFirstStreamID);
   RecreateFirstDecoderOnDecode(2);
-  ON_CALL(*mTrackDemuxer, GetNextRandomAccessPoint)
-      .WillByDefault([](TimeUnit* aTime) {
-        *aTime = TimeUnit(100, 1000);
-        return NS_OK;
+  // The replacement decoder resumes from the last sample returned, i.e. the
+  // first one, instead of skipping ahead.
+  EXPECT_CALL(*mTrackDemuxer, Seek(TimeUnit::Zero()))
+      .WillOnce([](const TimeUnit& aTime) {
+        return SeekPromise::CreateAndResolve(aTime, __func__);
       });
-  EXPECT_CALL(*mTrackDemuxer, SkipToNextRandomAccessPoint)
-      .WillOnce([](const TimeUnit&) {
-        return MediaTrackDemuxer::SkipAccessPointPromise::CreateAndResolve(
-            0, __func__);
-      });
+  EXPECT_CALL(*mTrackDemuxer, SkipToNextRandomAccessPoint).Times(0);
   InitReader();
   ReadToEnd();
 

@@ -576,6 +576,9 @@ class MediaFormatReader final
     Maybe<InternalSeekTarget> mTimeThreshold;
     // Time of last decoded sample returned.
     Maybe<media::TimeInterval> mLastDecodedSampleTime;
+    // Value of mLastDecodedSampleTime when we last resumed from it after
+    // replacing a failed decoder.
+    Maybe<media::TimeInterval> mLastRecoverySampleTime;
 
     // Decoded samples returned my mDecoder awaiting being returned to
     // state machine upon request.
@@ -630,6 +633,7 @@ class MediaFormatReader final
       CancelWaitingForKey();
       mTimeThreshold.reset();
       mLastDecodedSampleTime.reset();
+      mLastRecoverySampleTime.reset();
       mOutput.Clear();
       mNumSamplesInput = 0;
       mNumSamplesOutput = 0;
