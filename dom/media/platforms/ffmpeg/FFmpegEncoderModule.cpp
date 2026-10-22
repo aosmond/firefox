@@ -169,14 +169,24 @@ EncodeSupportSet FFmpegEncoderModule<V>::SupportsCodec(CodecType aCodec) const {
       // hardware encoding support is missing.
       switch (id) {
         case AV_CODEC_ID_H264:
-          supports += gfx::gfxVars::UseH264HwEncode()
-                          ? EncodeSupport::HardwareEncode
-                          : EncodeSupport::SoftwareEncode;
+          if (media::MCSInfo::SupportsSoftwareEncode(
+                  gfx::gfxVars::PlatformMediaCodecsSupported(),
+                  media::MediaCodec::H264)) {
+            supports += EncodeSupport::SoftwareEncode;
+          }
+          if (gfx::gfxVars::UseH264HwEncode()) {
+            supports += EncodeSupport::HardwareEncode;
+          }
           break;
         case AV_CODEC_ID_HEVC:
-          supports += gfx::gfxVars::UseHEVCHwEncode()
-                          ? EncodeSupport::HardwareEncode
-                          : EncodeSupport::SoftwareEncode;
+          if (media::MCSInfo::SupportsSoftwareEncode(
+                  gfx::gfxVars::PlatformMediaCodecsSupported(),
+                  media::MediaCodec::HEVC)) {
+            supports += EncodeSupport::SoftwareEncode;
+          }
+          if (gfx::gfxVars::UseHEVCHwEncode()) {
+            supports += EncodeSupport::HardwareEncode;
+          }
           break;
         default:
           supports += EncodeSupport::HardwareEncode;
