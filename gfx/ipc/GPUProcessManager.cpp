@@ -814,11 +814,16 @@ void GPUProcessManager::NotifyWebRenderError(wr::WebRenderError aError) {
     gfxVars::SetUseWebRenderDCompositionTextureOverlayWin(false);
     return;
   }
+  if (aError == wr::WebRenderError::SOFTWARE_D3D11) {
+    gfxVars::SetAllowSoftwareWebRenderD3D11(false);
+    return;
+  }
 #else
   if (aError == wr::WebRenderError::VIDEO_OVERLAY ||
       aError == wr::WebRenderError::VIDEO_HW_OVERLAY ||
       aError == wr::WebRenderError::VIDEO_SW_OVERLAY ||
-      aError == wr::WebRenderError::DCOMP_TEXTURE_OVERLAY) {
+      aError == wr::WebRenderError::DCOMP_TEXTURE_OVERLAY ||
+      aError == wr::WebRenderError::SOFTWARE_D3D11) {
     MOZ_ASSERT_UNREACHABLE("unexpected to be called");
     return;
   }
