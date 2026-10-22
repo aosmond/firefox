@@ -1824,27 +1824,6 @@ CompositorBridgeParent::GetLayerTreeState(LayersId aId) {
 }
 
 /* static */
-Maybe<TextureFactoryIdentifier>
-CompositorBridgeParent::GetTextureFactoryIdentifierForContent(
-    const dom::ContentParentId& aContentId) {
-  MOZ_ASSERT(CompositorThreadHolder::IsInCompositorThread());
-
-  StaticMonitorAutoLock lock(sIndirectLayerTreesLock);
-  for (auto& it : sIndirectLayerTrees) {
-    LayerTreeState& state = it.second;
-    if (!state.mWrBridge || !state.mContentCompositorBridgeParent ||
-        state.mContentCompositorBridgeParent->GetContentId() != aContentId) {
-      continue;
-    }
-    if (Maybe<TextureFactoryIdentifier> identifier =
-            state.mWrBridge->MaybeGetTextureFactoryIdentifier()) {
-      return identifier;
-    }
-  }
-  return Nothing();
-}
-
-/* static */
 bool CompositorBridgeParent::CallWithLayerTreeState(
     LayersId aId,
     const std::function<void(CompositorBridgeParent::LayerTreeState&)>& aFunc) {

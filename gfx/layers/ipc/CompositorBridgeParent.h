@@ -461,14 +461,6 @@ class CompositorBridgeParent final : public CompositorBridgeParentBase {
   static LayerTreeState* GetLayerTreeState(LayersId aId);
 
   /**
-   * Returns the TextureFactoryIdentifier of a compositor used by the given
-   * content process, if there is one. This must only be called on the
-   * compositor thread.
-   */
-  static Maybe<TextureFactoryIdentifier> GetTextureFactoryIdentifierForContent(
-      const dom::ContentParentId& aContentId);
-
-  /**
    * If a shadow tree exists for the given id |aId|, return true.  Otherwise
    * return false.
    */

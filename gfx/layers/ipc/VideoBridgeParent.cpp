@@ -5,13 +5,21 @@
 #include "VideoBridgeParent.h"
 
 #include "CompositorThread.h"
+#include "gfxConfig.h"
+#include "gfxPlatform.h"
 #include "mozilla/DataMutex.h"
+#include "mozilla/gfx/gfxVars.h"
 #include "mozilla/ipc/Endpoint.h"
 #include "mozilla/layers/CompositorBridgeParent.h"
 #include "mozilla/layers/PTextureParent.h"
+#include "mozilla/layers/SyncObject.h"
 #include "mozilla/layers/TextureHost.h"
 #include "mozilla/layers/VideoBridgeUtils.h"
 #include "mozilla/webrender/RenderThread.h"
+
+#ifdef XP_WIN
+#  include "mozilla/gfx/DeviceManagerDx.h"
+#endif
 
 namespace mozilla::layers {
 
@@ -271,11 +279,86 @@ already_AddRefed<PTextureParent> VideoBridgeParent::AllocPTextureParent(
   return parent.forget();
 }
 
+// Describes the compositors of this process, independently of any widget.
+// This mirrors the choices made by wr::RenderCompositor::Create for a widget
+// that allows native compositing.
+static TextureFactoryIdentifier GetProcessTextureFactoryIdentifier() {
+  const bool software = gfxVars::UseSoftwareWebRender();
+  WebRenderCompositor compositorType = WebRenderCompositor::DRAW;
+  bool useANGLE = false;
+  bool useDComp = false;
+  bool useLayerCompositor = false;
+  bool useCompositorWnd = false;
+  bool supportsD3D11NV12 = false;
+  SyncHandle syncHandle = {};
+
+  if (software) {
+    if (gfxPlatform::IsHeadless()) {
+      compositorType = WebRenderCompositor::SOFTWARE;
+    } else {
+#if defined(XP_WIN)
+      // SWGL can only draw D3D11 textures when compositing with D3D11. This
+      // mirrors RenderCompositorD3D11SWGL::Create, which clears
+      // AllowSoftwareWebRenderD3D11 if it fails.
+      compositorType = gfxVars::AllowSoftwareWebRenderD3D11() &&
+                               gfxConfig::IsEnabled(Feature::D3D11_COMPOSITING)
+                           ? WebRenderCompositor::D3D11
+                           : WebRenderCompositor::SOFTWARE;
+#elif defined(XP_DARWIN)
+      compositorType = WebRenderCompositor::DRAW;
+#else
+#  if defined(MOZ_WAYLAND)
+      if (gfxVars::UseWebRenderCompositor()) {
+        compositorType = WebRenderCompositor::DRAW;
+      } else
+#  endif
+          if (gfxVars::AllowSoftwareWebRenderOGL()) {
+        compositorType = WebRenderCompositor::OPENGL;
+      } else {
+        compositorType = WebRenderCompositor::SOFTWARE;
+      }
+#endif
+    }
+  } else {
+#ifdef XP_WIN
+    useANGLE = gfxVars::UseWebRenderANGLE();
+    if (useANGLE) {
+      useDComp = gfxVars::UseWebRenderDCompWin();
+      useLayerCompositor = useDComp && gfxVars::UseWebRenderCompositor();
+      if (useDComp) {
+        compositorType = WebRenderCompositor::DIRECT_COMPOSITION;
+      }
+    }
+#endif
+  }
+
+#ifdef XP_WIN
+  useCompositorWnd = XRE_IsGPUProcess() && !gfxPlatform::IsHeadless();
+  if (DeviceManagerDx* dm = DeviceManagerDx::Get()) {
+    supportsD3D11NV12 = dm->CanUseNV12();
+    if (useANGLE || compositorType == WebRenderCompositor::D3D11) {
+      // Both ANGLE and D3D11 SWGL share the sync object of the compositor
+      // device.
+      RefPtr<ID3D11Device> device;
+      RefPtr<SyncObjectHost> syncObject;
+      dm->GetCompositorDeviceAndSyncObject(&device, &syncObject);
+      if (syncObject) {
+        syncHandle = syncObject->GetSyncHandle();
+      }
+    }
+  }
+#endif
+
+  return TextureFactoryIdentifier(
+      software ? WebRenderBackend::SOFTWARE : WebRenderBackend::HARDWARE,
+      compositorType, XRE_GetProcessType(), /* aMaxTextureSize */ 4096,
+      useANGLE, useDComp, useLayerCompositor, useCompositorWnd, false, false,
+      false, supportsD3D11NV12, syncHandle);
+}
+
 mozilla::ipc::IPCResult VideoBridgeParent::RecvGetTextureFactoryIdentifier(
-    const dom::ContentParentId& aContentId,
     GetTextureFactoryIdentifierResolver&& aResolver) {
-  aResolver(CompositorBridgeParent::GetTextureFactoryIdentifierForContent(
-      aContentId));
+  aResolver(GetProcessTextureFactoryIdentifier());
   return IPC_OK();
 }
 

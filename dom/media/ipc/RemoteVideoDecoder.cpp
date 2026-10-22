@@ -212,17 +212,16 @@ void RemoteVideoDecoderParent::RequestTextureFactoryIdentifier(
     return;
   }
 
-  // Ask the compositor for the identifier used by the content process, since
-  // the content process may not have the current one, e.g. if the GPU process
-  // is being recreated.
-  videoBridge->SendGetTextureFactoryIdentifier(mParent->GetContentId())
+  // Ask the compositor for its identifier, since the content process may not
+  // have the current one, e.g. if the GPU process is being recreated.
+  videoBridge->SendGetTextureFactoryIdentifier()
       ->Then(GetCurrentSerialEventTarget(), __func__,
              [self = RefPtr{this}, resolver = std::move(aResolver)](
                  layers::VideoBridgeChild::GetTextureFactoryIdentifierPromise::
                      ResolveOrRejectValue&& aValue) mutable {
                self->mIdentifierRequest.Complete();
                self->CreateDecoder(
-                   aValue.IsResolve() ? aValue.ResolveValue() : Nothing(),
+                   aValue.IsResolve() ? Some(aValue.ResolveValue()) : Nothing(),
                    std::move(resolver));
              })
       ->Track(mIdentifierRequest);
