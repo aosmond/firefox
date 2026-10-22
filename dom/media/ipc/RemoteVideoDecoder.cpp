@@ -24,6 +24,7 @@
 #include "mozilla/layers/ImageClient.h"
 #include "mozilla/layers/TextureClient.h"
 #include "mozilla/layers/VideoBridgeChild.h"
+#include "nsPrintfCString.h"
 #ifdef MOZ_WIDGET_ANDROID
 #  include "mozilla/layers/VideoBridgeParent.h"
 #endif
@@ -301,6 +302,22 @@ void RemoteVideoDecoderParent::CreateDecoder(
                                       do_AddRef(self->mDecodeTaskQueue.get()));
         resolver(NS_OK);
       });
+}
+
+MediaResult RemoteVideoDecoderParent::AdjustDecodeError(
+    const MediaResult& aError) {
+  MOZ_ASSERT(OnManagerThread());
+
+  // The decoder allocates its images from the video bridge. If the bridge has
+  // shut down (e.g. the GPU process crashed), allocations fail and the error is
+  // not a real decoding error. Report it as a remote crash so that the child
+  // recreates the decoder instead of treating it as fatal.
+  if (mKnowsCompositor && !mKnowsCompositor->GetTextureForwarder()) {
+    return MediaResult(NS_ERROR_DOM_MEDIA_REMOTE_CRASHED_RDD_OR_GPU_ERR,
+                       nsPrintfCString("Video bridge shut down: %s",
+                                       aError.Description().get()));
+  }
+  return aError;
 }
 
 MediaResult RemoteVideoDecoderParent::ProcessDecodedData(
