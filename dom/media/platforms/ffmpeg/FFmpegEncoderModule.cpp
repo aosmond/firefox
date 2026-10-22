@@ -126,6 +126,14 @@ EncodeSupportSet FFmpegEncoderModule<V>::Supports(
     }
   }
   auto support = SupportsCodec(aConfig.mCodec);
+#ifdef MOZ_WIDGET_ANDROID
+  // mediacodecenc doesn't expose MediaCodec temporal layering (ts-schema), and
+  // per-frame layer ids are only reported on Android 17+ by encoders supporting
+  // a webrtc.svc schema.
+  if (aConfig.mScalabilityMode != ScalabilityMode::None) {
+    support -= EncodeSupport::HardwareEncode;
+  }
+#endif
   if (aConfig.mHardwarePreference == HardwarePreference::RequireHardware &&
       !support.contains(EncodeSupport::HardwareEncode)) {
     return {};

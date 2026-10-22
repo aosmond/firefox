@@ -392,6 +392,14 @@ bool FFmpegVideoEncoder<LIBAV_VER>::SvcEnabled() const {
 
 bool FFmpegVideoEncoder<LIBAV_VER>::ShouldTryHardware() const {
 #ifdef MOZ_WIDGET_ANDROID
+  // mediacodecenc doesn't expose MediaCodec temporal layering (ts-schema), and
+  // per-frame layer ids are only reported on Android 17+ by encoders supporting
+  // a webrtc.svc schema.
+  if (SvcEnabled()) {
+    FFMPEGV_LOG("MediaCodec encoders do not support SVC");
+    return false;
+  }
+
   // On Android, the MediaCodec encoders are the only ones available to us,
   // which may be implemented in hardware or software.
   if (mCodecID == AV_CODEC_ID_H264 || mCodecID == AV_CODEC_ID_HEVC) {
