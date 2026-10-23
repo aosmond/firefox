@@ -327,7 +327,7 @@ bool DCLayerTree::Initialize(HWND aHwnd, nsACString& aError) {
   if (gfx::gfxVars::UseWebRenderDCompVideoHwOverlayWin() ||
       gfx::gfxVars::UseWebRenderDCompVideoSwOverlayWin()) {
     if (!InitializeVideoOverlaySupport()) {
-      RenderThread::Get()->HandleWebRenderError(WebRenderError::VIDEO_OVERLAY);
+      RenderThread::Get()->NotifyWebRenderError(WebRenderError::VIDEO_OVERLAY);
     }
   }
   if (!sGpuOverlayInfo) {
