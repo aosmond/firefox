@@ -815,7 +815,22 @@ void GPUProcessManager::NotifyWebRenderError(wr::WebRenderError aError) {
     return;
   }
   if (aError == wr::WebRenderError::SOFTWARE_D3D11) {
+    if (!gfxVars::AllowSoftwareWebRenderD3D11()) {
+      return;
+    }
     gfxVars::SetAllowSoftwareWebRenderD3D11(false);
+    // Recreate the compositors for all windows so that none remain using D3D11
+    // compositing with SWGL, otherwise they would disagree on what textures
+    // they can draw.
+    if (mProcess) {
+      if (mGPUChild) {
+        mGPUChild->EnsureGPUReady(/* aForceSync */ true);
+      }
+      DestroyRemoteCompositorSessions();
+    } else {
+      DestroyInProcessCompositorSessions();
+    }
+    NotifyListenersOnCompositeDeviceReset();
     return;
   }
 #else
